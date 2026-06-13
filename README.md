@@ -48,7 +48,7 @@
 <h2 align="center">Requirements</h2>
 
 - Neovim with terminal and floating window support
-- OpenAI Codex CLI available as `codex`
+- OpenAI Codex CLI available as `codex`, or a custom command configured with `codex_cmd`
 - lazy.nvim or LazyVim for the plugin spec examples below
 
 <h2 align="center">Install</h2>
@@ -152,6 +152,7 @@ require("codux").setup({
   codex_cmd = vim.env.CODEX_CMD or "codex -s workspace-write -a on-request",
   auto_open = true,
   auto_focus = true,
+  health_timeout_ms = 10000,
 
   popup = {
     width = 0.85,
@@ -181,8 +182,19 @@ Prompt templates can be strings with `%{token}` placeholders or functions that r
 require("codux").setup({
   prompts = {
     file = "Review this %{target_type}, identify issues, and suggest or make fixes where appropriate: %{path}",
+    review_selection = "Review this selected code from %{relative_path}%{line_range} (%{filetype}):\n\n%{selection}",
     diagnostics = "Explain these %{diagnostics_source} issues for %{relative_path}:\n\n%{diagnostics}",
   },
+})
+```
+
+Available prompt tokens include `path`, `absolute_path`, `relative_path`, `target_type`, `target_source`, `filetype`, `git_branch`, `diagnostics`, `diagnostics_source`, `line_range`, and `selection`.
+
+`codex_cmd` can be a shell command string or an argument list:
+
+```lua
+require("codux").setup({
+  codex_cmd = { "codex", "-s", "workspace-write", "-a", "on-request" },
 })
 ```
 
