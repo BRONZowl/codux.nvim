@@ -1161,10 +1161,10 @@ function M.setup(opts)
 
   local mappings = type(config.mappings) == "table" and config.mappings or {}
   register_which_key_group(mappings)
-  set_mapping("n", mappings.open, M.open, "Codux: open popup")
-  set_mapping("n", mappings.review_file, M.send_file_review, "Codux: review file or explorer node")
+  set_mapping("n", mappings.open, M.open, "open codex")
+  set_mapping("n", mappings.review_file, M.send_file_review, "send file/folder to codex")
   set_mapping("v", mappings.review_selection, M.send_selection, "Codux: send selection")
-  set_mapping("n", mappings.diagnostics, M.send_diagnostics, "Codux: send diagnostics")
+  set_mapping("n", mappings.diagnostics, M.send_diagnostics, "send diagnostics to codex")
 end
 
 return M
