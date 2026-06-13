@@ -24,6 +24,10 @@ local function send_to_codex(message)
   vim.fn.system({ "tmux", "send-keys", "-t", tmux_target(), message, "Enter" })
 end
 
+local function switch_to_codex()
+  vim.fn.system({ "tmux", "select-window", "-t", tmux_target() })
+end
+
 function M.open()
   vim.fn.system("codux")
 end
@@ -98,6 +102,7 @@ function M.send_file_review()
   end
 
   send_to_codex("Review this " .. target_label(target) .. ": " .. target.path)
+  switch_to_codex()
 end
 
 function M.send_file_fix()
@@ -108,12 +113,14 @@ function M.send_file_fix()
   end
 
   send_to_codex("Find and fix issues in this " .. target_label(target) .. ": " .. target.path)
+  switch_to_codex()
 end
 
 function M.send_selection()
   vim.cmd('normal! "zy')
   local selected = vim.fn.getreg("z")
   send_to_codex("Review this selected code:\n\n" .. selected)
+  switch_to_codex()
 end
 
 function M.setup(opts)
