@@ -1,3 +1,5 @@
+<div align="center">
+
 # codux.nvim
 
 ```text
@@ -206,3 +208,5 @@ export PATH="$HOME/.local/bin:$PATH"
 - Keep the `CODEX` tmux window open while using Codux.
 - Neovim sends prompts with `tmux send-keys`.
 - Send mappings switch to the configured Codex tmux window after delivery.
+
+</div>
