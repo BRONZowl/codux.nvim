@@ -22,14 +22,36 @@ Built for LazyVim, friendly to Neo-tree, and small enough to understand at a gla
 
 <h2 align="center">What You Get</h2>
 
-| Feature | What it does |
-| --- | --- |
-| tmux window | Keeps Codex in a dedicated `CODEX` window |
-| File review | Sends the current file to Codex |
-| File fix | Asks Codex to find and fix issues in the current file |
-| Visual review | Sends selected code to Codex |
-| Neo-tree support | Sends the highlighted Neo-tree file or directory |
-| Auto-switch | Jumps to the Codex tmux window after sending |
+<table align="center">
+<tr>
+<th>Feature</th>
+<th>What it does</th>
+</tr>
+<tr>
+<td>tmux window</td>
+<td>Keeps Codex in a dedicated <code>CODEX</code> window</td>
+</tr>
+<tr>
+<td>File review</td>
+<td>Sends the current file to Codex</td>
+</tr>
+<tr>
+<td>File fix</td>
+<td>Asks Codex to find and fix issues in the current file</td>
+</tr>
+<tr>
+<td>Visual review</td>
+<td>Sends selected code to Codex</td>
+</tr>
+<tr>
+<td>Neo-tree support</td>
+<td>Sends the highlighted Neo-tree file or directory</td>
+</tr>
+<tr>
+<td>Auto-switch</td>
+<td>Jumps to the Codex tmux window after sending</td>
+</tr>
+</table>
 
 <h2 align="center">Requirements</h2>
 
