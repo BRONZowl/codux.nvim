@@ -381,6 +381,25 @@ local function command_with_prompt(command, prompt)
   return command .. " " .. vim.fn.shellescape(prompt)
 end
 
+local function codex_command_error(command)
+  if type(command) == "string" then
+    if command:match("^%s*$") then
+      return "Codex command must not be empty"
+    end
+    return nil
+  end
+
+  if type(command) ~= "table" then
+    return "Codex command must be a string or list"
+  end
+
+  if type(command[1]) ~= "string" or command[1]:match("^%s*$") then
+    return "Codex command list must start with an executable"
+  end
+
+  return nil
+end
+
 local function start_terminal(focus, initial_prompt)
   if terminal_running() then
     if focus then
@@ -389,8 +408,9 @@ local function start_terminal(focus, initial_prompt)
     return true
   end
 
-  if type(config.codex_cmd) ~= "string" and type(config.codex_cmd) ~= "table" then
-    notify("Codex command must be a string or list", vim.log.levels.ERROR)
+  local command_error = codex_command_error(config.codex_cmd)
+  if command_error then
+    notify(command_error, vim.log.levels.ERROR)
     return false
   end
 
@@ -807,13 +827,23 @@ local function format_list_diagnostics(items)
 end
 
 local function health_has_issues(text)
-  local lower = string.lower(text or "")
-  return lower:match("error") ~= nil
-    or lower:match("warn") ~= nil
-    or lower:match("fail") ~= nil
-    or lower:match("not found") ~= nil
-    or lower:match("missing") ~= nil
-    or lower:match("unavailable") ~= nil
+  for line in tostring(text or ""):gmatch("[^\r\n]+") do
+    local lower = string.lower(line)
+    if lower:match("^%s*health command exited with code") then
+      return true
+    end
+    if lower:match("^%s*failed to collect :") or lower:match("^%s*failed to collect health output") then
+      return true
+    end
+    if line:match("^%s*%- .*❌") or line:match("^%s*%- .*⚠") then
+      return true
+    end
+    if lower:match("^%s*%- %s*error") or lower:match("^%s*%- %s*warn") or lower:match("^%s*%- %s*warning") then
+      return true
+    end
+  end
+
+  return false
 end
 
 local function collect_health_diagnostics()
