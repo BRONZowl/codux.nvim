@@ -1127,16 +1127,44 @@ local function set_mapping(mode, lhs, rhs, desc)
   end
 end
 
+local function register_which_key_group(mappings)
+  local ok, which_key = pcall(require, "which-key")
+  if not ok then
+    return
+  end
+  local group_label = "codux"
+  local group_icon = "󰚩"
+
+  local has_codux_prefix = false
+  for _, lhs in pairs(mappings) do
+    if type(lhs) == "string" and lhs:match("^<leader>z") then
+      has_codux_prefix = true
+      break
+    end
+  end
+
+  if not has_codux_prefix then
+    return
+  end
+
+  if type(which_key.add) == "function" then
+    pcall(which_key.add, { { "<leader>z", group = group_label, icon = group_icon } })
+  elseif type(which_key.register) == "function" then
+    pcall(which_key.register, { z = { name = group_icon .. " " .. group_label } }, { prefix = "<leader>" })
+  end
+end
+
 function M.setup(opts)
   config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
 
   create_commands()
 
   local mappings = type(config.mappings) == "table" and config.mappings or {}
-  set_mapping("n", mappings.open, M.open, "Open Codex Popup")
-  set_mapping("n", mappings.review_file, M.send_file_review, "Send File Or Explorer Node To Codex")
-  set_mapping("v", mappings.review_selection, M.send_selection, "Send Selection To Codex")
-  set_mapping("n", mappings.diagnostics, M.send_diagnostics, "Send Diagnostics To Codex")
+  register_which_key_group(mappings)
+  set_mapping("n", mappings.open, M.open, "Codux: open popup")
+  set_mapping("n", mappings.review_file, M.send_file_review, "Codux: review file or explorer node")
+  set_mapping("v", mappings.review_selection, M.send_selection, "Codux: send selection")
+  set_mapping("n", mappings.diagnostics, M.send_diagnostics, "Codux: send diagnostics")
 end
 
 return M
