@@ -999,10 +999,7 @@ function M.send_file_fix()
   return M.send_file_review()
 end
 
-local function selection_from_marks()
-  local bufnr = vim.api.nvim_get_current_buf()
-  local start_pos = vim.fn.getpos("'<")
-  local end_pos = vim.fn.getpos("'>")
+local function normalize_selection_positions(start_pos, end_pos)
   local start_line = start_pos[2]
   local start_col = start_pos[3]
   local end_line = end_pos[2]
@@ -1017,19 +1014,53 @@ local function selection_from_marks()
     start_col, end_col = end_col, start_col
   end
 
+  return start_line, start_col, end_line, end_col
+end
+
+local function selection_from_positions(start_pos, end_pos, mode)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local start_line, start_col, end_line, end_col = normalize_selection_positions(start_pos, end_pos)
+  if not start_line then
+    return nil
+  end
+
   local lines = buffer_lines(bufnr, start_line - 1, end_line)
   if not lines or vim.tbl_isempty(lines) then
     return nil
   end
 
-  if #lines == 1 then
-    lines[1] = string.sub(lines[1], start_col, end_col)
-  else
-    lines[1] = string.sub(lines[1], start_col)
-    lines[#lines] = string.sub(lines[#lines], 1, end_col)
+  if mode ~= "V" and mode ~= "S" then
+    if #lines == 1 then
+      lines[1] = string.sub(lines[1], start_col, end_col)
+    else
+      lines[1] = string.sub(lines[1], start_col)
+      lines[#lines] = string.sub(lines[#lines], 1, end_col)
+    end
   end
 
   return table.concat(lines, "\n"), start_line, end_line
+end
+
+local function active_visual_mode()
+  local mode = vim.fn.mode()
+  if mode == "v" or mode == "V" or mode == "s" or mode == "S" or mode == "\22" or mode == "\19" then
+    return mode
+  end
+
+  return nil
+end
+
+local function selection_from_active_visual()
+  local mode = active_visual_mode()
+  if not mode then
+    return nil
+  end
+
+  return selection_from_positions(vim.fn.getpos("v"), vim.fn.getpos("."), mode)
+end
+
+local function selection_from_marks()
+  return selection_from_positions(vim.fn.getpos("'<"), vim.fn.getpos("'>"), vim.fn.visualmode())
 end
 
 local function selection_from_range(opts)
@@ -1038,6 +1069,10 @@ local function selection_from_range(opts)
   end
 
   if type(opts) ~= "table" or not opts.line1 or not opts.line2 or opts.line1 == 0 or opts.line2 == 0 then
+    local selected, start_line, end_line = selection_from_active_visual()
+    if selected then
+      return selected, start_line, end_line
+    end
     return selection_from_marks()
   end
 
@@ -1164,23 +1199,62 @@ local function register_which_key_group(mappings)
   end
   local group_label = "codux"
   local group_icon = "󰚩"
+  local normal_entries = {
+    { lhs = mappings.open, desc = "open codex" },
+    { lhs = mappings.review_file, desc = "send file/folder to codex" },
+    { lhs = mappings.review_selection, desc = "send selection to codex" },
+    { lhs = mappings.diagnostics, desc = "send diagnostics to codex" },
+  }
 
-  local has_codux_prefix = false
-  for _, lhs in pairs(mappings) do
-    if type(lhs) == "string" and lhs:match("^<leader>z") then
-      has_codux_prefix = true
+  local has_normal_prefix = false
+  for _, entry in ipairs(normal_entries) do
+    if type(entry.lhs) == "string" and entry.lhs:match("^<leader>z") then
+      has_normal_prefix = true
       break
     end
   end
+  local has_visual_prefix = type(mappings.review_selection) == "string" and mappings.review_selection:match("^<leader>z")
 
-  if not has_codux_prefix then
+  if not has_normal_prefix and not has_visual_prefix then
     return
   end
 
+  local modes = {}
+  if has_normal_prefix then
+    table.insert(modes, "n")
+  end
+  if has_visual_prefix then
+    table.insert(modes, "v")
+  end
+
   if type(which_key.add) == "function" then
-    pcall(which_key.add, { { "<leader>z", group = group_label, icon = group_icon } })
+    local specs = { { "<leader>z", group = group_label, icon = group_icon, mode = modes } }
+    for _, entry in ipairs(normal_entries) do
+      if type(entry.lhs) == "string" and entry.lhs:match("^<leader>z") then
+        table.insert(specs, { entry.lhs, desc = entry.desc, mode = "n" })
+      end
+    end
+    if has_visual_prefix then
+      table.insert(specs, { mappings.review_selection, desc = "send selection to codex", mode = "v" })
+    end
+    pcall(which_key.add, specs)
   elseif type(which_key.register) == "function" then
-    pcall(which_key.register, { z = { name = group_icon .. " " .. group_label } }, { prefix = "<leader>" })
+    if has_normal_prefix then
+      local normal_spec = { z = { name = group_icon .. " " .. group_label } }
+      for _, entry in ipairs(normal_entries) do
+        if type(entry.lhs) == "string" and entry.lhs:match("^<leader>z.") then
+          normal_spec.z[entry.lhs:sub(#"<leader>z" + 1)] = entry.desc
+        end
+      end
+      pcall(which_key.register, normal_spec, { prefix = "<leader>", mode = "n" })
+    end
+    if has_visual_prefix then
+      local visual_spec = { z = { name = group_icon .. " " .. group_label } }
+      if mappings.review_selection:match("^<leader>z.") then
+        visual_spec.z[mappings.review_selection:sub(#"<leader>z" + 1)] = "send selection to codex"
+      end
+      pcall(which_key.register, visual_spec, { prefix = "<leader>", mode = "v" })
+    end
   end
 end
 
@@ -1193,7 +1267,8 @@ function M.setup(opts)
   register_which_key_group(mappings)
   set_mapping("n", mappings.open, M.open, "open codex")
   set_mapping("n", mappings.review_file, M.send_file_review, "send file/folder to codex")
-  set_mapping("v", mappings.review_selection, M.send_selection, "Codux: send selection")
+  set_mapping("n", mappings.review_selection, M.send_selection, "send selection to codex")
+  set_mapping("v", mappings.review_selection, M.send_selection, "send selection to codex")
   set_mapping("n", mappings.diagnostics, M.send_diagnostics, "send diagnostics to codex")
 end
 

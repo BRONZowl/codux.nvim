@@ -109,12 +109,14 @@ Codex CLI
 
 In LazyVim, `<leader>` is usually Space.
 
-| Key | Action |
-| --- | --- |
-| `<leader>zc` | Open or focus the Codex popup |
-| `<leader>zf` | Review current file or explorer node, identify issues, and suggest fixes |
-| `<leader>zs` | Send selected code to Codex |
-| `<leader>zd` | Send diagnostics, location list, quickfix entries, and headless health output to Codex |
+| Mode | Key | Action |
+| --- | --- | --- |
+| Normal | `<leader>zc` | Open or focus the Codex popup |
+| Normal | `<leader>zf` | Review current file or explorer node, identify issues, and suggest fixes |
+| Normal / Visual | `<leader>zs` | Send selected code to Codex |
+| Normal | `<leader>zd` | Send diagnostics, location list, quickfix entries, and headless health output to Codex |
+
+Select text first, then press `<leader>zs` to send that selection to Codex. In normal mode, `<leader>zs` sends the most recent visual selection.
 
 <h2 align="center">Commands</h2>
 
