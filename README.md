@@ -1,111 +1,155 @@
+<div align="center">
+
 # codux.nvim
 
+<strong>OpenAI Codex, wired into Neovim as a persistent floating terminal.</strong>
+
+<br>
+<br>
+
+[![Neovim](https://img.shields.io/badge/Neovim-floating%20terminal-57A143?style=for-the-badge&logo=neovim&logoColor=white)](#requirements)
+[![Codex CLI](https://img.shields.io/badge/Codex-CLI-111827?style=for-the-badge)](#install)
+[![lazy.nvim](https://img.shields.io/badge/lazy.nvim-ready-7C3AED?style=for-the-badge)](#install)
+[![License](https://img.shields.io/badge/license-MIT-0F766E?style=for-the-badge)](LICENSE)
+
+<br>
+
+<pre>
++================================================+
+|                  CODUX.NVIM                    |
+|------------------------------------------------|
+|  send context -> keep flow -> stay in Neovim   |
+|  files | selections | diagnostics | explorers  |
++================================================+
+</pre>
+
+</div>
+
 ```text
-     _            _
- ___| | ___   __| |_   ___  __
-/ __| |/ _ \ / _` | | | \ \/ /
-| (__| | (_) | (_| | |_| |>  <
-\___|_|\___/ \__,_|\__,_/_/\_\
-
-Codex in a Neovim popup.
-Send files, selections, diagnostics, and explorer targets without leaving your editor.
+  file buffer         visual selection        diagnostics        explorer node
+      \                    |                     |                    /
+       \                   |                     |                   /
+        +------------------+---------------------+------------------+
+                                   |
+                                   v
+                     codux.nvim floating terminal
+                                   |
+                                   v
+                             OpenAI Codex CLI
 ```
 
-```text
-nvim buffer / explorer / selection / diagnostics
-        |
-        v
-codux.nvim floating terminal
-        |
-        v
-OpenAI Codex CLI
-```
+Codux opens Codex inside Neovim, sends rich editor context on demand, and lets you hide the popup without killing the session. No tmux launcher. No context switching. No ceremony.
 
-No tmux launcher required. Codux starts Codex directly inside Neovim and keeps the session alive when you hide the popup.
+## Install
 
-## Quick Start
+<table>
+<tr>
+<td width="50%">
 
-Install the Codex CLI:
+<strong>1. Install Codex CLI</strong>
 
-```bash
-$ curl -fsSL https://chatgpt.com/codex/install.sh | sh
-```
+<pre><code class="language-bash">$ curl -fsSL https://chatgpt.com/codex/install.sh | sh
+$ codex login</code></pre>
 
-Sign in:
+</td>
+<td width="50%">
 
-```bash
-$ codex login
-```
+<strong>2. Add codux.nvim</strong>
 
-Add the plugin with lazy.nvim or LazyVim:
-
-```lua
-return {
+<pre><code class="language-lua">return {
   "BRONZowl/codux.nvim",
   config = function()
     require("codux").setup()
   end,
-}
-```
+}</code></pre>
 
-Open a project:
+</td>
+</tr>
+</table>
+
+Then open a project and light it up:
 
 ```bash
 $ cd ~/Projects/your-project
 $ nvim
 ```
 
-Check the install:
-
 ```vim
 :checkhealth codux
-```
-
-Start Codex:
-
-```vim
 :CoduxOpen
 ```
 
-Or press `<leader>zc`.
+Press <kbd>&lt;leader&gt;zc</kbd> any time you want the popup back.
 
-## Requirements
+> In LazyVim, `<leader>` is usually Space.
+
+## What You Get
+
+<table>
+<tr>
+<td width="33%">
+
+<strong>Persistent Codex popup</strong>
+
+Hide the floating terminal without killing Codex. Bring the same session back with <code>:CoduxOpen</code>.
+
+</td>
+<td width="33%">
+
+<strong>Context launchers</strong>
+
+Send the current file, explorer target, selected code, diagnostics, quickfix items, and health output.
+
+</td>
+<td width="33%">
+
+<strong>Explorer aware</strong>
+
+Neo-tree, Oil.nvim, nvim-tree, and mini.files targets are detected before falling back to the active buffer.
+
+</td>
+</tr>
+<tr>
+<td width="33%">
+
+<strong>LazyVim friendly</strong>
+
+Default mappings live under <code>&lt;leader&gt;z</code> and register cleanly with which-key when it is available.
+
+</td>
+<td width="33%">
+
+<strong>Prompt templates</strong>
+
+Customize prompts with tokens like <code>%{relative_path}</code>, <code>%{line_range}</code>, <code>%{diagnostics}</code>, and <code>%{selection}</code>.
+
+</td>
+<td width="33%">
+
+<strong>Simple health checks</strong>
+
+<code>:checkhealth codux</code> verifies terminal support, floating windows, Codex command setup, popup state, and job state.
+
+</td>
+</tr>
+</table>
+
+## Command Deck
 
 ```text
-required:
-  - Neovim with terminal and floating window support
-  - Codex CLI on PATH as `codex`
-  - lazy.nvim or LazyVim
-
-optional:
-  - which-key.nvim for the <leader>z group label
-  - Neo-tree, Oil.nvim, nvim-tree, or mini.files for explorer targets
++------------------------+----------------+----------------------------------------------+
+| Move                   | Key            | Result                                       |
++------------------------+----------------+----------------------------------------------+
+| Open Codex             | <leader>zc     | Open or focus the floating Codex terminal    |
+| Review file            | <leader>zf     | Send current file or explorer target         |
+| Review selection       | <leader>zs     | Send selected code with file and line range  |
+| Diagnose project       | <leader>zd     | Send diagnostics, lists, and health output   |
+| Hide popup             | q / <C-q>      | Hide Codex, keep the session alive           |
+| Stop Codex             | :CoduxExit     | Stop Codex and clear the terminal            |
++------------------------+----------------+----------------------------------------------+
 ```
 
-On Windows, install Codex natively with PowerShell or use WSL2 for a Linux-style setup:
-
-```powershell
-irm https://chatgpt.com/codex/install.ps1 | iex
-```
-
-For remote or headless machines where browser login is awkward:
-
-```bash
-$ codex login --device-auth
-```
-
-## Daily Use
-
-```text
-open       <leader>zc     open or focus the Codex popup
-file       <leader>zf     send current file or explorer node
-selection  <leader>zs     send selected code
-diagnose   <leader>zd     send diagnostics, quickfix, location list, and health output
-hide       q or <C-q>     hide the popup, keep Codex running
-exit       :CoduxExit     stop Codex and clear the terminal
-```
-
-In LazyVim, `<leader>` is usually Space.
+## First Run Flow
 
 ### Open Codex
 
@@ -113,7 +157,7 @@ In LazyVim, `<leader>` is usually Space.
 :CoduxOpen
 ```
 
-The popup opens as a floating terminal. Closing it with `q`, `<C-q>`, or `:CoduxClose` hides the window but leaves the Codex process alive.
+Codux starts Codex in a floating terminal. If the popup is hidden later, `:CoduxOpen` brings the existing session back.
 
 ### Send A File
 
@@ -121,19 +165,25 @@ The popup opens as a floating terminal. Closing it with `q`, `<C-q>`, or `:Codux
 :CoduxReview
 ```
 
-Or press `<leader>zf`.
+Or press <kbd>&lt;leader&gt;zf</kbd>.
 
-Codux sends the active buffer path. If your cursor is in a supported file explorer, Codux sends the highlighted file or directory instead.
+Codux sends the active buffer path. From a supported explorer, it sends the highlighted file or directory instead.
 
 ### Send A Selection
 
-Select code, then press `<leader>zs`.
+Select code, then press <kbd>&lt;leader&gt;zs</kbd>.
 
 ```text
-visual select -> <leader>zs -> Codex receives file path, line range, and code
+visual selection
+      |
+      v
+file path + line range + selected code
+      |
+      v
+Codex prompt
 ```
 
-You can also use the command:
+You can also use the command form:
 
 ```vim
 :'<,'>CoduxReviewSelection
@@ -147,23 +197,23 @@ In normal mode, `<leader>zs` sends the most recent visual selection.
 :CoduxDiagnostics
 ```
 
-Or press `<leader>zd`.
+Or press <kbd>&lt;leader&gt;zd</kbd>.
 
 Codux collects current-buffer diagnostics, the location list, the quickfix list, and headless `:LazyHealth` / `:checkhealth` output. If nothing needs attention, Codux reports `No Issues Found` and exits the popup session.
 
 ## Commands
 
-```text
-:CoduxOpen              open or focus the Codex popup
-:CoduxToggle            toggle the Codex popup
-:CoduxClose             hide the popup without stopping Codex
-:CoduxExit              stop Codex and close the popup
-:CoduxReview            send current file or explorer node to Codex
-:CoduxReviewSelection   send selected code to Codex
-:CoduxDiagnostics       send diagnostics and health output to Codex
-:CoduxHealth            run codux.nvim health checks
-:checkhealth codux      run Neovim's health check for codux.nvim
-```
+| Command | What it does |
+| --- | --- |
+| `:CoduxOpen` | Open or focus the Codex popup |
+| `:CoduxToggle` | Toggle the Codex popup |
+| `:CoduxClose` | Hide the popup without stopping Codex |
+| `:CoduxExit` | Stop Codex and close the popup |
+| `:CoduxReview` | Send current file or explorer node to Codex |
+| `:CoduxReviewSelection` | Send selected code to Codex |
+| `:CoduxDiagnostics` | Send diagnostics and health output to Codex |
+| `:CoduxHealth` | Run codux.nvim health checks |
+| `:checkhealth codux` | Run Neovim's health check for codux.nvim |
 
 ## Keymaps
 
@@ -174,19 +224,30 @@ Codux collects current-buffer diagnostics, the location list, the quickfix list,
 | Normal / Visual | `<leader>zs` | Send selected code to Codex |
 | Normal | `<leader>zd` | Send diagnostics, lists, and health output |
 
-## Explorer Targets
-
-Codux detects supported file explorer buffers and sends the highlighted file or directory instead of the explorer buffer itself.
+## Requirements
 
 ```text
-supported explorers:
-  - Neo-tree
-  - Oil.nvim
-  - nvim-tree
-  - mini.files
+required
+  Neovim with terminal and floating window support
+  Codex CLI available on PATH as `codex`
+  lazy.nvim or LazyVim
+
+optional
+  which-key.nvim for the <leader>z group label
+  Neo-tree, Oil.nvim, nvim-tree, or mini.files for explorer targets
 ```
 
-When no explorer target is found, Codux falls back to the active buffer path.
+Windows users can install Codex natively with PowerShell:
+
+```powershell
+irm https://chatgpt.com/codex/install.ps1 | iex
+```
+
+Remote or headless login:
+
+```bash
+$ codex login --device-auth
+```
 
 ## Configuration
 
@@ -267,7 +328,18 @@ line_range
 selection
 ```
 
-## Custom Targets
+## Explorer Targets
+
+```text
+detected automatically
+  Neo-tree
+  Oil.nvim
+  nvim-tree
+  mini.files
+
+fallback
+  active buffer path
+```
 
 Custom target providers can return a file or directory target before Codux falls back to built-in explorer detection.
 
@@ -305,29 +377,14 @@ return {
 
 ## Troubleshooting
 
-```text
-codex not found:
-  Run `codex --version`.
-  If that fails, install the Codex CLI and make sure its install directory is on PATH.
-
-login does not open a browser:
-  Use `codex login --device-auth`.
-
-selection sends nothing:
-  Select text first, then press <leader>zs.
-  From normal mode, <leader>zs uses the most recent visual selection.
-
-explorer sends the wrong path:
-  Confirm the explorer is one of Neo-tree, Oil.nvim, nvim-tree, or mini.files.
-  Unsupported explorers fall back to the active buffer path unless you add a custom target provider.
-
-popup disappeared:
-  `q`, `<C-q>`, and `:CoduxClose` only hide the popup.
-  Use `:CoduxOpen` to bring the same Codex session back.
-
-need a clean Codex restart:
-  Run `:CoduxExit`, then `:CoduxOpen`.
-```
+| Problem | Fix |
+| --- | --- |
+| `codex` is not found | Run `codex --version`. If it fails, install the Codex CLI and make sure its install directory is on PATH. |
+| Browser login does not work | Run `codex login --device-auth`. |
+| Selection sends nothing | Select text first, then press `<leader>zs`. From normal mode, `<leader>zs` uses the most recent visual selection. |
+| Explorer sends the wrong path | Confirm the explorer is Neo-tree, Oil.nvim, nvim-tree, or mini.files, or add a custom target provider. |
+| Popup disappeared | `q`, `<C-q>`, and `:CoduxClose` only hide the popup. Run `:CoduxOpen` to bring the session back. |
+| Need a clean restart | Run `:CoduxExit`, then `:CoduxOpen`. |
 
 ## Health Check
 
