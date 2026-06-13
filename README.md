@@ -1,6 +1,4 @@
-<div align="center">
-
-# codux.nvim
+<h1 align="center">codux.nvim</h1>
 
 ```text
 +----------------------------------------------+
@@ -14,7 +12,7 @@
 
 Built for LazyVim, friendly to Neo-tree, and small enough to understand at a glance.
 
-## What You Get
+<h2 align="center">What You Get</h2>
 
 | Feature | What it does |
 | --- | --- |
@@ -25,7 +23,7 @@ Built for LazyVim, friendly to Neo-tree, and small enough to understand at a gla
 | Neo-tree support | Sends the highlighted Neo-tree file or directory |
 | Auto-switch | Jumps to the Codex tmux window after sending |
 
-## Requirements
+<h2 align="center">Requirements</h2>
 
 - Linux or another Unix-like environment
 - tmux
@@ -33,7 +31,7 @@ Built for LazyVim, friendly to Neo-tree, and small enough to understand at a gla
 - OpenAI Codex CLI available as `codex`
 - Lazy.nvim or LazyVim for the plugin spec examples below
 
-## Fast Install
+<h2 align="center">Fast Install</h2>
 
 Clone the repo:
 
@@ -61,7 +59,7 @@ The installer:
 
 Restart your shell after installing, or source your rc file.
 
-## LazyVim Setup
+<h2 align="center">LazyVim Setup</h2>
 
 Create:
 
@@ -93,7 +91,7 @@ return {
 
 That is enough for the default workflow.
 
-## Run It
+<h2 align="center">Run It</h2>
 
 Start tmux, open a project, then open Neovim:
 
@@ -115,7 +113,7 @@ tmux send-keys
 Codex window: CODEX
 ```
 
-## Keymaps
+<h2 align="center">Keymaps</h2>
 
 In LazyVim, `<leader>` is usually Space.
 
@@ -126,7 +124,7 @@ In LazyVim, `<leader>` is usually Space.
 | `<leader>zx` | Ask Codex to fix the current file or selected Neo-tree node, then switch to Codex |
 | `<leader>zs` | Send selected code to Codex, then switch to Codex |
 
-## Neo-tree
+<h2 align="center">Neo-tree</h2>
 
 Codux detects when your cursor is in a Neo-tree window.
 
@@ -137,7 +135,7 @@ When Neo-tree is focused:
 
 When Neo-tree is not focused, Codux uses the active buffer path instead.
 
-## tmux And Codex
+<h2 align="center">tmux And Codex</h2>
 
 The `codux` launcher must run inside tmux.
 
@@ -173,7 +171,7 @@ require("codux").setup({
 })
 ```
 
-## Custom Keymaps
+<h2 align="center">Custom Keymaps</h2>
 
 ```lua
 require("codux").setup({
@@ -187,7 +185,7 @@ require("codux").setup({
 })
 ```
 
-## Manual Launcher Install
+<h2 align="center">Manual Launcher Install</h2>
 
 Use this instead of `./installcodux.sh` if you want to do the launcher setup yourself:
 
@@ -203,10 +201,8 @@ Then make sure this is in your shell rc file:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-## Notes
+<h2 align="center">Notes</h2>
 
 - Keep the `CODEX` tmux window open while using Codux.
 - Neovim sends prompts with `tmux send-keys`.
 - Send mappings switch to the configured Codex tmux window after delivery.
-
-</div>
