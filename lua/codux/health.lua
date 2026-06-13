@@ -36,14 +36,60 @@ local function executable(name)
   return vim.fn.executable(name) == 1
 end
 
+local function command_display(command)
+  if type(command) == "string" then
+    return command
+  end
+
+  if type(command) ~= "table" then
+    return tostring(command)
+  end
+
+  local parts = {}
+  for _, part in ipairs(command) do
+    local value = tostring(part)
+    if value:find("%s") then
+      value = vim.fn.shellescape(value)
+    end
+    table.insert(parts, value)
+  end
+
+  return table.concat(parts, " ")
+end
+
+local function command_executable(command)
+  if type(command) == "table" then
+    return command[1]
+  end
+
+  if type(command) == "string" then
+    return command:match("^%s*(%S+)")
+  end
+
+  return nil
+end
+
+local function command_error(command)
+  if type(command) == "string" then
+    if command:match("^%s*$") then
+      return "configured Codex command must not be empty"
+    end
+    return nil
+  end
+
+  if type(command) ~= "table" then
+    return "configured Codex command must be a string or list"
+  end
+
+  if type(command[1]) ~= "string" or command[1] == "" then
+    return "configured Codex command list must start with an executable"
+  end
+
+  return nil
+end
+
 function M.check()
   health_start("codux.nvim")
-
-  if executable("codex") then
-    health_ok("codex executable found")
-  else
-    health_warn("codex executable not found")
-  end
 
   if vim.fn.exists("*termopen") == 1 then
     health_ok("Neovim terminal support available")
@@ -64,18 +110,32 @@ function M.check()
   end
 
   local info = codux.health_info()
-  health_ok("configured Codex command: " .. info.config.codex_cmd)
+  local codex_cmd = info.config and info.config.codex_cmd
+  local config_error = command_error(codex_cmd)
+  if config_error then
+    health_error(config_error)
+    return
+  end
+
+  health_ok("configured Codex command: " .. command_display(codex_cmd))
+
+  local executable_name = command_executable(codex_cmd)
+  if type(executable_name) == "string" and executable_name ~= "" and executable(executable_name) then
+    health_ok("Codex executable found: " .. executable_name)
+  else
+    health_warn("Codex executable not found: " .. tostring(executable_name or "unknown"))
+  end
 
   if info.popup_visible then
     health_ok("Codex popup is visible")
   else
-    health_warn("Codex popup is hidden")
+    health_ok("Codex popup is hidden (normal when idle)")
   end
 
   if info.terminal_running then
     health_ok("Codex terminal job is running")
   else
-    health_warn("Codex terminal job is not running yet")
+    health_ok("Codex terminal job is not running (starts on demand)")
   end
 end
 
