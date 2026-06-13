@@ -1,12 +1,20 @@
 <h1 align="center">codux.nvim</h1>
 
-```text
+<table align="center">
+<tr>
+<td>
+
+<pre>
 +----------------------------------------------+
 |                  codux.nvim                  |
 |           Neovim -> tmux -> Codex            |
 |   Send the file. Switch windows. Keep moving.|
 +----------------------------------------------+
-```
+</pre>
+
+</td>
+</tr>
+</table>
 
 `codux.nvim` gives Neovim a fast tmux-first Codex workflow. It opens Codex in a dedicated tmux window, sends files or selections into that session, and switches you to Codex after the prompt is delivered.
 
