@@ -81,7 +81,7 @@ local function command_error(command)
     return "configured Codex command must be a string or list"
   end
 
-  if type(command[1]) ~= "string" or command[1] == "" then
+  if type(command[1]) ~= "string" or command[1]:match("^%s*$") then
     return "configured Codex command list must start with an executable"
   end
 
