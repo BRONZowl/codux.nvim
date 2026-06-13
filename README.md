@@ -1,79 +1,84 @@
 # codux.nvim
 
-A small tmux-first Codex workflow for Neovim and LazyVim.
+```text
++----------------------------------------------+
+| codux.nvim                                   |
+| Neovim -> tmux -> Codex                      |
+| Send the file. Switch windows. Keep moving.  |
++----------------------------------------------+
+```
 
-`codux.nvim` keeps Codex in a dedicated tmux window and lets Neovim send work directly into it: review the current file, ask Codex to fix a file, review selected code, or target the highlighted Neo-tree node. After sending, Codux switches you to the Codex tmux window so you can continue the conversation immediately.
+`codux.nvim` gives Neovim a fast tmux-first Codex workflow. It opens Codex in a dedicated tmux window, sends files or selections into that session, and switches you to Codex after the prompt is delivered.
 
-## Highlights
+Built for LazyVim, friendly to Neo-tree, and small enough to understand at a glance.
 
-- Dedicated Codex tmux window, named `CODEX` by default.
-- LazyVim-friendly mappings for file review, file fixes, and visual selections.
-- Neo-tree support for sending the highlighted file or directory.
-- Automatic fallback to the active buffer when Neo-tree is not focused.
-- Simple launcher script with configurable Codex command and tmux window name.
+## What You Get
+
+| Feature | What it does |
+| --- | --- |
+| tmux window | Keeps Codex in a dedicated `CODEX` window |
+| File review | Sends the current file to Codex |
+| File fix | Asks Codex to find and fix issues in the current file |
+| Visual review | Sends selected code to Codex |
+| Neo-tree support | Sends the highlighted Neo-tree file or directory |
+| Auto-switch | Jumps to the Codex tmux window after sending |
 
 ## Requirements
 
+- Linux or another Unix-like environment
 - tmux
 - Neovim
 - OpenAI Codex CLI available as `codex`
-- `~/.local/bin` in your shell `PATH`
+- Lazy.nvim or LazyVim for the plugin spec examples below
 
-## Quick Start
+## Fast Install
 
-Clone the plugin:
+Clone the repo:
 
 ```bash
 git clone https://github.com/BRONZowl/codux.nvim.git
 cd codux.nvim
 ```
 
-Install the tmux launcher:
+Install the launcher:
 
 ```bash
-mkdir -p ~/.local/bin
-cp bin/codux ~/.local/bin/codux
-chmod +x ~/.local/bin/codux
+./installcodux.sh
 ```
 
-Make sure `~/.local/bin` is in your shell `PATH`.
+The installer:
 
-For bash:
+- Copies `bin/codux` to `~/.local/bin/codux`.
+- Makes the launcher executable.
+- Adds `~/.local/bin` to common Linux shell startup files when needed:
+  - `~/.bashrc`
+  - `~/.zshrc`
+  - `~/.profile`
+  - `~/.bash_profile`
+  - `~/.config/fish/config.fish` when fish config exists
 
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-For zsh:
-
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-```
+Restart your shell after installing, or source your rc file.
 
 ## LazyVim Setup
 
-Create a plugin spec:
+Create:
 
 ```bash
 nvim ~/.config/nvim/lua/plugins/codux.lua
 ```
 
-For a local checkout:
+Use this if you cloned the repo locally:
 
 ```lua
 return {
-  dir = "~/path/to/codux.nvim",
+  dir = "~/Projects/codux.nvim",
   config = function()
-    require("codux").setup({
-      tmux_window = "CODEX",
-    })
+    require("codux").setup()
   end,
 }
 ```
 
-For a GitHub-hosted install:
+Use this if you install from GitHub:
 
 ```lua
 return {
@@ -84,36 +89,33 @@ return {
 }
 ```
 
-To override the defaults:
+That is enough for the default workflow.
 
-```lua
-return {
-  "BRONZowl/codux.nvim",
-  config = function()
-    require("codux").setup({
-      tmux_window = "CODEX",
-      mappings = {
-        open = "<leader>zc",
-        review_file = "<leader>zf",
-        fix_file = "<leader>zx",
-        review_selection = "<leader>zs",
-      },
-    })
-  end,
-}
-```
+## Run It
 
-## Workflow
-
-Start inside tmux, enter your project, and open Neovim:
+Start tmux, open a project, then open Neovim:
 
 ```bash
 tmux
-cd ~/Projects/FPS
+cd ~/Projects/your-project
 nvim
 ```
 
-Use `<leader>zc` to open or switch to the Codex tmux window. The launcher creates a `CODEX` window in the current directory if it does not already exist; otherwise it selects the existing window.
+Press `<leader>zc` to open or switch to Codex.
+
+```text
+Neovim buffer / Neo-tree node / visual selection
+        |
+        v
+tmux send-keys
+        |
+        v
+Codex window: CODEX
+```
+
+## Keymaps
+
+In LazyVim, `<leader>` is usually Space.
 
 | Key | Action |
 | --- | --- |
@@ -122,25 +124,32 @@ Use `<leader>zc` to open or switch to the Codex tmux window. The launcher create
 | `<leader>zx` | Ask Codex to fix the current file or selected Neo-tree node, then switch to Codex |
 | `<leader>zs` | Send selected code to Codex, then switch to Codex |
 
-In LazyVim, `<leader>` is usually Space.
-
 ## Neo-tree
 
-Codux understands Neo-tree when the Neo-tree window is focused.
+Codux detects when your cursor is in a Neo-tree window.
 
-With the Neo-tree LazyVim extra enabled, highlight a file or directory and press `<leader>zf` or `<leader>zx`. Codux sends that selected path to the running Codex tmux window instead of sending the Neo-tree buffer path.
+When Neo-tree is focused:
 
-If Neo-tree is not installed, or if the current window is not Neo-tree, Codux uses the active buffer path.
+- `<leader>zf` reviews the highlighted file or directory.
+- `<leader>zx` asks Codex to fix the highlighted file or directory.
+
+When Neo-tree is not focused, Codux uses the active buffer path instead.
 
 ## tmux And Codex
 
-The `codux` launcher expects to run inside tmux. By default it starts Codex with:
+The `codux` launcher must run inside tmux.
+
+Default behavior:
 
 ```bash
 codex -s workspace-write -a on-request
 ```
 
-That gives Codex workspace-write access and keeps higher-risk actions behind approval prompts.
+Default tmux window:
+
+```text
+CODEX
+```
 
 Override the Codex command:
 
@@ -154,7 +163,7 @@ Rename the tmux window:
 export CODUX_WINDOW_NAME="AI"
 ```
 
-If you rename the tmux window, use the same name in your plugin setup:
+If you rename the tmux window, match it in Neovim:
 
 ```lua
 require("codux").setup({
@@ -162,8 +171,38 @@ require("codux").setup({
 })
 ```
 
+## Custom Keymaps
+
+```lua
+require("codux").setup({
+  tmux_window = "CODEX",
+  mappings = {
+    open = "<leader>zc",
+    review_file = "<leader>zf",
+    fix_file = "<leader>zx",
+    review_selection = "<leader>zs",
+  },
+})
+```
+
+## Manual Launcher Install
+
+Use this instead of `./installcodux.sh` if you want to do the launcher setup yourself:
+
+```bash
+mkdir -p ~/.local/bin
+cp bin/codux ~/.local/bin/codux
+chmod +x ~/.local/bin/codux
+```
+
+Then make sure this is in your shell rc file:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
 ## Notes
 
-- Keep the Codex tmux window open while using Codux.
+- Keep the `CODEX` tmux window open while using Codux.
 - Neovim sends prompts with `tmux send-keys`.
-- Send mappings switch to the configured Codex tmux window after the prompt is delivered.
+- Send mappings switch to the configured Codex tmux window after delivery.
