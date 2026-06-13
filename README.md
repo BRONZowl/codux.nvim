@@ -1,6 +1,9 @@
-# codux.nvim
+<h1 align="center">codux.nvim</h1>
 
-Codux runs OpenAI Codex in a persistent Neovim floating terminal. It lets you send the current file, selected code, diagnostics, or a file explorer target to Codex without leaving your editor.
+<p align="center">
+  Codux runs OpenAI Codex in a persistent Neovim floating terminal.
+  Send the current file, selected code, diagnostics, or a file explorer target without leaving your editor.
+</p>
 
 Closing the popup hides it; it does not kill the Codex session.
 
