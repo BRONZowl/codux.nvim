@@ -2,9 +2,9 @@
 
 ```text
 +----------------------------------------------+
-| codux.nvim                                   |
-| Neovim -> tmux -> Codex                      |
-| Send the file. Switch windows. Keep moving.  |
+|                  codux.nvim                  |
+|           Neovim -> tmux -> Codex            |
+|   Send the file. Switch windows. Keep moving.|
 +----------------------------------------------+
 ```
 
