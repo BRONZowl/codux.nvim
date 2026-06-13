@@ -1,24 +1,12 @@
 <h1 align="center">codux.nvim</h1>
 
-<table align="center">
-<tr>
-<td>
+<p align="center">
+  <strong>Codex in a Neovim popup. Send context without leaving your editor.</strong>
+</p>
 
-<pre>
-+----------------------------------------------+
-|                  codux.nvim                  |
-|           Neovim -> tmux -> Codex            |
-|   Send the file. Switch windows. Keep moving.|
-+----------------------------------------------+
-</pre>
-
-</td>
-</tr>
-</table>
-
-`codux.nvim` gives Neovim a fast tmux-first Codex workflow. It opens Codex in a dedicated tmux window, sends files or selections into that session, and switches you to Codex after the prompt is delivered.
-
-Built for LazyVim, friendly to Neo-tree, and small enough to understand at a glance.
+<p align="center">
+  <code>files</code> · <code>selections</code> · <code>diagnostics</code> · <code>Neo-tree</code> · <code>floating terminal</code>
+</p>
 
 <h2 align="center">What You Get</h2>
 
@@ -28,73 +16,48 @@ Built for LazyVim, friendly to Neo-tree, and small enough to understand at a gla
 <th>What it does</th>
 </tr>
 <tr>
-<td>tmux window</td>
-<td>Keeps Codex in a dedicated <code>CODEX</code> window</td>
+<td>Codex popup</td>
+<td>Runs Codex in a persistent Neovim floating terminal</td>
 </tr>
 <tr>
-<td>File review</td>
-<td>Sends the current file to Codex</td>
+<td>Hide, do not kill</td>
+<td>Closing the popup keeps the Codex session alive</td>
 </tr>
 <tr>
-<td>File fix</td>
-<td>Asks Codex to find and fix issues in the current file</td>
+<td>File review/fix</td>
+<td>Sends the current file or file explorer node to Codex</td>
 </tr>
 <tr>
-<td>Visual review</td>
-<td>Sends selected code to Codex</td>
+<td>Selection review</td>
+<td>Sends selected code with file path and line range</td>
 </tr>
 <tr>
-<td>Neo-tree support</td>
-<td>Sends the highlighted Neo-tree file or directory</td>
+<td>Diagnostics</td>
+<td>Sends current-buffer diagnostics, location list, quickfix entries, and headless <code>:LazyHealth</code>/<code>:checkhealth</code> output without opening health buffers</td>
 </tr>
 <tr>
-<td>Auto-switch</td>
-<td>Jumps to the Codex tmux window after sending</td>
+<td>Explorer targets</td>
+<td>Supports Neo-tree, Oil.nvim, nvim-tree, mini.files, and custom providers</td>
+</tr>
+<tr>
+<td>Health check</td>
+<td>Checks Codex CLI, terminal support, popup state, and job state</td>
 </tr>
 </table>
 
 <h2 align="center">Requirements</h2>
 
-- Linux or another Unix-like environment
-- tmux
-- Neovim
+- Neovim with terminal and floating window support
 - OpenAI Codex CLI available as `codex`
-- Lazy.nvim or LazyVim for the plugin spec examples below
+- lazy.nvim or LazyVim for the plugin spec examples below
 
-<h2 align="center">Fast Install</h2>
+<h2 align="center">Install</h2>
 
 Clone the repo:
 
 ```bash
 git clone https://github.com/BRONZowl/codux.nvim.git
 cd codux.nvim
-```
-
-Install the launcher:
-
-```bash
-./installcodux.sh
-```
-
-The installer:
-
-- Copies `bin/codux` to `~/.local/bin/codux`.
-- Makes the launcher executable.
-- Adds `~/.local/bin` to common Linux shell startup files when needed:
-  - `~/.bashrc`
-  - `~/.zshrc`
-  - `~/.profile`
-  - `~/.bash_profile`
-  - `~/.config/fish/config.fish` when fish config exists
-
-Restart your shell after installing, or source your rc file.
-
-<h2 align="center">LazyVim Setup</h2>
-
-Create:
-
-```bash
-nvim ~/.config/nvim/lua/plugins/codux.lua
 ```
 
 Use this if you cloned the repo locally:
@@ -119,28 +82,27 @@ return {
 }
 ```
 
-That is enough for the default workflow.
+No tmux launcher is required. Codux starts Codex directly inside Neovim.
 
 <h2 align="center">Run It</h2>
 
-Start tmux, open a project, then open Neovim:
+Open Neovim in a project:
 
 ```bash
-tmux
 cd ~/Projects/your-project
 nvim
 ```
 
-Press `<leader>zc` to open or switch to Codex.
+Press `<leader>zc` to open the Codex popup.
 
 ```text
-Neovim buffer / Neo-tree node / visual selection
+Neovim file / explorer node / visual selection / diagnostics
         |
         v
-tmux send-keys
+codux.nvim floating terminal
         |
         v
-Codex window: CODEX
+Codex CLI
 ```
 
 <h2 align="center">Keymaps</h2>
@@ -149,90 +111,100 @@ In LazyVim, `<leader>` is usually Space.
 
 | Key | Action |
 | --- | --- |
-| `<leader>zc` | Open or switch to the Codex tmux window |
-| `<leader>zf` | Send current file or selected Neo-tree node for review, then switch to Codex |
-| `<leader>zx` | Ask Codex to fix the current file or selected Neo-tree node, then switch to Codex |
-| `<leader>zs` | Send selected code to Codex, then switch to Codex |
+| `<leader>zc` | Open or focus the Codex popup |
+| `<leader>zf` | Review current file or explorer node, identify issues, and suggest fixes |
+| `<leader>zs` | Send selected code to Codex |
+| `<leader>zd` | Send diagnostics, location list, quickfix entries, and headless health output to Codex |
 
-<h2 align="center">Neo-tree</h2>
+<h2 align="center">Commands</h2>
 
-Codux detects when your cursor is in a Neo-tree window.
-
-When Neo-tree is focused:
-
-- `<leader>zf` reviews the highlighted file or directory.
-- `<leader>zx` asks Codex to fix the highlighted file or directory.
-
-When Neo-tree is not focused, Codux uses the active buffer path instead.
-
-<h2 align="center">tmux And Codex</h2>
-
-The `codux` launcher must run inside tmux.
-
-Default behavior:
-
-```bash
-codex -s workspace-write -a on-request
+```vim
+:CoduxOpen
+:CoduxToggle
+:CoduxClose
+:CoduxExit
+:CoduxReview
+:CoduxReviewSelection
+:CoduxDiagnostics
+:CoduxHealth
+:checkhealth codux
 ```
 
-Default tmux window:
+`CoduxClose` hides the popup and keeps Codex running. `CoduxExit` stops Codex and clears the terminal.
 
-```text
-CODEX
-```
+<h2 align="center">File Explorer Support</h2>
 
-Override the Codex command:
+Codux detects supported file explorer buffers and sends the highlighted file or directory instead of the explorer buffer path.
 
-```bash
-export CODEX_CMD="codex"
-```
+Built-in providers:
 
-Rename the tmux window:
+- Neo-tree
+- Oil.nvim
+- nvim-tree
+- mini.files
 
-```bash
-export CODUX_WINDOW_NAME="AI"
-```
+When no supported explorer target is found, Codux falls back to the active buffer path.
 
-If you rename the tmux window, match it in Neovim:
+<h2 align="center">Configuration</h2>
 
 ```lua
 require("codux").setup({
-  tmux_window = "AI",
-})
-```
+  codex_cmd = vim.env.CODEX_CMD or "codex -s workspace-write -a on-request",
+  auto_open = true,
+  auto_focus = true,
 
-<h2 align="center">Custom Keymaps</h2>
+  popup = {
+    width = 0.85,
+    height = 0.85,
+    border = "rounded",
+  },
 
-```lua
-require("codux").setup({
-  tmux_window = "CODEX",
   mappings = {
     open = "<leader>zc",
     review_file = "<leader>zf",
-    fix_file = "<leader>zx",
     review_selection = "<leader>zs",
+    diagnostics = "<leader>zd",
+  },
+
+  explorers = {
+    neo_tree = true,
+    oil = true,
+    nvim_tree = true,
+    mini_files = true,
   },
 })
 ```
 
-<h2 align="center">Manual Launcher Install</h2>
+Prompt templates can be strings with `%{token}` placeholders or functions that return a string:
 
-Use this instead of `./installcodux.sh` if you want to do the launcher setup yourself:
-
-```bash
-mkdir -p ~/.local/bin
-cp bin/codux ~/.local/bin/codux
-chmod +x ~/.local/bin/codux
+```lua
+require("codux").setup({
+  prompts = {
+    file = "Review this %{target_type}, identify issues, and suggest or make fixes where appropriate: %{path}",
+    diagnostics = "Explain these %{diagnostics_source} issues for %{relative_path}:\n\n%{diagnostics}",
+  },
+})
 ```
 
-Then make sure this is in your shell rc file:
+Custom target providers can return a file or directory target:
 
-```bash
-export PATH="$HOME/.local/bin:$PATH"
+```lua
+require("codux").setup({
+  target_providers = {
+    function()
+      return {
+        path = "/path/to/file.lua",
+        type = "file",
+        source = "custom",
+      }
+    end,
+  },
+})
 ```
 
 <h2 align="center">Notes</h2>
 
-- Keep the `CODEX` tmux window open while using Codux.
-- Neovim sends prompts with `tmux send-keys`.
-- Send mappings switch to the configured Codex tmux window after delivery.
+- The popup can be hidden without losing the Codex session.
+- Send actions auto-open the popup when needed.
+- Set `auto_focus = false` to send prompts without jumping into the popup.
+- Press `q` in normal mode or `<C-q>` from normal/terminal mode inside the popup to hide it.
