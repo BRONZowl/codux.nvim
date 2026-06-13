@@ -4,6 +4,8 @@ A tiny tmux-first Codex workflow for Neovim/LazyVim.
 
 It opens OpenAI Codex in a dedicated tmux window named `CODEX`, then lets Neovim send the current file, a fix request, or a visual selection into that running Codex session.
 
+It also understands LazyVim's Neo-tree: when your cursor is in Neo-tree, the review and fix mappings use the highlighted file or directory instead of the Neo-tree buffer itself.
+
 ## Requirements
 
 - tmux
@@ -74,6 +76,25 @@ return {
 }
 ```
 
+The default mappings match the local LazyVim setup this plugin was extracted from. You can override them if needed:
+
+```lua
+return {
+  "BRONZowl/codux.nvim",
+  config = function()
+    require("codux").setup({
+      tmux_window = "CODEX",
+      mappings = {
+        open = "<leader>zc",
+        review_file = "<leader>zf",
+        fix_file = "<leader>zx",
+        review_selection = "<leader>zs",
+      },
+    })
+  end,
+}
+```
+
 ## Usage
 
 Start tmux, enter your project, then open Neovim:
@@ -88,12 +109,18 @@ Keybindings:
 
 | Key | Action |
 | --- | --- |
-| `<leader>cc` | Open/switch to the Codex tmux window |
-| `<leader>cf` | Send current file path for review |
-| `<leader>cx` | Ask Codex to fix the current file |
-| `<leader>cs` | Send selected code to Codex |
+| `<leader>zc` | Open/switch to the Codex tmux window |
+| `<leader>zf` | Send current file or selected Neo-tree node for review |
+| `<leader>zx` | Ask Codex to fix the current file or selected Neo-tree node |
+| `<leader>zs` | Send selected code to Codex |
 
 In LazyVim, `<leader>` is usually Space.
+
+## Neo-tree
+
+With the Neo-tree LazyVim extra enabled, focus a file or directory in the tree and use `<leader>zf` or `<leader>zx`. Codux sends that selected path to the running Codex tmux window.
+
+If Neo-tree is not installed or the current window is not Neo-tree, Codux falls back to the active buffer path.
 
 ## Codex permissions
 
