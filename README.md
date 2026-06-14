@@ -9,6 +9,10 @@
   Closing the popup hides it; it does not kill the Codex session.
 </p>
 
+<p align="center">
+  <img src="assets/codux-demo.gif" alt="codux.nvim demo opening Codex in a Neovim popup" width="760">
+</p>
+
 <h2 align="center">Manual Install</h2>
 
 1. Install the Codex CLI and sign in:
