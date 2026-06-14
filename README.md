@@ -5,7 +5,9 @@
   Send the current file, selected code, diagnostics, or a file explorer target without leaving your editor.
 </p>
 
-Closing the popup hides it; it does not kill the Codex session.
+<p align="center">
+  Closing the popup hides it; it does not kill the Codex session.
+</p>
 
 <h2 align="center">Install</h2>
 
@@ -66,11 +68,40 @@ codex login --device-auth
 
 <h2 align="center">Usage</h2>
 
-| Action | Key | Command |
-| --- | --- | --- |
-| Open or focus Codex | `<leader>zc` | `:CoduxOpen` |
-| Send current file or explorer node | `<leader>zf` | `:CoduxReview` |
-| Send selected code | `<leader>zs` | `:CoduxReviewSelection` |
-| Send diagnostics and health output | `<leader>zd` | `:CoduxDiagnostics` |
-| Hide the popup | `q` or `<C-q>` | `:CoduxClose` |
-| Stop Codex | | `:CoduxExit` |
+<table align="center">
+<tr>
+<th>Action</th>
+<th>Key</th>
+<th>Command</th>
+</tr>
+<tr>
+<td>Open or focus Codex</td>
+<td><code>&lt;leader&gt;zc</code></td>
+<td><code>:CoduxOpen</code></td>
+</tr>
+<tr>
+<td>Send current file or explorer node</td>
+<td><code>&lt;leader&gt;zf</code></td>
+<td><code>:CoduxReview</code></td>
+</tr>
+<tr>
+<td>Send selected code</td>
+<td><code>&lt;leader&gt;zs</code></td>
+<td><code>:CoduxReviewSelection</code></td>
+</tr>
+<tr>
+<td>Send diagnostics and health output</td>
+<td><code>&lt;leader&gt;zd</code></td>
+<td><code>:CoduxDiagnostics</code></td>
+</tr>
+<tr>
+<td>Hide the popup</td>
+<td><code>q</code> or <code>&lt;C-q&gt;</code></td>
+<td><code>:CoduxClose</code></td>
+</tr>
+<tr>
+<td>Stop Codex</td>
+<td></td>
+<td><code>:CoduxExit</code></td>
+</tr>
+</table>
