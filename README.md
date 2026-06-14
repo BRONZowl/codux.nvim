@@ -9,7 +9,7 @@
   Closing the popup hides it; it does not kill the Codex session.
 </p>
 
-<h2 align="center">Install</h2>
+<h2 align="center">Manual Install</h2>
 
 1. Install the Codex CLI and sign in:
 
@@ -63,9 +63,9 @@ nvim
 
 In LazyVim, `<leader>` is usually Space.
 
-<p align="center">
-  Or just have codex do it.
-</p>
+<h3 align="center">
+  <strong>Or just have Codex do it.</strong>
+</h3>
 
 <h2 align="center">Requirements</h2>
 
