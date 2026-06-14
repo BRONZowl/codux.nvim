@@ -214,6 +214,83 @@ local function terminal_running()
   return false
 end
 
+local function focus_terminal_prompt(input)
+  if not valid_win() then
+    return false
+  end
+
+  local line_count = vim.api.nvim_buf_line_count(state.buf)
+  pcall(vim.api.nvim_win_set_cursor, state.win, { line_count, 0 })
+  pcall(vim.cmd, "startinsert")
+
+  if type(input) == "string" and input ~= "" and terminal_running() then
+    pcall(vim.fn.chansend, state.job_id, input)
+  end
+
+  return true
+end
+
+local function terminal_prompt_key(input)
+  return function()
+    return focus_terminal_prompt(input)
+  end
+end
+
+local function printable_prompt_keys()
+  local keys = { { "<Space>", " " } }
+
+  for code = string.byte("a"), string.byte("z") do
+    local char = string.char(code)
+    table.insert(keys, { char, char })
+    table.insert(keys, { char:upper(), char:upper() })
+  end
+
+  for code = string.byte("0"), string.byte("9") do
+    local char = string.char(code)
+    table.insert(keys, { char, char })
+  end
+
+  for _, char in ipairs({
+    "!",
+    '"',
+    "#",
+    "$",
+    "%",
+    "&",
+    "'",
+    "(",
+    ")",
+    "*",
+    "+",
+    ",",
+    "-",
+    ".",
+    "/",
+    ":",
+    ";",
+    "=",
+    ">",
+    "?",
+    "@",
+    "[",
+    "\\",
+    "]",
+    "^",
+    "_",
+    "`",
+    "{",
+    "|",
+    "}",
+    "~",
+  }) do
+    table.insert(keys, { char, char })
+  end
+
+  table.insert(keys, { "<lt>", "<" })
+
+  return keys
+end
+
 local function focus_window()
   if not valid_win() then
     return false
@@ -225,7 +302,7 @@ local function focus_window()
     return false
   end
   if terminal_running() then
-    vim.cmd("startinsert")
+    focus_terminal_prompt()
   end
 
   return true
@@ -284,6 +361,20 @@ local function ensure_buffer()
   pcall(vim.api.nvim_set_option_value, "filetype", "codux", { buf = bufnr })
   pcall(vim.api.nvim_buf_set_name, bufnr, "codux://codex")
   pcall(vim.keymap.set, { "n", "t" }, "<C-q>", M.close, { buffer = bufnr, silent = true, desc = "Hide Codux Popup" })
+  pcall(vim.keymap.set, "n", "<CR>", focus_terminal_prompt, {
+    buffer = bufnr,
+    silent = true,
+    desc = "Return to Codux Prompt",
+  })
+  for _, key in ipairs(printable_prompt_keys()) do
+    local lhs = key[1]
+    local input = key[2]
+    pcall(vim.keymap.set, "n", lhs, terminal_prompt_key(input), {
+      buffer = bufnr,
+      silent = true,
+      desc = "Type in Codux Prompt",
+    })
+  end
   pcall(vim.keymap.set, "n", "q", M.close, { buffer = bufnr, silent = true, desc = "Hide Codux Popup" })
 
   pcall(vim.api.nvim_create_autocmd, { "BufUnload", "BufDelete", "BufWipeout" }, {

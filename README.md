@@ -134,6 +134,11 @@ codex login --device-auth
 <td><code>:CoduxClose</code></td>
 </tr>
 <tr>
+<td>Start typing after scrolling</td>
+<td>Type normally</td>
+<td></td>
+</tr>
+<tr>
 <td>Stop Codex</td>
 <td></td>
 <td><code>:CoduxExit</code></td>
