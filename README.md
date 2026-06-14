@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/codux-demo.gif" alt="codux.nvim demo opening Codex in a Neovim popup" width="760">
+  <img src="assets/codux-demo.png" alt="codux.nvim running in a Tokyonight LazyVim setup with Neo-tree" width="760">
 </p>
 
 <h2 align="center">Manual Install</h2>
