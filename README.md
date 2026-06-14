@@ -7,7 +7,7 @@
 
 Closing the popup hides it; it does not kill the Codex session.
 
-## Install
+<h2 align="center">Install</h2>
 
 Install and sign in to the Codex CLI:
 
@@ -41,7 +41,7 @@ nvim
 
 In LazyVim, `<leader>` is usually Space.
 
-## Requirements
+<h2 align="center">Requirements</h2>
 
 - Neovim with terminal and floating window support
 - OpenAI Codex CLI available as `codex`
@@ -64,7 +64,7 @@ For remote or headless login:
 codex login --device-auth
 ```
 
-## Usage
+<h2 align="center">Usage</h2>
 
 | Action | Key | Command |
 | --- | --- | --- |
@@ -75,13 +75,13 @@ codex login --device-auth
 | Hide the popup | `q` or `<C-q>` | `:CoduxClose` |
 | Stop Codex | | `:CoduxExit` |
 
-### Send A File
+<h3 align="center">Send A File</h3>
 
 Run `:CoduxReview` or press `<leader>zf`.
 
 Codux sends the active buffer path. If your cursor is in a supported file explorer, Codux sends the highlighted file or directory instead.
 
-### Send A Selection
+<h3 align="center">Send A Selection</h3>
 
 Select code, then press `<leader>zs`.
 
@@ -93,13 +93,13 @@ You can also run:
 
 In normal mode, `<leader>zs` sends the most recent visual selection.
 
-### Send Diagnostics
+<h3 align="center">Send Diagnostics</h3>
 
 Run `:CoduxDiagnostics` or press `<leader>zd`.
 
 Codux collects current-buffer diagnostics, the location list, the quickfix list, and headless `:LazyHealth` / `:checkhealth` output. If nothing needs attention, Codux reports `No Issues Found` and exits the popup session.
 
-## Commands
+<h2 align="center">Commands</h2>
 
 | Command | Description |
 | --- | --- |
@@ -113,7 +113,7 @@ Codux collects current-buffer diagnostics, the location list, the quickfix list,
 | `:CoduxHealth` | Run codux.nvim health checks |
 | `:checkhealth codux` | Run Neovim's health check for codux.nvim |
 
-## File Explorer Support
+<h2 align="center">File Explorer Support</h2>
 
 Codux can detect targets from:
 
@@ -124,7 +124,7 @@ Codux can detect targets from:
 
 When no supported explorer target is found, Codux falls back to the active buffer path.
 
-## Configuration
+<h2 align="center">Configuration</h2>
 
 The default setup is enough for most users:
 
@@ -173,7 +173,7 @@ require("codux").setup({
 
 Set `auto_focus = false` to send prompts without moving focus into the Codex popup.
 
-## Prompt Templates
+<h2 align="center">Prompt Templates</h2>
 
 Prompt templates can be strings with `%{token}` placeholders or functions that return a string:
 
@@ -201,7 +201,7 @@ Available prompt tokens:
 - `line_range`
 - `selection`
 
-## Custom Targets
+<h2 align="center">Custom Targets</h2>
 
 Custom target providers can return a file or directory target before Codux falls back to built-in explorer detection:
 
@@ -219,7 +219,7 @@ require("codux").setup({
 })
 ```
 
-## Local Development
+<h2 align="center">Local Development</h2>
 
 Use a local checkout only when developing the plugin:
 
@@ -237,7 +237,7 @@ return {
 }
 ```
 
-## Troubleshooting
+<h2 align="center">Troubleshooting</h2>
 
 | Problem | Fix |
 | --- | --- |
