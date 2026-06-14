@@ -88,17 +88,15 @@ Optional:
 
 This plugin was developed using Neo-tree in LazyVim.
 
-Windows users can install Codex with PowerShell:
-
-```powershell
-irm https://chatgpt.com/codex/install.ps1 | iex
-```
+Windows users can use WSL2 with the Linux install command above, or follow the official Codex Windows setup guide.
 
 For remote or headless login:
 
 ```bash
 codex login --device-auth
 ```
+
+Codux sends requested files, selections, diagnostics, and health output through your configured Codex CLI session.
 
 <h2 align="center">Usage</h2>
 
