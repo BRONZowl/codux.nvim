@@ -11,14 +11,22 @@
 
 <h2 align="center">Install</h2>
 
-Install and sign in to the Codex CLI:
+1. Install the Codex CLI and sign in:
 
 ```bash
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
 codex login
 ```
 
-Add codux.nvim with lazy.nvim or LazyVim:
+Confirm the CLI is available:
+
+```bash
+codex --version
+```
+
+2. Add codux.nvim with lazy.nvim or LazyVim.
+
+Create a plugin spec such as `lua/plugins/codux.lua`:
 
 ```lua
 return {
@@ -29,7 +37,19 @@ return {
 }
 ```
 
-Open Neovim in a project and verify the setup:
+3. Open Neovim and install the plugin:
+
+```bash
+nvim
+```
+
+```vim
+:Lazy sync
+```
+
+Restart Neovim after lazy.nvim finishes installing the plugin.
+
+4. Open a project and verify the setup:
 
 ```bash
 cd ~/Projects/your-project
@@ -42,6 +62,10 @@ nvim
 ```
 
 In LazyVim, `<leader>` is usually Space.
+
+<p align="center">
+  Or just have codex do it.
+</p>
 
 <h2 align="center">Requirements</h2>
 
