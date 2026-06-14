@@ -54,6 +54,8 @@ Optional:
 - which-key.nvim for the `<leader>z` group label
 - Neo-tree, Oil.nvim, nvim-tree, or mini.files for file explorer targets
 
+This plugin was developed using Neo-tree in LazyVim.
+
 Windows users can install Codex with PowerShell:
 
 ```powershell
