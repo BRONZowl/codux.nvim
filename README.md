@@ -9,7 +9,7 @@
   Closing the popup hides it; it does not kill the Codex session.
 </p>
 
-<h2 align="center">Manual Install (Or just have Codex do it.)</h2>
+<h2 align="center">Manual Install</h2>
 
 1. Install the Codex CLI and sign in:
 
@@ -63,6 +63,14 @@ nvim
 
 In LazyVim, `<leader>` is usually Space.
 
+<h3 align="center">
+  <strong>Or just have Codex do it.</strong>
+</h3>
+
+<p align="center">
+  Ask Codex: <code>Install BRONZowl/codux.nvim in my LazyVim config.</code>
+</p>
+
 <h2 align="center">Requirements</h2>
 
 - Neovim with terminal and floating window support
@@ -109,7 +117,7 @@ codex login --device-auth
 <tr>
 <td>Send selected code</td>
 <td><code>&lt;leader&gt;zs</code></td>
-<td><code>:CoduxReviewSelection</code></td>
+<td><code>:&#39;&lt;,&#39;&gt;CoduxReviewSelection</code></td>
 </tr>
 <tr>
 <td>Send diagnostics and health output</td>
