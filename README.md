@@ -1,7 +1,7 @@
 <h1 align="center">codux.nvim</h1>
 
 <p align="center">
-  Codux runs OpenAI Codex in a persistent Neovim floating terminal.
+  Codux runs OpenAI Codex in a persistent Neovim floating terminal.<br>
   Send the current file, selected code, diagnostics, or a file explorer target without leaving your editor.
 </p>
 
