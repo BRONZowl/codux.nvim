@@ -150,7 +150,7 @@ Codux sends requested files, selections, diagnostics, and health output through 
 </tr>
 <tr>
 <td>Hide the popup</td>
-<td><code>q</code> or <code>&lt;C-q&gt;</code></td>
+<td><code>&lt;C-q&gt;</code></td>
 <td><code>:CoduxClose</code></td>
 </tr>
 <tr>
