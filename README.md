@@ -2,7 +2,7 @@
 
 <p align="center">
   Codux runs OpenAI Codex in a persistent Neovim floating terminal.<br>
-  Send the current file, selected code, diagnostics, or a file explorer target without leaving your editor.
+  Send the current file, selected code, diagnostics, Git diffs, or a file explorer target without leaving your editor.
 </p>
 
 <p align="center">
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/codux-demo.png" alt="codux.nvim running in a Tokyonight LazyVim setup with Neo-tree" width="760">
+  <img src="assets/codux-demo.gif" alt="codux.nvim opening Codex and sending a Git diff from Neovim" width="760">
 </p>
 
 <h2 align="center">Manual Install</h2>
@@ -112,6 +112,16 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td><code>:CoduxOpen</code></td>
 </tr>
 <tr>
+<td>Open Codex autopilot with approve-for-me permissions</td>
+<td><code>&lt;leader&gt;za</code></td>
+<td><code>:CoduxOpenAuto</code></td>
+</tr>
+<tr>
+<td>Open Codex danger zone with no sandbox</td>
+<td><code>&lt;leader&gt;zA</code></td>
+<td><code>:CoduxOpenDanger</code></td>
+</tr>
+<tr>
 <td>Send current file or explorer node</td>
 <td><code>&lt;leader&gt;zf</code></td>
 <td><code>:CoduxReview</code></td>
@@ -125,6 +135,11 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td>Send diagnostics and health output</td>
 <td><code>&lt;leader&gt;zd</code></td>
 <td><code>:CoduxDiagnostics</code></td>
+</tr>
+<tr>
+<td>Send Git changes</td>
+<td><code>&lt;leader&gt;zg</code></td>
+<td><code>:CoduxDiff</code></td>
 </tr>
 <tr>
 <td>Hide the popup</td>
@@ -142,3 +157,7 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td><code>:CoduxExit</code></td>
 </tr>
 </table>
+
+<p align="center">
+  <code>:CoduxOpenDanger</code> starts Codex with no approval prompts and no sandbox. Use it only in repositories you trust.
+</p>

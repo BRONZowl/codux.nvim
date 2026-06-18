@@ -1,7 +1,10 @@
 local M = {}
 
 local defaults = {
-  codex_cmd = vim.env.CODEX_CMD or "codex -s workspace-write -a on-request",
+  codex_cmd = vim.env.CODEX_CMD or 'codex -s workspace-write -a on-request -c approvals_reviewer="user"',
+  workspace_auto_cmd = vim.env.CODEX_WORKSPACE_AUTO_CMD
+    or 'codex -s workspace-write -a on-request -c approvals_reviewer="auto_review"',
+  danger_full_access_cmd = vim.env.CODEX_DANGER_FULL_ACCESS_CMD or "codex -s danger-full-access -a never",
   auto_open = true,
   auto_focus = true,
   popup = {
@@ -12,14 +15,18 @@ local defaults = {
   health_timeout_ms = 10000,
   mappings = {
     open = "<leader>zc",
+    open_auto = "<leader>za",
+    open_danger = "<leader>zA",
     review_file = "<leader>zf",
     review_selection = "<leader>zs",
     diagnostics = "<leader>zd",
+    diff = "<leader>zg",
   },
   prompts = {
     file = "Review this %{target_type}, identify issues, and suggest or make fixes where appropriate: %{path}",
     review_selection = "Review this selected code from %{relative_path}%{line_range} (%{filetype}):\n\n%{selection}",
     diagnostics = "Explain these %{diagnostics_source} issues for %{relative_path}, identify the likely causes, and suggest fixes:\n\n%{diagnostics}",
+    git_diff = "Review these Git changes on branch %{git_branch} in %{relative_path}. Identify issues, risks, and concrete improvements:\n\n%{git_diff}",
   },
   explorers = {
     neo_tree = true,
@@ -472,7 +479,7 @@ local function command_with_prompt(command, prompt)
   return command .. " " .. vim.fn.shellescape(prompt)
 end
 
-local function codex_command_error(command)
+local function command_error(command)
   if type(command) == "string" then
     if command:match("^%s*$") then
       return "Codex command must not be empty"
@@ -491,7 +498,19 @@ local function codex_command_error(command)
   return nil
 end
 
-local function start_terminal(focus, initial_prompt)
+local function command_executable(command)
+  if type(command) == "table" then
+    return command[1]
+  end
+
+  if type(command) == "string" then
+    return command:match("^%s*(%S+)")
+  end
+
+  return nil
+end
+
+local function start_terminal(focus, initial_prompt, command)
   if terminal_running() then
     if focus then
       focus_window()
@@ -499,17 +518,16 @@ local function start_terminal(focus, initial_prompt)
     return true
   end
 
-  local command_error = codex_command_error(config.codex_cmd)
-  if command_error then
-    notify(command_error, vim.log.levels.ERROR)
+  command = command or config.codex_cmd
+
+  local error_message = command_error(command)
+  if error_message then
+    notify(error_message, vim.log.levels.ERROR)
     return false
   end
 
-  if
-    type(config.codex_cmd) == "string"
-    and vim.fn.executable("codex") ~= 1
-    and config.codex_cmd:match("^%s*codex[%s$]")
-  then
+  local executable = command_executable(command)
+  if type(executable) == "string" and executable == "codex" and vim.fn.executable(executable) ~= 1 then
     notify("Codex CLI not found on PATH", vim.log.levels.WARN)
   end
 
@@ -539,7 +557,7 @@ local function start_terminal(focus, initial_prompt)
 
   local job_id
   local term_ok
-  term_ok, job_id = pcall(vim.fn.termopen, command_with_prompt(config.codex_cmd, initial_prompt), {
+  term_ok, job_id = pcall(vim.fn.termopen, command_with_prompt(command, initial_prompt), {
     on_exit = function(_, code)
       local expected_exit = state.exiting_jobs[job_id] == true
       local pending_delete_buffer = state.pending_delete_buffers[job_id]
@@ -606,6 +624,21 @@ function M.open(opts)
   end
 
   return start_terminal(focus)
+end
+
+local function restart_with_command(command, focus)
+  M.exit()
+  return start_terminal(focus ~= false, nil, command)
+end
+
+function M.open_workspace_auto()
+  notify("Starting Codex autopilot with approve-for-me permissions")
+  return restart_with_command(config.workspace_auto_cmd, true)
+end
+
+function M.open_danger_full_access()
+  notify("Starting Codex with no approvals and no sandbox", vim.log.levels.WARN)
+  return restart_with_command(config.danger_full_access_cmd, true)
 end
 
 function M.close()
@@ -854,6 +887,97 @@ local function git_branch_for(path)
   end
 
   return trim(output)
+end
+
+local function git_root_for(path)
+  local cwd = path
+  if cwd and cwd ~= "" and vim.fn.isdirectory(cwd) ~= 1 then
+    cwd = vim.fn.fnamemodify(cwd, ":h")
+  end
+
+  if cwd == nil or cwd == "" then
+    cwd = vim.fn.getcwd()
+  end
+
+  local output, code = system({ "git", "-C", cwd, "rev-parse", "--show-toplevel" })
+  if code ~= 0 then
+    return nil
+  end
+
+  local root = trim(output)
+  if root == "" then
+    return nil
+  end
+
+  return root
+end
+
+local function git_output(root, ...)
+  local args = { "git", "-C", root }
+  vim.list_extend(args, { ... })
+  local output, code = system(args)
+  if code ~= 0 then
+    return nil
+  end
+
+  return trim(output)
+end
+
+local function git_branch_or_head(root)
+  local branch = git_output(root, "branch", "--show-current")
+  if branch and branch ~= "" then
+    return branch
+  end
+
+  local head = git_output(root, "rev-parse", "--short", "HEAD")
+  if head and head ~= "" then
+    return head
+  end
+
+  return "unknown"
+end
+
+local function git_diff_target_path()
+  local target = current_target()
+  if target and type(target.path) == "string" and target.path ~= "" then
+    return target.path
+  end
+
+  local path = current_buffer_name()
+  if path ~= "" then
+    return path
+  end
+
+  return vim.fn.getcwd()
+end
+
+local function format_git_diff_context(root)
+  local status = git_output(root, "status", "--short")
+  if status == nil then
+    return nil, "Failed to collect Git status"
+  end
+
+  if status == "" then
+    return nil, "No Git changes found"
+  end
+
+  local staged = git_output(root, "diff", "--cached", "--no-ext-diff", "--")
+  if staged == nil then
+    return nil, "Failed to collect staged Git diff"
+  end
+
+  local unstaged = git_output(root, "diff", "--no-ext-diff", "--")
+  if unstaged == nil then
+    return nil, "Failed to collect unstaged Git diff"
+  end
+
+  local sections = {
+    "## Git status\n" .. status,
+    "## Staged diff\n" .. (staged ~= "" and staged or "(none)"),
+    "## Unstaged diff\n" .. (unstaged ~= "" and unstaged or "(none)"),
+  }
+
+  return table.concat(sections, "\n\n"), nil
 end
 
 local severity_names = {
@@ -1229,6 +1353,32 @@ function M.send_diagnostics()
   )
 end
 
+function M.send_git_diff()
+  local root = git_root_for(git_diff_target_path())
+  if not root then
+    notify("Not inside a Git repository", vim.log.levels.WARN)
+    return false
+  end
+
+  local diff, error_message = format_git_diff_context(root)
+  if not diff then
+    notify(error_message or "No Git changes found", vim.log.levels.INFO)
+    return error_message == "No Git changes found"
+  end
+
+  return send_prompt(
+    "git_diff",
+    context_for_target({
+      path = root,
+      type = "directory",
+      source = "git",
+    }, {
+      git_branch = git_branch_or_head(root),
+      git_diff = diff,
+    })
+  )
+end
+
 function M.health()
   vim.cmd("checkhealth codux")
 end
@@ -1247,6 +1397,14 @@ local function create_commands()
   vim.api.nvim_create_user_command("CoduxOpen", function()
     M.open()
   end, { force = true, desc = "Open or focus the Codex popup" })
+
+  vim.api.nvim_create_user_command("CoduxOpenAuto", function()
+    M.open_workspace_auto()
+  end, { force = true, desc = "Open Codex autopilot with approve-for-me permissions" })
+
+  vim.api.nvim_create_user_command("CoduxOpenDanger", function()
+    M.open_danger_full_access()
+  end, { force = true, desc = "Open Codex danger zone with no sandbox" })
 
   vim.api.nvim_create_user_command("CoduxToggle", function()
     M.toggle()
@@ -1272,6 +1430,10 @@ local function create_commands()
     M.send_diagnostics()
   end, { force = true, desc = "Send diagnostics, lists, and headless health output to Codex" })
 
+  vim.api.nvim_create_user_command("CoduxDiff", function()
+    M.send_git_diff()
+  end, { force = true, desc = "Send Git changes to Codex for review" })
+
   vim.api.nvim_create_user_command("CoduxHealth", function()
     M.health()
   end, { force = true, desc = "Run codux.nvim health checks" })
@@ -1292,9 +1454,12 @@ local function register_which_key_group(mappings)
   local group_icon = "󰚩"
   local normal_entries = {
     { lhs = mappings.open, desc = "open codex" },
+    { lhs = mappings.open_auto, desc = "codex autopilot" },
+    { lhs = mappings.open_danger, desc = "codex danger zone" },
     { lhs = mappings.review_file, desc = "send file/folder to codex" },
     { lhs = mappings.review_selection, desc = "send selection to codex" },
     { lhs = mappings.diagnostics, desc = "send diagnostics to codex" },
+    { lhs = mappings.diff, desc = "send git diff to codex" },
   }
 
   local has_normal_prefix = false
@@ -1357,10 +1522,13 @@ function M.setup(opts)
   local mappings = type(config.mappings) == "table" and config.mappings or {}
   register_which_key_group(mappings)
   set_mapping("n", mappings.open, M.open, "open codex")
+  set_mapping("n", mappings.open_auto, M.open_workspace_auto, "codex autopilot")
+  set_mapping("n", mappings.open_danger, M.open_danger_full_access, "codex danger zone")
   set_mapping("n", mappings.review_file, M.send_file_review, "send file/folder to codex")
   set_mapping("n", mappings.review_selection, M.send_selection, "send selection to codex")
   set_mapping("v", mappings.review_selection, M.send_selection, "send selection to codex")
   set_mapping("n", mappings.diagnostics, M.send_diagnostics, "send diagnostics to codex")
+  set_mapping("n", mappings.diff, M.send_git_diff, "send git diff to codex")
 end
 
 return M

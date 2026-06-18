@@ -110,20 +110,31 @@ function M.check()
   end
 
   local info = codux.health_info()
-  local codex_cmd = info.config and info.config.codex_cmd
-  local config_error = command_error(codex_cmd)
-  if config_error then
-    health_error(config_error)
-    return
-  end
+  local commands = {
+    { label = "default", value = info.config and info.config.codex_cmd },
+    { label = "workspace auto", value = info.config and info.config.workspace_auto_cmd },
+    { label = "danger full access", value = info.config and info.config.danger_full_access_cmd },
+  }
 
-  health_ok("configured Codex command: " .. command_display(codex_cmd))
+  local checked_executables = {}
+  for _, entry in ipairs(commands) do
+    local config_error = command_error(entry.value)
+    if config_error then
+      health_error(entry.label .. " command: " .. config_error)
+      return
+    end
 
-  local executable_name = command_executable(codex_cmd)
-  if type(executable_name) == "string" and executable_name ~= "" and executable(executable_name) then
-    health_ok("Codex executable found: " .. executable_name)
-  else
-    health_warn("Codex executable not found: " .. tostring(executable_name or "unknown"))
+    health_ok("configured " .. entry.label .. " command: " .. command_display(entry.value))
+
+    local executable_name = command_executable(entry.value)
+    if type(executable_name) == "string" and executable_name ~= "" and not checked_executables[executable_name] then
+      checked_executables[executable_name] = true
+      if executable(executable_name) then
+        health_ok("Codex executable found: " .. executable_name)
+      else
+        health_warn("Codex executable not found: " .. tostring(executable_name or "unknown"))
+      end
+    end
   end
 
   if info.popup_visible then
