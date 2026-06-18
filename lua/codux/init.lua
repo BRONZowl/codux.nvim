@@ -1495,19 +1495,21 @@ local function mode_status_label()
   return "codux status " .. (state.mode or "not running")
 end
 
-local function mode_status_hl()
+local function mode_status_color()
   if state.mode == "execute" then
-    return "DiagnosticOk"
+    return "#3fb950"
   end
   if state.mode == "plan" then
-    return "WhichKeyIconPurple"
+    return "#a371f7"
   end
 
-  return "DiagnosticError"
+  return "#f85149"
 end
 
 local function apply_mode_status_hl()
-  pcall(vim.api.nvim_set_hl, 0, "WhichKeyGroup", { link = mode_status_hl() })
+  local fg = mode_status_color()
+  pcall(vim.api.nvim_set_hl, 0, "WhichKeyGroup", { fg = fg })
+  pcall(vim.api.nvim_set_hl, 0, "WhichKeyTitle", { fg = fg })
 end
 
 local function mode_status_icon()
@@ -1518,7 +1520,7 @@ local function mode_status_icon()
     return { icon = codux_icon, color = "purple" }
   end
 
-  return { icon = codux_icon, color = "grey" }
+  return { icon = codux_icon, color = "red" }
 end
 
 local function mode_action_desc()
