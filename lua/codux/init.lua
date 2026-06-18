@@ -1813,6 +1813,10 @@ function M.health_info()
 end
 
 local function create_commands()
+  vim.api.nvim_create_user_command("Codux", function()
+    M.open()
+  end, { force = true, desc = "Open or focus the Codex popup" })
+
   vim.api.nvim_create_user_command("CoduxOpen", function()
     M.open()
   end, { force = true, desc = "Open or focus the Codex popup" })

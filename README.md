@@ -20,7 +20,24 @@
 
 <h2 align="center">Manual Install</h2>
 
-1. Install the Codex CLI and sign in:
+1. Add codux.nvim with lazy.nvim or LazyVim:
+
+```lua
+{
+  "BRONZowl/codux.nvim",
+  opts = {},
+}
+```
+
+2. Run `:Lazy sync`, restart Neovim, then open Codux:
+
+```vim
+:Codux
+```
+
+In LazyVim, `<leader>` is usually Space. Codux also maps open to `<leader>zc`.
+
+3. Install the Codex CLI and sign in if `codex` is not already available:
 
 ```bash
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
@@ -33,31 +50,6 @@ Confirm the CLI is available:
 codex --version
 ```
 
-2. Add codux.nvim with lazy.nvim or LazyVim.
-
-Create a plugin spec such as `lua/plugins/codux.lua`:
-
-```lua
-return {
-  "BRONZowl/codux.nvim",
-  config = function()
-    require("codux").setup()
-  end,
-}
-```
-
-3. Open Neovim and install the plugin:
-
-```bash
-nvim
-```
-
-```vim
-:Lazy sync
-```
-
-Restart Neovim after lazy.nvim finishes installing the plugin.
-
 4. Open a project and verify the setup:
 
 ```bash
@@ -67,10 +59,8 @@ nvim
 
 ```vim
 :checkhealth codux
-:CoduxOpen
+:Codux
 ```
-
-In LazyVim, `<leader>` is usually Space.
 
 <h3 align="center">
   <strong>Or just have Codex do it.</strong>
@@ -114,7 +104,7 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <tr>
 <td>Open or focus Codex</td>
 <td><code>&lt;leader&gt;zc</code></td>
-<td><code>:CoduxOpen</code></td>
+<td><code>:Codux</code></td>
 </tr>
 <tr>
 <td>Open Codex autopilot with approve-for-me permissions</td>
