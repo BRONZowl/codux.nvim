@@ -53,15 +53,18 @@ local state = {
   codex_working = false,
   last_working_activity = 0,
   terminal_attached_buf = nil,
+  terminal_input = "",
   exiting_jobs = {},
   pending_delete_buffers = {},
 }
 
 local augroup = vim.api.nvim_create_augroup("codux.nvim", { clear = true })
 local refresh_which_key
+local update_terminal_mode_mapping
 local update_working_indicator
 local close_working_indicator
 local set_codex_working
+local append_terminal_input
 local codux_icon = "󰚩"
 
 local function notify(message, level)
@@ -74,6 +77,9 @@ local function set_mode(mode)
   end
 
   state.mode = mode
+  if mode == "not running" then
+    state.terminal_input = ""
+  end
   if type(refresh_which_key) == "function" then
     refresh_which_key()
   end
@@ -266,9 +272,83 @@ local function focus_terminal_prompt(input)
   pcall(vim.cmd, "startinsert")
 
   if type(input) == "string" and input ~= "" and terminal_running() then
+    append_terminal_input(input)
     pcall(vim.fn.chansend, state.job_id, input)
   end
 
+  return true
+end
+
+local function reset_terminal_input()
+  state.terminal_input = ""
+end
+
+append_terminal_input = function(input)
+  if type(input) ~= "string" or input == "" then
+    return
+  end
+
+  state.terminal_input = (state.terminal_input or "") .. input
+  if #state.terminal_input > 128 then
+    state.terminal_input = state.terminal_input:sub(-128)
+  end
+end
+
+local function backspace_terminal_input()
+  local input = state.terminal_input or ""
+  if input ~= "" then
+    state.terminal_input = input:sub(1, -2)
+  end
+end
+
+local function terminal_input_command()
+  local input = trim(state.terminal_input or "")
+  return input:match("([^%s]+)%s*$") or input
+end
+
+local function toggle_tracked_mode()
+  set_mode(state.mode == "plan" and "execute" or "plan")
+end
+
+local function terminal_submit_is_mode_toggle()
+  local command = terminal_input_command()
+  return command == "/plan" or command == "/"
+end
+
+local function send_mode_toggle_to_codex()
+  if not terminal_running() then
+    notify("Codex terminal is not running", vim.log.levels.WARN)
+    return false
+  end
+
+  local paste = "\27[200~/plan\27[201~\r"
+  local send_ok, sent = pcall(vim.fn.chansend, state.job_id, paste)
+  if not send_ok or sent == 0 then
+    notify("Failed to toggle Codex plan mode", vim.log.levels.ERROR)
+    return false
+  end
+
+  set_mode(state.mode == "plan" and "execute" or "plan")
+  reset_terminal_input()
+  notify("Codex mode: " .. state.mode)
+  return true
+end
+
+local function send_shift_tab_mode_toggle_to_codex()
+  if not terminal_running() then
+    notify("Codex terminal is not running", vim.log.levels.WARN)
+    return false
+  end
+
+  local send_ok, sent = pcall(vim.fn.chansend, state.job_id, "\27[Z")
+  if not send_ok or sent == 0 then
+    notify("Failed to toggle Codex plan mode", vim.log.levels.ERROR)
+    return false
+  end
+
+  set_mode(state.mode == "plan" and "execute" or "plan")
+  reset_terminal_input()
+  notify("Codex mode: " .. state.mode)
   return true
 end
 
@@ -276,6 +356,16 @@ local function terminal_prompt_key(input)
   return function()
     return focus_terminal_prompt(input)
   end
+end
+
+local function terminal_backspace_key()
+  if not terminal_running() then
+    return false
+  end
+
+  backspace_terminal_input()
+  local send_ok, sent = pcall(vim.fn.chansend, state.job_id, "\127")
+  return send_ok and sent ~= 0
 end
 
 local function printable_prompt_keys()
@@ -630,9 +720,15 @@ local function submit_terminal_prompt()
     return false
   end
 
+  local is_mode_toggle = terminal_submit_is_mode_toggle()
   local send_ok, sent = pcall(vim.fn.chansend, state.job_id, "\r")
   if send_ok and sent ~= 0 then
-    set_codex_working(true)
+    if is_mode_toggle then
+      toggle_tracked_mode()
+    else
+      set_codex_working(true)
+    end
+    reset_terminal_input()
     return true
   end
 
@@ -645,6 +741,7 @@ local function interrupt_terminal_prompt()
   end
 
   set_codex_working(false)
+  reset_terminal_input()
   local send_ok, sent = pcall(vim.fn.chansend, state.job_id, "\3")
   return send_ok and sent ~= 0
 end
@@ -679,6 +776,37 @@ local function ensure_buffer()
     nowait = true,
     silent = true,
     desc = "Interrupt Codex",
+  })
+  pcall(vim.keymap.set, "t", "<BS>", terminal_backspace_key, {
+    buffer = bufnr,
+    nowait = true,
+    silent = true,
+    desc = "Edit Codux Prompt",
+  })
+  pcall(vim.keymap.set, "t", "<C-h>", terminal_backspace_key, {
+    buffer = bufnr,
+    nowait = true,
+    silent = true,
+    desc = "Edit Codux Prompt",
+  })
+  if type(update_terminal_mode_mapping) == "function" then
+    update_terminal_mode_mapping()
+  end
+  pcall(vim.keymap.set, "t", "/plan<CR>", send_mode_toggle_to_codex, {
+    buffer = bufnr,
+    silent = true,
+    desc = "Switch Codex Mode",
+  })
+  pcall(vim.keymap.set, "t", "/<CR>", send_mode_toggle_to_codex, {
+    buffer = bufnr,
+    silent = true,
+    desc = "Switch Codex Mode",
+  })
+  pcall(vim.keymap.set, { "n", "t" }, "<S-Tab>", send_shift_tab_mode_toggle_to_codex, {
+    buffer = bufnr,
+    nowait = true,
+    silent = true,
+    desc = "Switch Codex Mode",
   })
   pcall(vim.keymap.set, "n", "<CR>", focus_terminal_prompt, {
     buffer = bufnr,
@@ -970,6 +1098,9 @@ function M.close()
     pcall(vim.api.nvim_win_close, state.win, true)
     state.win = nil
     update_working_indicator()
+    if type(refresh_which_key) == "function" then
+      refresh_which_key()
+    end
     return true
   end
 
@@ -1015,21 +1146,7 @@ function M.exit()
 end
 
 function M.toggle_plan_mode()
-  if not terminal_running() then
-    notify("Codex terminal is not running", vim.log.levels.WARN)
-    return false
-  end
-
-  local paste = "\27[200~/plan\27[201~\r"
-  local send_ok, sent = pcall(vim.fn.chansend, state.job_id, paste)
-  if not send_ok or sent == 0 then
-    notify("Failed to toggle Codex plan mode", vim.log.levels.ERROR)
-    return false
-  end
-
-  set_mode(state.mode == "plan" and "execute" or "plan")
-  notify("Codex mode: " .. state.mode)
-  return true
+  return send_mode_toggle_to_codex()
 end
 
 local function send_to_codex(message)
@@ -1842,11 +1959,70 @@ local function mode_action_desc()
   return nil
 end
 
+local function clear_which_key_cache()
+  local ok, which_key_buf = pcall(require, "which-key.buf")
+  if ok and type(which_key_buf.clear) == "function" then
+    pcall(which_key_buf.clear)
+  end
+end
+
+local function remove_codux_which_key_specs(mappings)
+  local ok, which_key_config = pcall(require, "which-key.config")
+  if not ok or type(which_key_config.mappings) ~= "table" then
+    return
+  end
+
+  local owned = {}
+  for _, lhs in pairs(mappings) do
+    if type(lhs) == "string" and lhs ~= "" then
+      owned[lhs] = true
+    end
+  end
+  owned["<leader>z"] = true
+
+  for index = #which_key_config.mappings, 1, -1 do
+    local mapping = which_key_config.mappings[index]
+    if type(mapping) == "table" and owned[mapping.lhs] then
+      table.remove(which_key_config.mappings, index)
+    end
+  end
+
+  clear_which_key_cache()
+end
+
+update_terminal_mode_mapping = function()
+  if not valid_buf() then
+    return
+  end
+
+  local mappings = type(config.mappings) == "table" and config.mappings or {}
+  local lhs = mappings.mode
+  if type(lhs) ~= "string" or lhs == "" then
+    return
+  end
+
+  local action_desc = mode_action_desc()
+  if action_desc then
+    pcall(vim.keymap.set, { "n", "t" }, lhs, M.toggle_plan_mode, {
+      buffer = state.buf,
+      nowait = true,
+      silent = true,
+      desc = action_desc,
+    })
+  else
+    pcall(vim.keymap.del, "n", lhs, { buffer = state.buf })
+    pcall(vim.keymap.del, "t", lhs, { buffer = state.buf })
+  end
+end
+
 local function register_which_key_group(mappings)
   local ok, which_key = pcall(require, "which-key")
   if not ok then
     return
   end
+
+  remove_codux_which_key_specs(mappings)
+
   local normal_entries = {
     { lhs = mappings.open, desc = "open codex" },
     { lhs = mappings.open_auto, desc = "codex autopilot" },
@@ -1922,6 +2098,7 @@ refresh_which_key = function()
   elseif type(mappings.mode) == "string" and mappings.mode ~= "" then
     pcall(vim.keymap.del, "n", mappings.mode)
   end
+  update_terminal_mode_mapping()
 end
 
 function M.setup(opts)
