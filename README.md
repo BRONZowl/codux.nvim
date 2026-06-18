@@ -17,6 +17,14 @@
   <img src="assets/codux-demo.gif?v=20260618" alt="codux.nvim opening Codex and sending a Git diff from Neovim" width="900">
 </p>
 
+<h2 align="center">Why Codux?</h2>
+
+Codux focuses on persistent Codex terminal workflows.
+
+Unlike chat-style plugins, Codux keeps you inside a real Codex session and lets you send editor context directly from Neovim.
+
+Use Codux when you want Codex to see the file, visual selection, diagnostics, Git diff, or file explorer target you are already working with.
+
 <h2 align="center">Manual Install</h2>
 
 1. Add codux.nvim with lazy.nvim or LazyVim:
@@ -68,14 +76,6 @@ nvim
 <p align="center">
   Ask Codex: <code>Install BRONZowl/codux.nvim in my LazyVim config.</code>
 </p>
-
-<h2 align="center">Why Codux?</h2>
-
-Codux focuses on persistent Codex terminal workflows.
-
-Unlike chat-style plugins, Codux keeps you inside a real Codex session and lets you send editor context directly from Neovim.
-
-Use Codux when you want Codex to see the file, visual selection, diagnostics, Git diff, or file explorer target you are already working with.
 
 <h2 align="center">Requirements</h2>
 
