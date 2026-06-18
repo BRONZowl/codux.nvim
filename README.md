@@ -15,6 +15,10 @@
 </p>
 
 <p align="center">
+  If Codux fits your workflow, a GitHub star helps other Neovim users find it.
+</p>
+
+<p align="center">
   <img src="assets/codux-demo.gif?v=20260618" alt="codux.nvim opening Codex and sending a Git diff from Neovim" width="900">
 </p>
 
