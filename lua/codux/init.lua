@@ -12,6 +12,7 @@ local defaults = {
     height = 0.85,
     border = "rounded",
   },
+  working_idle_ms = 3000,
   health_timeout_ms = 10000,
   mappings = {
     open = "<leader>zc",
@@ -44,12 +45,23 @@ local state = {
   win = nil,
   job_id = nil,
   mode = "not running",
+  working_buf = nil,
+  working_win = nil,
+  working_timer = nil,
+  working_idle_timer = nil,
+  working_frame = 1,
+  codex_working = false,
+  last_working_activity = 0,
+  terminal_attached_buf = nil,
   exiting_jobs = {},
   pending_delete_buffers = {},
 }
 
 local augroup = vim.api.nvim_create_augroup("codux.nvim", { clear = true })
 local refresh_which_key
+local update_working_indicator
+local close_working_indicator
+local set_codex_working
 local codux_icon = "󰚩"
 
 local function notify(message, level)
@@ -210,6 +222,7 @@ end
 
 local function terminal_running()
   if state.job_id == nil then
+    set_codex_working(false)
     set_mode("not running")
     return false
   end
@@ -218,6 +231,7 @@ local function terminal_running()
     pcall(vim.fn.jobstop, state.job_id)
     state.exiting_jobs[state.job_id] = nil
     state.job_id = nil
+    set_codex_working(false)
     set_mode("not running")
     return false
   end
@@ -226,6 +240,7 @@ local function terminal_running()
   if not wait_ok or type(statuses) ~= "table" then
     state.exiting_jobs[state.job_id] = nil
     state.job_id = nil
+    set_codex_working(false)
     set_mode("not running")
     return false
   end
@@ -236,6 +251,7 @@ local function terminal_running()
   end
 
   state.job_id = nil
+  set_codex_working(false)
   set_mode("not running")
   return false
 end
@@ -368,6 +384,271 @@ local function popup_config()
   }
 end
 
+local working_frames = {
+  " codex is working    ",
+  " codex is working.   ",
+  " codex is working..  ",
+  " codex is working... ",
+}
+
+local function stop_working_timer()
+  local timer = state.working_timer
+  state.working_timer = nil
+  if timer then
+    pcall(timer.stop, timer)
+    pcall(timer.close, timer)
+  end
+end
+
+local function stop_working_idle_timer()
+  local timer = state.working_idle_timer
+  state.working_idle_timer = nil
+  if timer then
+    pcall(timer.stop, timer)
+    pcall(timer.close, timer)
+  end
+end
+
+close_working_indicator = function()
+  stop_working_timer()
+
+  if is_valid_win(state.working_win) then
+    pcall(vim.api.nvim_win_close, state.working_win, true)
+  end
+  state.working_win = nil
+
+  if is_valid_buf(state.working_buf) then
+    pcall(vim.api.nvim_buf_delete, state.working_buf, { force = true })
+  end
+  state.working_buf = nil
+  state.working_frame = 1
+end
+
+local function now_ms()
+  local loop = vim.uv or vim.loop
+  if loop and type(loop.now) == "function" then
+    return loop.now()
+  end
+  if loop and type(loop.hrtime) == "function" then
+    return math.floor(loop.hrtime() / 1000000)
+  end
+
+  return os.time() * 1000
+end
+
+local function working_idle_ms()
+  local value = tonumber(config.working_idle_ms)
+  if value == nil or value < 500 then
+    return defaults.working_idle_ms
+  end
+
+  return value
+end
+
+local function start_working_idle_timer()
+  if state.working_idle_timer then
+    return
+  end
+
+  local loop = vim.uv or vim.loop
+  local timer = loop and loop.new_timer()
+  if not timer then
+    return
+  end
+
+  state.working_idle_timer = timer
+  timer:start(working_idle_ms(), 500, vim.schedule_wrap(function()
+    if not state.codex_working then
+      stop_working_idle_timer()
+      return
+    end
+
+    if not terminal_running() then
+      set_codex_working(false)
+      return
+    end
+
+    if now_ms() - state.last_working_activity >= working_idle_ms() then
+      set_codex_working(false)
+      return
+    end
+
+    update_working_indicator()
+  end))
+end
+
+set_codex_working = function(working)
+  state.codex_working = working == true
+  if not state.codex_working then
+    state.last_working_activity = 0
+    stop_working_idle_timer()
+    close_working_indicator()
+  else
+    state.last_working_activity = now_ms()
+    start_working_idle_timer()
+    update_working_indicator()
+  end
+end
+
+local function note_terminal_activity()
+  if not state.codex_working then
+    return
+  end
+
+  state.last_working_activity = now_ms()
+  update_working_indicator()
+end
+
+local function attach_terminal_activity(bufnr)
+  if state.terminal_attached_buf == bufnr then
+    return
+  end
+
+  state.terminal_attached_buf = bufnr
+  local attach_ok = pcall(vim.api.nvim_buf_attach, bufnr, false, {
+    on_lines = function(_, attached_buf)
+      if attached_buf == state.buf then
+        vim.schedule(note_terminal_activity)
+      end
+    end,
+    on_detach = function(_, attached_buf)
+      if state.terminal_attached_buf == attached_buf then
+        state.terminal_attached_buf = nil
+      end
+    end,
+  })
+
+  if not attach_ok then
+    state.terminal_attached_buf = nil
+  end
+end
+
+local function working_indicator_config()
+  local width = 21
+  local height = 1
+  local total_width = math.max(1, vim.o.columns)
+  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+
+  return {
+    relative = "editor",
+    style = "minimal",
+    focusable = false,
+    width = width,
+    height = height,
+    col = math.max(0, total_width - width - 2),
+    row = math.max(0, total_height - height - 1),
+    border = "rounded",
+    zindex = 40,
+  }
+end
+
+local function render_working_indicator()
+  if not is_loaded_buf(state.working_buf) then
+    return
+  end
+
+  local frame = working_frames[state.working_frame] or working_frames[1]
+  pcall(vim.api.nvim_buf_set_lines, state.working_buf, 0, -1, false, { frame })
+end
+
+local function ensure_working_indicator()
+  if is_valid_win(state.working_win) then
+    pcall(vim.api.nvim_win_set_config, state.working_win, working_indicator_config())
+    return true
+  end
+
+  if not is_loaded_buf(state.working_buf) then
+    local buf_ok, bufnr = pcall(vim.api.nvim_create_buf, false, true)
+    if not buf_ok or not is_loaded_buf(bufnr) then
+      state.working_buf = nil
+      return false
+    end
+
+    state.working_buf = bufnr
+    pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
+    pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = bufnr })
+  end
+
+  render_working_indicator()
+  local win_ok, win = pcall(vim.api.nvim_open_win, state.working_buf, false, working_indicator_config())
+  if not win_ok then
+    state.working_win = nil
+    return false
+  end
+
+  state.working_win = win
+  pcall(vim.api.nvim_set_option_value, "winblend", 10, { win = win })
+  pcall(vim.api.nvim_set_option_value, "wrap", false, { win = win })
+  return true
+end
+
+local function start_working_timer()
+  if state.working_timer then
+    return
+  end
+
+  local loop = vim.uv or vim.loop
+  local timer = loop and loop.new_timer()
+  if not timer then
+    return
+  end
+
+  state.working_timer = timer
+  timer:start(0, 450, vim.schedule_wrap(function()
+    if not is_valid_win(state.working_win) then
+      stop_working_timer()
+      return
+    end
+
+    state.working_frame = (state.working_frame % #working_frames) + 1
+    render_working_indicator()
+  end))
+end
+
+local function working_activity_is_stale()
+  return state.last_working_activity == 0 or now_ms() - state.last_working_activity >= working_idle_ms()
+end
+
+update_working_indicator = function()
+  if state.codex_working and working_activity_is_stale() then
+    set_codex_working(false)
+    return
+  end
+
+  if state.codex_working and terminal_running() and not valid_win() then
+    if ensure_working_indicator() then
+      start_working_timer()
+    end
+    return
+  end
+
+  close_working_indicator()
+end
+
+local function submit_terminal_prompt()
+  if not terminal_running() then
+    return false
+  end
+
+  local send_ok, sent = pcall(vim.fn.chansend, state.job_id, "\r")
+  if send_ok and sent ~= 0 then
+    set_codex_working(true)
+    return true
+  end
+
+  return false
+end
+
+local function interrupt_terminal_prompt()
+  if not terminal_running() then
+    return false
+  end
+
+  set_codex_working(false)
+  local send_ok, sent = pcall(vim.fn.chansend, state.job_id, "\3")
+  return send_ok and sent ~= 0
+end
+
 local function ensure_buffer()
   if valid_buf() then
     return true
@@ -387,6 +668,18 @@ local function ensure_buffer()
   pcall(vim.api.nvim_set_option_value, "filetype", "codux", { buf = bufnr })
   pcall(vim.api.nvim_buf_set_name, bufnr, "codux://codex")
   pcall(vim.keymap.set, { "n", "t" }, "<C-q>", M.close, { buffer = bufnr, silent = true, desc = "Hide Codux Popup" })
+  pcall(vim.keymap.set, "t", "<CR>", submit_terminal_prompt, {
+    buffer = bufnr,
+    nowait = true,
+    silent = true,
+    desc = "Submit Codux Prompt",
+  })
+  pcall(vim.keymap.set, { "n", "t" }, "<C-c>", interrupt_terminal_prompt, {
+    buffer = bufnr,
+    nowait = true,
+    silent = true,
+    desc = "Interrupt Codex",
+  })
   pcall(vim.keymap.set, "n", "<CR>", focus_terminal_prompt, {
     buffer = bufnr,
     silent = true,
@@ -410,10 +703,13 @@ local function ensure_buffer()
       if state.buf == bufnr then
         state.buf = nil
         state.job_id = nil
+        set_codex_working(false)
         set_mode("not running")
       end
     end,
   })
+
+  attach_terminal_activity(bufnr)
 
   return true
 end
@@ -429,6 +725,7 @@ local function open_window(focus)
       state.win = nil
       return open_window(focus)
     end
+    close_working_indicator()
     if focus then
       focus_window()
     end
@@ -451,6 +748,7 @@ local function open_window(focus)
   end
 
   state.win = win
+  close_working_indicator()
   pcall(vim.api.nvim_set_option_value, "number", false, { win = state.win })
   pcall(vim.api.nvim_set_option_value, "relativenumber", false, { win = state.win })
   pcall(vim.api.nvim_set_option_value, "signcolumn", "no", { win = state.win })
@@ -464,6 +762,7 @@ local function open_window(focus)
     callback = function()
       if state.win == win_id then
         state.win = nil
+        update_working_indicator()
       end
     end,
   })
@@ -475,6 +774,7 @@ local function open_window(focus)
       if valid_win() then
         pcall(vim.api.nvim_win_set_config, state.win, popup_config())
       end
+      update_working_indicator()
     end,
   })
 
@@ -585,6 +885,7 @@ local function start_terminal(focus, initial_prompt, command)
       state.pending_delete_buffers[job_id] = nil
       if state.job_id == job_id then
         state.job_id = nil
+        set_codex_working(false)
         set_mode("not running")
       end
       if not expected_exit and code ~= 0 then
@@ -607,6 +908,7 @@ local function start_terminal(focus, initial_prompt, command)
 
   state.job_id = job_id
   set_mode("execute")
+  set_codex_working(type(initial_prompt) == "string" and initial_prompt ~= "")
 
   if focus then
     pcall(vim.cmd, "startinsert")
@@ -667,6 +969,7 @@ function M.close()
   if valid_win() then
     pcall(vim.api.nvim_win_close, state.win, true)
     state.win = nil
+    update_working_indicator()
     return true
   end
 
@@ -694,6 +997,7 @@ function M.exit()
     pcall(vim.fn.jobstop, job_id)
   end
   state.job_id = nil
+  set_codex_working(false)
   set_mode("not running")
 
   if valid_win() then
@@ -705,6 +1009,7 @@ function M.exit()
   if not running and is_valid_buf(bufnr) then
     delete_buffer_deferred(bufnr)
   end
+  set_codex_working(false)
 
   return true
 end
@@ -749,6 +1054,7 @@ local function send_to_codex(message)
     return false
   end
 
+  set_codex_working(true)
   return true
 end
 
@@ -1432,6 +1738,8 @@ function M.health_info()
     terminal_buffer = valid_buf() and state.buf or nil,
     terminal_job_id = state.job_id,
     mode = state.mode,
+    codex_working = state.codex_working,
+    working_indicator_visible = is_valid_win(state.working_win),
   }
 end
 

@@ -170,3 +170,7 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <p align="center">
   The <code>&lt;leader&gt;z</code> group label shows the current Codux-tracked status as <code>codux status execute</code>, <code>codux status plan</code>, or <code>codux status not running</code>. Status text is green for execute, purple for plan, and red when Codex is not running.
 </p>
+
+<p align="center">
+  When Codex is actively working and the popup is hidden, Codux shows a small <code>codex is working...</code> indicator near the bottom-right of the editor. The indicator clears when Codex goes idle, is interrupted, or exits.
+</p>
