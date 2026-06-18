@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/codux-demo.gif?v=20260618" alt="codux.nvim opening Codex and sending a Git diff from Neovim" width="900">
+  <img src="assets/codux-demo.gif?v=20260618-2" alt="codux.nvim opening Codex and sending a Git diff from Neovim" width="900">
 </p>
 
 <h2 align="center">Why Codux?</h2>
