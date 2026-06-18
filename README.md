@@ -10,6 +10,11 @@
 </p>
 
 <p align="center">
+  Neovim Codex plugin for AI-assisted coding in Neovim.<br>
+  OpenAI Codex Neovim integration with a persistent Codex terminal.
+</p>
+
+<p align="center">
   <img src="assets/codux-demo.gif?v=20260618" alt="codux.nvim opening Codex and sending a Git diff from Neovim" width="900">
 </p>
 
