@@ -2001,16 +2001,14 @@ local function register_which_key_group(mappings)
     return
   end
 
-  local modes = {}
-  if has_normal_prefix then
-    table.insert(modes, "n")
-  end
-  if has_visual_prefix then
-    table.insert(modes, "v")
-  end
-
   if type(which_key.add) == "function" then
-    local specs = { { "<leader>z", group = mode_status_label(), icon = mode_status_icon(), mode = modes } }
+    local specs = {}
+    if has_normal_prefix then
+      table.insert(specs, { "<leader>z", group = mode_status_label(), icon = mode_status_icon(), mode = "n" })
+    end
+    if has_visual_prefix then
+      table.insert(specs, { "<leader>z", group = mode_status_label(), mode = "v" })
+    end
     for _, entry in ipairs(normal_entries) do
       if type(entry.lhs) == "string" and entry.lhs:match("^<leader>z") then
         table.insert(specs, { entry.lhs, desc = entry.desc, mode = "n" })
@@ -2031,7 +2029,7 @@ local function register_which_key_group(mappings)
       pcall(which_key.register, normal_spec, { prefix = "<leader>", mode = "n" })
     end
     if has_visual_prefix then
-      local visual_spec = { z = { name = codux_icon .. " " .. mode_status_label() } }
+      local visual_spec = { z = { name = mode_status_label() } }
       if mappings.review_selection:match("^<leader>z.") then
         visual_spec.z[mappings.review_selection:sub(#"<leader>z" + 1)] = "send selection to codex"
       end
