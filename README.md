@@ -142,6 +142,11 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td><code>:CoduxDiff</code></td>
 </tr>
 <tr>
+<td>Toggle Codex plan mode</td>
+<td><code>&lt;leader&gt;zp</code></td>
+<td><code>:CoduxTogglePlan</code></td>
+</tr>
+<tr>
 <td>Hide the popup</td>
 <td><code>q</code> or <code>&lt;C-q&gt;</code></td>
 <td><code>:CoduxClose</code></td>
@@ -160,4 +165,8 @@ Codux sends requested files, selections, diagnostics, and health output through 
 
 <p align="center">
   <code>:CoduxOpenDanger</code> starts Codex with no approval prompts and no sandbox. Use it only in repositories you trust.
+</p>
+
+<p align="center">
+  The <code>&lt;leader&gt;z</code> group label shows the current Codux-tracked status as <code>codux status execute</code>, <code>codux status plan</code>, or <code>codux status not running</code>. Status text is green for execute, purple for plan, and red when Codex is not running.
 </p>

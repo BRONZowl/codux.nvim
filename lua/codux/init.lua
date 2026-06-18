@@ -21,6 +21,7 @@ local defaults = {
     review_selection = "<leader>zs",
     diagnostics = "<leader>zd",
     diff = "<leader>zg",
+    mode = "<leader>zp",
   },
   prompts = {
     file = "Review this %{target_type}, identify issues, and suggest or make fixes where appropriate: %{path}",
@@ -42,14 +43,28 @@ local state = {
   buf = nil,
   win = nil,
   job_id = nil,
+  mode = "not running",
   exiting_jobs = {},
   pending_delete_buffers = {},
 }
 
 local augroup = vim.api.nvim_create_augroup("codux.nvim", { clear = true })
+local refresh_which_key
+local codux_icon = "󰚩"
 
 local function notify(message, level)
   vim.notify(message, level or vim.log.levels.INFO, { title = "codux.nvim" })
+end
+
+local function set_mode(mode)
+  if state.mode == mode then
+    return
+  end
+
+  state.mode = mode
+  if type(refresh_which_key) == "function" then
+    refresh_which_key()
+  end
 end
 
 local function trim(value)
@@ -195,6 +210,7 @@ end
 
 local function terminal_running()
   if state.job_id == nil then
+    set_mode("not running")
     return false
   end
 
@@ -202,6 +218,7 @@ local function terminal_running()
     pcall(vim.fn.jobstop, state.job_id)
     state.exiting_jobs[state.job_id] = nil
     state.job_id = nil
+    set_mode("not running")
     return false
   end
 
@@ -209,6 +226,7 @@ local function terminal_running()
   if not wait_ok or type(statuses) ~= "table" then
     state.exiting_jobs[state.job_id] = nil
     state.job_id = nil
+    set_mode("not running")
     return false
   end
 
@@ -218,6 +236,7 @@ local function terminal_running()
   end
 
   state.job_id = nil
+  set_mode("not running")
   return false
 end
 
@@ -391,6 +410,7 @@ local function ensure_buffer()
       if state.buf == bufnr then
         state.buf = nil
         state.job_id = nil
+        set_mode("not running")
       end
     end,
   })
@@ -565,6 +585,7 @@ local function start_terminal(focus, initial_prompt, command)
       state.pending_delete_buffers[job_id] = nil
       if state.job_id == job_id then
         state.job_id = nil
+        set_mode("not running")
       end
       if not expected_exit and code ~= 0 then
         notify("Codex exited with code " .. tostring(code), vim.log.levels.WARN)
@@ -585,6 +606,7 @@ local function start_terminal(focus, initial_prompt, command)
   end
 
   state.job_id = job_id
+  set_mode("execute")
 
   if focus then
     pcall(vim.cmd, "startinsert")
@@ -672,6 +694,7 @@ function M.exit()
     pcall(vim.fn.jobstop, job_id)
   end
   state.job_id = nil
+  set_mode("not running")
 
   if valid_win() then
     pcall(vim.api.nvim_win_close, state.win, true)
@@ -683,6 +706,24 @@ function M.exit()
     delete_buffer_deferred(bufnr)
   end
 
+  return true
+end
+
+function M.toggle_plan_mode()
+  if not terminal_running() then
+    notify("Codex terminal is not running", vim.log.levels.WARN)
+    return false
+  end
+
+  local paste = "\27[200~/plan\27[201~\r"
+  local send_ok, sent = pcall(vim.fn.chansend, state.job_id, paste)
+  if not send_ok or sent == 0 then
+    notify("Failed to toggle Codex plan mode", vim.log.levels.ERROR)
+    return false
+  end
+
+  set_mode(state.mode == "plan" and "execute" or "plan")
+  notify("Codex mode: " .. state.mode)
   return true
 end
 
@@ -1390,6 +1431,7 @@ function M.health_info()
     terminal_running = terminal_running(),
     terminal_buffer = valid_buf() and state.buf or nil,
     terminal_job_id = state.job_id,
+    mode = state.mode,
   }
 end
 
@@ -1434,6 +1476,10 @@ local function create_commands()
     M.send_git_diff()
   end, { force = true, desc = "Send Git changes to Codex for review" })
 
+  vim.api.nvim_create_user_command("CoduxTogglePlan", function()
+    M.toggle_plan_mode()
+  end, { force = true, desc = "Toggle Codex plan mode" })
+
   vim.api.nvim_create_user_command("CoduxHealth", function()
     M.health()
   end, { force = true, desc = "Run codux.nvim health checks" })
@@ -1445,13 +1491,52 @@ local function set_mapping(mode, lhs, rhs, desc)
   end
 end
 
+local function mode_status_label()
+  return "codux status " .. (state.mode or "not running")
+end
+
+local function mode_status_hl()
+  if state.mode == "execute" then
+    return "DiagnosticOk"
+  end
+  if state.mode == "plan" then
+    return "WhichKeyIconPurple"
+  end
+
+  return "DiagnosticError"
+end
+
+local function apply_mode_status_hl()
+  pcall(vim.api.nvim_set_hl, 0, "WhichKeyGroup", { link = mode_status_hl() })
+end
+
+local function mode_status_icon()
+  if state.mode == "execute" then
+    return { icon = codux_icon, color = "green" }
+  end
+  if state.mode == "plan" then
+    return { icon = codux_icon, color = "purple" }
+  end
+
+  return { icon = codux_icon, color = "grey" }
+end
+
+local function mode_action_desc()
+  if state.mode == "execute" then
+    return "switch to plan mode"
+  end
+  if state.mode == "plan" then
+    return "switch to execute mode"
+  end
+
+  return nil
+end
+
 local function register_which_key_group(mappings)
   local ok, which_key = pcall(require, "which-key")
   if not ok then
     return
   end
-  local group_label = "codux"
-  local group_icon = "󰚩"
   local normal_entries = {
     { lhs = mappings.open, desc = "open codex" },
     { lhs = mappings.open_auto, desc = "codex autopilot" },
@@ -1461,6 +1546,9 @@ local function register_which_key_group(mappings)
     { lhs = mappings.diagnostics, desc = "send diagnostics to codex" },
     { lhs = mappings.diff, desc = "send git diff to codex" },
   }
+  if mode_action_desc() then
+    table.insert(normal_entries, { lhs = mappings.mode, desc = mode_action_desc() })
+  end
 
   local has_normal_prefix = false
   for _, entry in ipairs(normal_entries) do
@@ -1484,7 +1572,7 @@ local function register_which_key_group(mappings)
   end
 
   if type(which_key.add) == "function" then
-    local specs = { { "<leader>z", group = group_label, icon = group_icon, mode = modes } }
+    local specs = { { "<leader>z", group = mode_status_label(), icon = mode_status_icon(), mode = modes } }
     for _, entry in ipairs(normal_entries) do
       if type(entry.lhs) == "string" and entry.lhs:match("^<leader>z") then
         table.insert(specs, { entry.lhs, desc = entry.desc, mode = "n" })
@@ -1496,7 +1584,7 @@ local function register_which_key_group(mappings)
     pcall(which_key.add, specs)
   elseif type(which_key.register) == "function" then
     if has_normal_prefix then
-      local normal_spec = { z = { name = group_icon .. " " .. group_label } }
+      local normal_spec = { z = { name = codux_icon .. " " .. mode_status_label() } }
       for _, entry in ipairs(normal_entries) do
         if type(entry.lhs) == "string" and entry.lhs:match("^<leader>z.") then
           normal_spec.z[entry.lhs:sub(#"<leader>z" + 1)] = entry.desc
@@ -1505,12 +1593,24 @@ local function register_which_key_group(mappings)
       pcall(which_key.register, normal_spec, { prefix = "<leader>", mode = "n" })
     end
     if has_visual_prefix then
-      local visual_spec = { z = { name = group_icon .. " " .. group_label } }
+      local visual_spec = { z = { name = codux_icon .. " " .. mode_status_label() } }
       if mappings.review_selection:match("^<leader>z.") then
         visual_spec.z[mappings.review_selection:sub(#"<leader>z" + 1)] = "send selection to codex"
       end
       pcall(which_key.register, visual_spec, { prefix = "<leader>", mode = "v" })
     end
+  end
+end
+
+refresh_which_key = function()
+  local mappings = type(config.mappings) == "table" and config.mappings or {}
+  apply_mode_status_hl()
+  register_which_key_group(mappings)
+  local action_desc = mode_action_desc()
+  if action_desc then
+    set_mapping("n", mappings.mode, M.toggle_plan_mode, action_desc)
+  elseif type(mappings.mode) == "string" and mappings.mode ~= "" then
+    pcall(vim.keymap.del, "n", mappings.mode)
   end
 end
 
@@ -1520,7 +1620,7 @@ function M.setup(opts)
   create_commands()
 
   local mappings = type(config.mappings) == "table" and config.mappings or {}
-  register_which_key_group(mappings)
+  refresh_which_key()
   set_mapping("n", mappings.open, M.open, "open codex")
   set_mapping("n", mappings.open_auto, M.open_workspace_auto, "codex autopilot")
   set_mapping("n", mappings.open_danger, M.open_danger_full_access, "codex danger zone")
@@ -1529,6 +1629,9 @@ function M.setup(opts)
   set_mapping("v", mappings.review_selection, M.send_selection, "send selection to codex")
   set_mapping("n", mappings.diagnostics, M.send_diagnostics, "send diagnostics to codex")
   set_mapping("n", mappings.diff, M.send_git_diff, "send git diff to codex")
+  if mode_action_desc() then
+    set_mapping("n", mappings.mode, M.toggle_plan_mode, mode_action_desc())
+  end
 end
 
 return M

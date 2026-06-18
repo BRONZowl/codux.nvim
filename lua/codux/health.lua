@@ -145,6 +145,7 @@ function M.check()
 
   if info.terminal_running then
     health_ok("Codex terminal job is running")
+    health_ok("Codex mode: " .. tostring(info.mode or "unknown"))
   else
     health_ok("Codex terminal job is not running (starts on demand)")
   end
