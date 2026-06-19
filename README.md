@@ -17,20 +17,42 @@
   <img src="assets/codux-demo.gif?v=20260618-2" alt="codux.nvim showing the Codex menu, persistent terminal, and visual selection workflow" width="900">
 </p>
 
+<h2 align="center">What is Codux?</h2>
+
+<p align="center">
+  Codux is a Neovim plugin that runs OpenAI Codex inside a persistent floating terminal.
+</p>
+
+<p align="center">
+  Unlike chat-style AI plugins, Codux keeps you connected to a real Codex CLI session.<br>
+  Send files, visual selections, diagnostics, Git diffs, and file explorer targets directly from Neovim without leaving your editor.
+</p>
+
+<p align="center">
+  Close the window at any time; the Codex session keeps running in the background.
+</p>
+
 <h2 align="center">Why Codux?</h2>
 
 <p align="center">
-  Codux focuses on persistent Codex terminal workflows.
+  Codux focuses on persistent OpenAI Codex workflows for Neovim.
 </p>
 
 <p align="center">
-  Unlike chat-style plugins, Codux keeps you inside a real Codex session.<br>
-  Send editor context directly from Neovim without switching windows.
+  Use Codux when you want your AI coding assistant to work with the file,<br>
+  visual selection, diagnostics, Git diff, or explorer target already in front of you.
 </p>
 
 <p align="center">
-  Use Codux when you want Codex to see the file, visual selection, diagnostics,<br>
-  Git diff, or file explorer target you are already working with.
+  It is built for LazyVim and Neovim users who want a terminal-first Codex workflow.
+</p>
+
+<h2 align="center">Comparison</h2>
+
+<p align="center">
+  <strong>Codux</strong>: persistent OpenAI Codex CLI session in a floating terminal.<br>
+  <strong>Chat-style plugins</strong>: prompt and chat-oriented workflows.<br>
+  <strong>Agent-style plugins</strong>: broader in-editor agent experiences.
 </p>
 
 <h2 align="center">Manual Install</h2>
