@@ -42,6 +42,8 @@
   <strong>Agent-style plugins</strong>: usually provide broader in-editor editing agents and automation.
 </p>
 
+<br>
+
 ## Manual Install
 
 1. Add codux.nvim with lazy.nvim or LazyVim:
