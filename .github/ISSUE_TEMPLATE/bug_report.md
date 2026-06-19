@@ -2,7 +2,7 @@
 name: Bug report
 about: Report a reproducible problem with codux.nvim
 title: "bug: "
-labels: bug
+labels: ["bug"]
 assignees: ""
 ---
 
