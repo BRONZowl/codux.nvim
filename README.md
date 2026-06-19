@@ -37,9 +37,9 @@
 <h2 align="center">Comparison</h2>
 
 <p align="center">
-  <strong>Codux</strong>: persistent OpenAI Codex CLI session in a floating terminal.<br>
-  <strong>Chat-style plugins</strong>: prompt and chat-oriented workflows.<br>
-  <strong>Agent-style plugins</strong>: broader in-editor agent experiences.
+  <strong>Codux</strong>: keeps a persistent OpenAI Codex CLI session in a floating terminal.<br>
+  <strong>Chat-style plugins</strong>: usually center on prompts, chat buffers, and one-off AI requests.<br>
+  <strong>Agent-style plugins</strong>: usually provide broader in-editor editing agents and automation.
 </p>
 
 <h2 align="center">Manual Install</h2>
