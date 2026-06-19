@@ -2,7 +2,7 @@
 name: Feature request
 about: Suggest an improvement or new feature for codux.nvim
 title: "feat: "
-labels: enhancement
+labels: ["enhancement"]
 assignees: ""
 ---
 
