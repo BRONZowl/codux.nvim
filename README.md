@@ -19,11 +19,11 @@
 
 <h2 align="center">Why Codux?</h2>
 
-Codux focuses on persistent Codex terminal workflows.
-
-Unlike chat-style plugins, Codux keeps you inside a real Codex session and lets you send editor context directly from Neovim.
-
-Use Codux when you want Codex to see the file, visual selection, diagnostics, Git diff, or file explorer target you are already working with.
+<p align="center">
+  Codux focuses on persistent Codex terminal workflows.<br>
+  Unlike chat-style plugins, Codux keeps you inside a real Codex session and lets you send editor context directly from Neovim.<br>
+  Use Codux when you want Codex to see the file, visual selection, diagnostics, Git diff, or file explorer target you are already working with.
+</p>
 
 <h2 align="center">Manual Install</h2>
 
