@@ -1,22 +1,5 @@
 <h1 align="center">codux.nvim</h1>
 
-<p align="center">
-  Codux runs OpenAI Codex in a persistent Neovim floating terminal.<br>
-  Send the current file, selected code, diagnostics, Git diffs, or a file explorer target without leaving your editor.
-</p>
-
-<p align="center">
-  Closing the popup hides it; it does not kill the Codex session.
-</p>
-
-<p align="center">
-  If Codux fits your workflow, a GitHub star helps other Neovim users find it.
-</p>
-
-<p align="center">
-  <img src="assets/codux-demo.gif?v=20260618-2" alt="codux.nvim showing the Codex menu, persistent terminal, and visual selection workflow" width="900">
-</p>
-
 <h2 align="center">What is Codux?</h2>
 
 <p align="center">
@@ -30,6 +13,10 @@
 
 <p align="center">
   Close the window at any time; the Codex session keeps running in the background.
+</p>
+
+<p align="center">
+  <img src="assets/codux-demo.gif?v=20260618-2" alt="codux.nvim showing the Codex menu, persistent terminal, and visual selection workflow" width="900">
 </p>
 
 <h2 align="center">Why Codux?</h2>
