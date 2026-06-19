@@ -77,7 +77,7 @@ nvim
   Ask Codex: <code>Install BRONZowl/codux.nvim in my LazyVim config.</code>
 </p>
 
-<h2 align="center">Requirements</h2>
+## Requirements
 
 - Neovim with terminal and floating window support
 - OpenAI Codex CLI available as `codex`
