@@ -19,6 +19,16 @@
   <img src="assets/codux-demo.gif?v=20260619-token-usage-2" alt="codux.nvim showing the Codex menu, persistent terminal, and visual selection workflow" width="900">
 </p>
 
+<h2 align="center">Latest Feature</h2>
+
+<p align="center">
+  Codux now shows Codex token monitoring directly in the <code>&lt;leader&gt;z</code> menu.
+</p>
+
+<p align="center">
+  Track 5 hr and weekly usage while your persistent Codex session is running.
+</p>
+
 <h2 align="center">Why Codux?</h2>
 
 <p align="center">
