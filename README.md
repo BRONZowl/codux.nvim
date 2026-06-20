@@ -31,18 +31,13 @@
 
 <h2 align="center">Why Codux?</h2>
 
-<p align="center">
-  Codux focuses on persistent OpenAI Codex workflows for Neovim.
-</p>
-
-<p align="center">
-  Use Codux when you want your AI coding assistant to work with the file,<br>
-  visual selection, diagnostics, Git diff, or explorer target already in front of you.
-</p>
-
-<p align="center">
-  It is built for LazyVim and Neovim users who want a terminal-first Codex workflow.
-</p>
+<ul>
+  <li>Persistent Codex sessions</li>
+  <li>Floating terminal workflow</li>
+  <li>Built-in token monitoring</li>
+  <li>Native Neovim experience</li>
+  <li>No context loss between prompts</li>
+</ul>
 
 <h2 align="center">Comparison</h2>
 
