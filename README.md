@@ -15,6 +15,16 @@
   Close the window at any time; the Codex session keeps running in the background.
 </p>
 
+<h2 align="center">Why Codux?</h2>
+
+<p align="center">
+  Persistent Codex sessions<br>
+  Floating terminal workflow<br>
+  Built-in token monitoring<br>
+  Native Neovim experience<br>
+  No context loss between prompts
+</p>
+
 <p align="center">
   <img src="assets/codux-demo.gif?v=20260619-token-usage-2" alt="codux.nvim showing the Codex menu, persistent terminal, and visual selection workflow" width="900">
 </p>
@@ -27,16 +37,6 @@
 
 <p align="center">
   Track 5 hr and weekly usage while your persistent Codex session is running.
-</p>
-
-<h2 align="center">Why Codux?</h2>
-
-<p align="center">
-  Persistent Codex sessions<br>
-  Floating terminal workflow<br>
-  Built-in token monitoring<br>
-  Native Neovim experience<br>
-  No context loss between prompts
 </p>
 
 <h2 align="center">Comparison</h2>
