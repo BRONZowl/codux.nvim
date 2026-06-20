@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/codux-demo.gif?v=20260618-2" alt="codux.nvim showing the Codex menu, persistent terminal, and visual selection workflow" width="900">
+  <img src="assets/codux-demo.gif?v=20260619-token-usage-2" alt="codux.nvim showing the Codex menu, persistent terminal, and visual selection workflow" width="900">
 </p>
 
 <h2 align="center">Why Codux?</h2>
@@ -189,7 +189,13 @@ Codux sends requested files, selections, diagnostics, and health output through 
 </p>
 
 <p align="center">
-  The <code>&lt;leader&gt;z</code> group label shows the current Codux-tracked status as <code>codux status execute</code>, <code>codux status plan</code>, or <code>codux status not running</code>. Status text is green for execute, purple for plan, and red when Codex is not running.
+  The <code>&lt;leader&gt;z</code> menu header shows the current Codux-tracked status and token usage while Codux is running:<br>
+  <code>codux execute | 5hr 3% | wk 5%</code><br>
+  <code>codux plan | 5hr 3% | wk 5%</code>
+</p>
+
+<p align="center">
+  Token monitoring refreshes in the background only while Codux is running. The popup can be hidden, but the Codex session must still be active. If usage is unavailable while Codux is running, Codux shows <code>--%</code> placeholders. Status text is green for execute, purple for plan, and red when Codex is not running.
 </p>
 
 <p align="center">

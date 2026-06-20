@@ -14,6 +14,11 @@ local defaults = {
   },
   working_idle_ms = 3000,
   health_timeout_ms = 10000,
+  token_monitor = {
+    enabled = true,
+    refresh_ms = 60000,
+    timeout_ms = 5000,
+  },
   mappings = {
     open = "<leader>zc",
     open_auto = "<leader>za",
@@ -52,6 +57,16 @@ local state = {
   working_frame = 1,
   codex_working = false,
   last_working_activity = 0,
+  token_usage = {
+    five_hour_percent = nil,
+    weekly_percent = nil,
+    last_error = nil,
+    in_flight = false,
+    job_id = nil,
+    stdout = "",
+    initialized = false,
+    timeout_timer = nil,
+  },
   terminal_attached_buf = nil,
   terminal_command_tail = "",
   exiting_jobs = {},
@@ -64,7 +79,12 @@ local update_terminal_mode_mapping
 local update_working_indicator
 local close_working_indicator
 local set_codex_working
+local refresh_which_key_header
+local refresh_token_usage
+local start_token_monitor_timer
+local stop_token_monitor_timer
 local codux_icon = "󰚩"
+local which_key_header_hooked = false
 
 local function notify(message, level)
   vim.notify(message, level or vim.log.levels.INFO, { title = "codux.nvim" })
@@ -76,8 +96,8 @@ local function set_mode(mode)
   end
 
   state.mode = mode
-  if type(refresh_which_key) == "function" then
-    refresh_which_key()
+  if type(refresh_which_key_header) == "function" then
+    refresh_which_key_header()
   end
 end
 
@@ -224,6 +244,9 @@ end
 
 local function terminal_running()
   if state.job_id == nil then
+    if type(stop_token_monitor_timer) == "function" then
+      stop_token_monitor_timer()
+    end
     set_codex_working(false)
     set_mode("not running")
     return false
@@ -233,6 +256,9 @@ local function terminal_running()
     pcall(vim.fn.jobstop, state.job_id)
     state.exiting_jobs[state.job_id] = nil
     state.job_id = nil
+    if type(stop_token_monitor_timer) == "function" then
+      stop_token_monitor_timer()
+    end
     set_codex_working(false)
     set_mode("not running")
     return false
@@ -242,6 +268,9 @@ local function terminal_running()
   if not wait_ok or type(statuses) ~= "table" then
     state.exiting_jobs[state.job_id] = nil
     state.job_id = nil
+    if type(stop_token_monitor_timer) == "function" then
+      stop_token_monitor_timer()
+    end
     set_codex_working(false)
     set_mode("not running")
     return false
@@ -253,6 +282,9 @@ local function terminal_running()
   end
 
   state.job_id = nil
+  if type(stop_token_monitor_timer) == "function" then
+    stop_token_monitor_timer()
+  end
   set_codex_working(false)
   set_mode("not running")
   return false
@@ -910,6 +942,393 @@ local function command_executable(command)
   return nil
 end
 
+local function token_monitor_config()
+  if config.token_monitor == false then
+    return { enabled = false }
+  end
+
+  if type(config.token_monitor) ~= "table" then
+    return defaults.token_monitor
+  end
+
+  return config.token_monitor
+end
+
+local function token_monitor_enabled()
+  return token_monitor_config().enabled ~= false
+end
+
+local function token_refresh_ms()
+  local value = tonumber(token_monitor_config().refresh_ms)
+  if value == nil or value < 10000 then
+    return defaults.token_monitor.refresh_ms
+  end
+
+  return value
+end
+
+local function token_timeout_ms()
+  local value = tonumber(token_monitor_config().timeout_ms)
+  if value == nil or value < 1000 then
+    return defaults.token_monitor.timeout_ms
+  end
+
+  return value
+end
+
+local function json_encode(value)
+  if vim.json and type(vim.json.encode) == "function" then
+    return vim.json.encode(value)
+  end
+
+  return vim.fn.json_encode(value)
+end
+
+local function json_decode(value)
+  local ok, decoded
+  if vim.json and type(vim.json.decode) == "function" then
+    ok, decoded = pcall(vim.json.decode, value)
+  else
+    ok, decoded = pcall(vim.fn.json_decode, value)
+  end
+
+  if ok then
+    return decoded
+  end
+
+  return nil
+end
+
+local function normalize_usage_percent(value)
+  local percent = tonumber(value)
+  if percent == nil then
+    return nil
+  end
+
+  percent = math.floor(percent + 0.5)
+  return math.min(100, math.max(0, percent))
+end
+
+local function parse_token_usage_window(window, usage)
+  if type(window) ~= "table" then
+    return
+  end
+
+  local duration = tonumber(window.windowDurationMins)
+  local percent = normalize_usage_percent(window.usedPercent)
+  if duration == nil or percent == nil then
+    return
+  end
+
+  if duration == 300 then
+    usage.five_hour_percent = percent
+  elseif duration == 10080 then
+    usage.weekly_percent = percent
+  end
+end
+
+local function parse_token_usage_response(response)
+  if type(response) ~= "table" then
+    return nil
+  end
+
+  local result = type(response.result) == "table" and response.result or response
+  local rate_limits = result.rateLimits
+  if type(result.rateLimitsByLimitId) == "table" and type(result.rateLimitsByLimitId.codex) == "table" then
+    rate_limits = result.rateLimitsByLimitId.codex
+  end
+
+  if type(rate_limits) ~= "table" then
+    return nil
+  end
+
+  local usage = {
+    five_hour_percent = nil,
+    weekly_percent = nil,
+  }
+
+  parse_token_usage_window(rate_limits.primary, usage)
+  parse_token_usage_window(rate_limits.secondary, usage)
+
+  if usage.five_hour_percent == nil and usage.weekly_percent == nil then
+    return nil
+  end
+
+  return usage
+end
+
+local function token_usage_label()
+  if not token_monitor_enabled() or state.job_id == nil or state.mode == "not running" then
+    return ""
+  end
+
+  local five_hour = state.token_usage.five_hour_percent
+  local weekly = state.token_usage.weekly_percent
+  local five_hour_label = five_hour ~= nil and (tostring(five_hour) .. "%") or "--%"
+  local weekly_label = weekly ~= nil and (tostring(weekly) .. "%") or "--%"
+
+  return "usage | 5hr " .. five_hour_label .. " | wk " .. weekly_label
+end
+
+local function stop_token_timeout_timer()
+  local timer = state.token_usage.timeout_timer
+  state.token_usage.timeout_timer = nil
+  if timer then
+    pcall(timer.stop, timer)
+    pcall(timer.close, timer)
+  end
+end
+
+local function clear_token_usage()
+  state.token_usage.five_hour_percent = nil
+  state.token_usage.weekly_percent = nil
+  state.token_usage.last_error = nil
+end
+
+local function complete_token_usage_request(job_id, usage, error_message, stop_job)
+  if state.token_usage.job_id ~= job_id then
+    return
+  end
+
+  stop_token_timeout_timer()
+  state.token_usage.job_id = nil
+  state.token_usage.in_flight = false
+  state.token_usage.stdout = ""
+  state.token_usage.initialized = false
+
+  if type(usage) == "table" then
+    state.token_usage.five_hour_percent = usage.five_hour_percent
+    state.token_usage.weekly_percent = usage.weekly_percent
+    state.token_usage.last_error = nil
+  elseif type(error_message) == "string" and error_message ~= "" then
+    state.token_usage.last_error = error_message
+  end
+
+  if stop_job then
+    pcall(vim.fn.jobstop, job_id)
+  end
+
+  if type(refresh_which_key_header) == "function" then
+    refresh_which_key_header()
+  end
+end
+
+local function send_token_usage_rpc(job_id, payload)
+  local encoded = json_encode(payload)
+  local ok, sent = pcall(vim.fn.chansend, job_id, encoded .. "\n")
+  return ok and sent ~= 0
+end
+
+local function process_token_usage_message(job_id, message)
+  if state.token_usage.job_id ~= job_id then
+    return
+  end
+
+  if message.id == 1 and not state.token_usage.initialized then
+    if type(message.result) ~= "table" then
+      complete_token_usage_request(job_id, nil, "Codex app-server initialize failed", true)
+      return
+    end
+
+    state.token_usage.initialized = true
+    send_token_usage_rpc(job_id, {
+      jsonrpc = "2.0",
+      method = "initialized",
+      params = {},
+    })
+    if not send_token_usage_rpc(job_id, {
+      jsonrpc = "2.0",
+      id = 2,
+      method = "account/rateLimits/read",
+      params = vim.NIL,
+    }) then
+      complete_token_usage_request(job_id, nil, "Failed to request Codex token usage", true)
+    end
+    return
+  end
+
+  if message.id ~= 2 then
+    return
+  end
+
+  if type(message.error) == "table" then
+    complete_token_usage_request(job_id, nil, tostring(message.error.message or "Codex token usage request failed"), true)
+    return
+  end
+
+  local usage = parse_token_usage_response(message)
+  if usage == nil then
+    complete_token_usage_request(job_id, nil, "Codex token usage response was unavailable", true)
+    return
+  end
+
+  complete_token_usage_request(job_id, usage, nil, true)
+end
+
+local function handle_token_usage_stdout(job_id, data)
+  if state.token_usage.job_id ~= job_id or type(data) ~= "table" then
+    return
+  end
+
+  local chunk = table.concat(data, "\n")
+  if chunk == "" then
+    return
+  end
+
+  state.token_usage.stdout = (state.token_usage.stdout or "") .. chunk
+
+  while true do
+    local newline = state.token_usage.stdout:find("\n", 1, true)
+    if not newline then
+      break
+    end
+
+    local line = state.token_usage.stdout:sub(1, newline - 1)
+    state.token_usage.stdout = state.token_usage.stdout:sub(newline + 1)
+    local message = json_decode(line)
+    if type(message) == "table" then
+      process_token_usage_message(job_id, message)
+    end
+  end
+end
+
+local function codex_app_server_command()
+  local monitor = token_monitor_config()
+  local executable = type(monitor.codex_cmd) == "string" and monitor.codex_cmd or command_executable(config.codex_cmd)
+  if executable == nil or executable == "" then
+    executable = "codex"
+  end
+
+  return { executable, "app-server", "--stdio" }, executable
+end
+
+refresh_token_usage = function(force)
+  if not token_monitor_enabled() or state.job_id == nil then
+    return false
+  end
+
+  if state.token_usage.in_flight then
+    if not force then
+      return false
+    end
+    complete_token_usage_request(state.token_usage.job_id, nil, "Codex token usage request was replaced", true)
+  end
+
+  local command, executable = codex_app_server_command()
+  if vim.fn.executable(executable) ~= 1 then
+    state.token_usage.last_error = "Codex CLI not found on PATH"
+    if type(refresh_which_key_header) == "function" then
+      refresh_which_key_header()
+    end
+    return false
+  end
+
+  state.token_usage.in_flight = true
+  state.token_usage.stdout = ""
+  state.token_usage.initialized = false
+  state.token_usage.last_error = nil
+
+  local job_id
+  job_id = vim.fn.jobstart(command, {
+    stdout_buffered = false,
+    stderr_buffered = false,
+    on_stdout = vim.schedule_wrap(function(_, data)
+      handle_token_usage_stdout(job_id, data)
+    end),
+    on_exit = vim.schedule_wrap(function(_, code)
+      if state.token_usage.job_id == job_id then
+        complete_token_usage_request(job_id, nil, "Codex token usage request exited with code " .. tostring(code), false)
+      end
+    end),
+  })
+
+  if type(job_id) ~= "number" or job_id <= 0 then
+    state.token_usage.job_id = nil
+    state.token_usage.in_flight = false
+    state.token_usage.last_error = "Failed to start Codex app-server"
+    if type(refresh_which_key_header) == "function" then
+      refresh_which_key_header()
+    end
+    return false
+  end
+
+  state.token_usage.job_id = job_id
+
+  local loop = vim.uv or vim.loop
+  local timer = loop and loop.new_timer()
+  if timer then
+    state.token_usage.timeout_timer = timer
+    timer:start(token_timeout_ms(), 0, vim.schedule_wrap(function()
+      complete_token_usage_request(job_id, nil, "Codex token usage request timed out", true)
+    end))
+  end
+
+  if not send_token_usage_rpc(job_id, {
+    jsonrpc = "2.0",
+    id = 1,
+    method = "initialize",
+    params = {
+      clientInfo = {
+        name = "codux.nvim",
+        version = "0",
+      },
+      capabilities = {
+        experimentalApi = true,
+      },
+    },
+  }) then
+    complete_token_usage_request(job_id, nil, "Failed to initialize Codex app-server", true)
+    return false
+  end
+
+  return true
+end
+
+start_token_monitor_timer = function()
+  if not token_monitor_enabled() or state.job_id == nil then
+    return
+  end
+
+  if state.token_usage.refresh_timer then
+    refresh_token_usage(true)
+    return
+  end
+
+  refresh_token_usage(false)
+
+  local loop = vim.uv or vim.loop
+  local timer = loop and loop.new_timer()
+  if not timer then
+    return
+  end
+
+  state.token_usage.refresh_timer = timer
+  timer:start(token_refresh_ms(), token_refresh_ms(), vim.schedule_wrap(function()
+    refresh_token_usage(false)
+  end))
+end
+
+stop_token_monitor_timer = function()
+  local refresh_timer = state.token_usage.refresh_timer
+  state.token_usage.refresh_timer = nil
+  if refresh_timer then
+    pcall(refresh_timer.stop, refresh_timer)
+    pcall(refresh_timer.close, refresh_timer)
+  end
+
+  stop_token_timeout_timer()
+
+  local job_id = state.token_usage.job_id
+  state.token_usage.job_id = nil
+  state.token_usage.in_flight = false
+  state.token_usage.stdout = ""
+  state.token_usage.initialized = false
+  clear_token_usage()
+  if job_id then
+    pcall(vim.fn.jobstop, job_id)
+  end
+end
+
 local function start_terminal(focus, initial_prompt, command)
   if terminal_running() then
     if focus then
@@ -965,6 +1384,9 @@ local function start_terminal(focus, initial_prompt, command)
       state.pending_delete_buffers[job_id] = nil
       if state.job_id == job_id then
         state.job_id = nil
+        if type(stop_token_monitor_timer) == "function" then
+          stop_token_monitor_timer()
+        end
         set_codex_working(false)
         set_mode("not running")
       end
@@ -988,6 +1410,9 @@ local function start_terminal(focus, initial_prompt, command)
 
   state.job_id = job_id
   set_mode("execute")
+  if type(start_token_monitor_timer) == "function" then
+    start_token_monitor_timer()
+  end
   set_codex_working(type(initial_prompt) == "string" and initial_prompt ~= "")
 
   if focus then
@@ -1080,6 +1505,9 @@ function M.exit()
     pcall(vim.fn.jobstop, job_id)
   end
   state.job_id = nil
+  if type(stop_token_monitor_timer) == "function" then
+    stop_token_monitor_timer()
+  end
   set_codex_working(false)
   set_mode("not running")
 
@@ -1809,6 +2237,12 @@ function M.health_info()
     mode = state.mode,
     codex_working = state.codex_working,
     working_indicator_visible = is_valid_win(state.working_win),
+    token_usage = {
+      five_hour_percent = state.token_usage.five_hour_percent,
+      weekly_percent = state.token_usage.weekly_percent,
+      in_flight = state.token_usage.in_flight,
+      last_error = state.token_usage.last_error,
+    },
   }
 end
 
@@ -1873,24 +2307,35 @@ local function set_mapping(mode, lhs, rhs, desc)
 end
 
 local function mode_status_label()
-  return "codux status " .. (state.mode or "not running")
+  return "codux"
 end
 
-local function mode_status_color()
-  if state.mode == "execute" then
-    return "#3fb950"
-  end
-  if state.mode == "plan" then
-    return "#a371f7"
+local function mode_status_header_lines()
+  local lines = { "codux status " .. (state.mode or "not running") }
+  local usage = token_usage_label()
+  if usage ~= "" then
+    table.insert(lines, usage)
   end
 
-  return "#f85149"
+  return lines
+end
+
+local function mode_status_hl()
+  if state.mode == "execute" then
+    return "CoduxWhichKeyExecute"
+  end
+  if state.mode == "plan" then
+    return "CoduxWhichKeyPlan"
+  end
+
+  return "CoduxWhichKeyNotRunning"
 end
 
 local function apply_mode_status_hl()
-  local fg = mode_status_color()
-  pcall(vim.api.nvim_set_hl, 0, "WhichKeyGroup", { fg = fg })
-  pcall(vim.api.nvim_set_hl, 0, "WhichKeyTitle", { fg = fg })
+  pcall(vim.api.nvim_set_hl, 0, "CoduxWhichKeyExecute", { fg = "#3fb950" })
+  pcall(vim.api.nvim_set_hl, 0, "CoduxWhichKeyPlan", { fg = "#a371f7" })
+  pcall(vim.api.nvim_set_hl, 0, "CoduxWhichKeyNotRunning", { fg = "#f85149" })
+  pcall(vim.api.nvim_set_hl, 0, "CoduxWhichKeyUsage", { fg = "#8b949e" })
 end
 
 local function mode_status_icon()
@@ -1922,12 +2367,219 @@ local function clear_which_key_cache()
   end
 end
 
-local function remove_codux_which_key_specs(mappings)
+local function active_which_key_node()
+  local ok, which_key_state = pcall(require, "which-key.state")
+  if not ok or type(which_key_state.state) ~= "table" or type(which_key_state.state.node) ~= "table" then
+    return nil
+  end
+
+  return which_key_state.state.node
+end
+
+local function codux_which_key_prefix()
+  local ok, which_key_util = pcall(require, "which-key.util")
+  if ok and type(which_key_util.norm) == "function" then
+    local norm_ok, value = pcall(which_key_util.norm, "<leader>z")
+    if norm_ok and type(value) == "string" then
+      return value
+    end
+  end
+
+  return "<leader>z"
+end
+
+local function codux_menu_marker(value)
+  if type(value) ~= "string" then
+    return false
+  end
+
+  local text = value:lower()
+  local markers = {
+    "open codex",
+    "codex autopilot",
+    "codex danger zone",
+    "send file/folder to codex",
+    "send selection to codex",
+    "send diagnostics to codex",
+    "send git diff to codex",
+    "switch to execute mode",
+    "switch to plan mode",
+  }
+
+  for _, marker in ipairs(markers) do
+    if text:find(marker, 1, true) then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function node_has_codux_menu_child(node)
+  if type(node) ~= "table" or type(node.children) ~= "function" then
+    return false
+  end
+
+  local ok, children = pcall(node.children, node)
+  if not ok or type(children) ~= "table" then
+    return false
+  end
+
+  for _, child in ipairs(children) do
+    if codux_menu_marker(child.desc) then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function codux_which_key_active()
+  local node = active_which_key_node()
+  if type(node) ~= "table" then
+    return false
+  end
+
+  return node.keys == codux_which_key_prefix() or node_has_codux_menu_child(node)
+end
+
+local function which_key_view()
+  local ok, view = pcall(require, "which-key.view")
+  if not ok or type(view) ~= "table" or type(view.view) ~= "table" then
+    return nil
+  end
+
+  return view
+end
+
+local function valid_which_key_window(view)
+  if type(view) ~= "table" or type(view.view) ~= "table" then
+    return nil, nil
+  end
+
+  local win = view.view.win
+  local buf = view.view.buf
+  if not is_valid_win(win) or not is_loaded_buf(buf) then
+    return nil, nil
+  end
+
+  return win, buf
+end
+
+local function codux_which_key_title()
+  local usage = token_usage_label()
+  local title = { { " codux " .. (state.mode or "not running") .. " ", mode_status_hl() } }
+  if usage ~= "" then
+    local compact_usage = usage:gsub("^usage | ", "")
+    table.insert(title, { "| " .. compact_usage .. " ", "CoduxWhichKeyUsage" })
+  end
+
+  return title
+end
+
+local function with_codux_which_key_chrome(callback)
   local ok, which_key_config = pcall(require, "which-key.config")
-  if not ok or type(which_key_config.mappings) ~= "table" then
+  if not ok or type(which_key_config.win) ~= "table" then
+    return callback()
+  end
+
+  local win_config = which_key_config.win
+  local original = {
+    border = win_config.border,
+    title = win_config.title,
+    title_pos = win_config.title_pos,
+    footer = win_config.footer,
+    footer_pos = win_config.footer_pos,
+    show_keys = which_key_config.show_keys,
+  }
+
+  local title = codux_which_key_title()
+  win_config.title = title
+  win_config.title_pos = "center"
+  win_config.footer = ""
+  win_config.footer_pos = "center"
+  which_key_config.show_keys = false
+  if win_config.border == nil or win_config.border == false or win_config.border == "none" then
+    win_config.border = "rounded"
+  end
+
+  local ok_callback, results = pcall(function()
+    return { callback() }
+  end)
+
+  win_config.border = original.border
+  win_config.title = original.title
+  win_config.title_pos = original.title_pos
+  win_config.footer = original.footer
+  win_config.footer_pos = original.footer_pos
+  which_key_config.show_keys = original.show_keys
+
+  if not ok_callback then
+    error(results)
+  end
+
+  return unpack(results)
+end
+
+refresh_which_key_header = function()
+  local view = which_key_view()
+  local win = valid_which_key_window(view)
+  if win and codux_which_key_active() and type(view.show) == "function" then
+    pcall(view.show)
+  end
+end
+
+local function install_which_key_header_hook()
+  if which_key_header_hooked then
     return
   end
 
+  local ok, view = pcall(require, "which-key.view")
+  if not ok or type(view) ~= "table" or type(view.show) ~= "function" then
+    return
+  end
+
+  if view._codux_header_hooked == "chrome" then
+    which_key_header_hooked = true
+    return
+  end
+
+  local original_show = view.show
+  view.show = function(...)
+    local args = { ... }
+    if codux_which_key_active() then
+      return with_codux_which_key_chrome(function()
+        return original_show(unpack(args))
+      end)
+    end
+
+    return original_show(unpack(args))
+  end
+  view._codux_header_hooked = "chrome"
+  which_key_header_hooked = true
+end
+
+local function spec_has_owned_lhs(spec, owned)
+  if type(spec) ~= "table" then
+    return false
+  end
+  if type(spec.lhs) == "string" and owned[spec.lhs] then
+    return true
+  end
+  if type(spec[1]) == "string" and owned[spec[1]] then
+    return true
+  end
+
+  for _, child in pairs(spec) do
+    if spec_has_owned_lhs(child, owned) then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function remove_codux_which_key_specs(mappings)
   local owned = {}
   for _, lhs in pairs(mappings) do
     if type(lhs) == "string" and lhs ~= "" then
@@ -1935,6 +2587,21 @@ local function remove_codux_which_key_specs(mappings)
     end
   end
   owned["<leader>z"] = true
+
+  local ok_wk, which_key = pcall(require, "which-key")
+  if ok_wk and type(which_key._queue) == "table" then
+    for index = #which_key._queue, 1, -1 do
+      local queued = which_key._queue[index]
+      if type(queued) == "table" and spec_has_owned_lhs(queued.spec, owned) then
+        table.remove(which_key._queue, index)
+      end
+    end
+  end
+
+  local ok, which_key_config = pcall(require, "which-key.config")
+  if not ok or type(which_key_config.mappings) ~= "table" then
+    return
+  end
 
   for index = #which_key_config.mappings, 1, -1 do
     local mapping = which_key_config.mappings[index]
@@ -1977,6 +2644,7 @@ local function register_which_key_group(mappings)
     return
   end
 
+  install_which_key_header_hook()
   remove_codux_which_key_specs(mappings)
 
   local normal_entries = {
@@ -2056,6 +2724,7 @@ refresh_which_key = function()
 end
 
 function M.setup(opts)
+  stop_token_monitor_timer()
   config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
 
   create_commands()
@@ -2073,6 +2742,16 @@ function M.setup(opts)
   if mode_action_desc() then
     set_mapping("n", mappings.mode, M.toggle_plan_mode, mode_action_desc())
   end
+
+  pcall(vim.api.nvim_clear_autocmds, { group = augroup, event = "VimLeavePre" })
+  pcall(vim.api.nvim_create_autocmd, "VimLeavePre", {
+    group = augroup,
+    callback = function()
+      stop_token_monitor_timer()
+    end,
+  })
+
+  install_which_key_header_hook()
 end
 
 return M
