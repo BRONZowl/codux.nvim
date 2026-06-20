@@ -29,25 +29,29 @@
   <img src="assets/codux-demo.gif?v=20260619-token-usage-2" alt="codux.nvim showing the Codex menu, persistent terminal, and visual selection workflow" width="900">
 </p>
 
-<h2 align="center">Latest Feature</h2>
+<h2 align="center">Why not just use Codex in a terminal?</h2>
 
 <p align="center">
-  Codux now shows Codex token monitoring directly in the <code>&lt;leader&gt;z</code> menu.
+  Using Codex in a separate terminal works, but it means:
 </p>
 
 <p align="center">
-  Track 5 hr and weekly usage while your persistent Codex session is running.
+  Switching between editor and terminal<br>
+  Losing focus while reviewing changes<br>
+  Managing window layouts manually<br>
+  No editor-native visibility into token usage
 </p>
-
-<h2 align="center">Comparison</h2>
 
 <p align="center">
-  <strong>Codux</strong>: keeps a persistent OpenAI Codex CLI session in a floating terminal.<br>
-  <strong>Chat-style plugins</strong>: usually center on prompts, chat buffers, and one-off AI requests.<br>
-  <strong>Agent-style plugins</strong>: usually provide broader in-editor editing agents and automation.
+  codux.nvim keeps your Codex workflow inside Neovim with:
 </p>
 
-<br>
+<p align="center">
+  Persistent sessions<br>
+  Floating terminal integration<br>
+  Built-in token monitoring<br>
+  Fast toggling between code and AI
+</p>
 
 ## Manual Install
 
