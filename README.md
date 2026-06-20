@@ -53,6 +53,48 @@
   Fast toggling between code and AI
 </p>
 
+<h2 align="center">Why codux.nvim pairs well with tmux</h2>
+
+<p align="center">
+  Large development tasks rarely involve a single conversation.
+</p>
+
+<p align="center">
+  With tmux, you can dedicate a Codux session to a specific objective and keep that context alive while you work.
+</p>
+
+<p align="center">
+  <strong>Window 1 - Feature Development</strong><br>
+  Implementing a new gameplay system<br>
+  Codux focused on design decisions, code generation, and implementation details
+</p>
+
+<p align="center">
+  <strong>Window 2 - Code Review</strong><br>
+  Reviewing your current branch<br>
+  Codux focused on bugs, edge cases, performance issues, and refactoring opportunities
+</p>
+
+<p align="center">
+  <strong>Window 3 - Debugging</strong><br>
+  Investigating a failing test or runtime issue<br>
+  Codux focused on logs, diagnostics, stack traces, and root-cause analysis
+</p>
+
+<p align="center">
+  <strong>Window 4 - Architecture</strong><br>
+  Planning larger changes<br>
+  Codux focused on project structure, APIs, and long-term design decisions
+</p>
+
+<p align="center">
+  Each Codux session maintains its own conversation and context.
+</p>
+
+<p align="center">
+  Instead of constantly changing topics within a single AI conversation, you can keep dedicated Codux sessions attached to specific workflows and switch between them instantly with tmux.
+</p>
+
 ## Manual Install
 
 1. Add codux.nvim with lazy.nvim or LazyVim:
