@@ -31,13 +31,13 @@
 
 <h2 align="center">Why Codux?</h2>
 
-<ul align="center">
-  <li>Persistent Codex sessions</li>
-  <li>Floating terminal workflow</li>
-  <li>Built-in token monitoring</li>
-  <li>Native Neovim experience</li>
-  <li>No context loss between prompts</li>
-</ul>
+<p align="center">
+  Persistent Codex sessions<br>
+  Floating terminal workflow<br>
+  Built-in token monitoring<br>
+  Native Neovim experience<br>
+  No context loss between prompts
+</p>
 
 <h2 align="center">Comparison</h2>
 
