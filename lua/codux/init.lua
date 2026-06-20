@@ -455,6 +455,7 @@ local function popup_config()
   local available_height = math.max(1, total_height - (has_border and 2 or 0))
   local width = math.min(available_width, dimension(popup.width, available_width, 0.85))
   local height = math.min(available_height, dimension(popup.height, available_height, 0.85))
+  local border_size = has_border and 2 or 0
 
   return {
     relative = "editor",
@@ -462,8 +463,8 @@ local function popup_config()
     border = popup.border or "rounded",
     width = width,
     height = height,
-    col = math.floor((total_width - width) / 2),
-    row = math.floor((total_height - height) / 2),
+    col = math.max(0, math.floor((total_width - width - border_size) / 2)),
+    row = math.max(0, math.floor((total_height - height - border_size) / 2) - 1),
   }
 end
 
