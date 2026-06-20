@@ -31,7 +31,7 @@
 
 <h2 align="center">Why Codux?</h2>
 
-<ul>
+<ul align="center">
   <li>Persistent Codex sessions</li>
   <li>Floating terminal workflow</li>
   <li>Built-in token monitoring</li>
