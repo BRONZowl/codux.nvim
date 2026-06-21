@@ -187,15 +187,15 @@ require("codux").setup({
 <div align="center">
 
 ```text
-codux.nvim doctor
+              codux.nvim doctor
 
-[ok] tmux found: tmux
-[ok] codex found: codex
-[ok] workspace state readable
-[ok] workspace state writable
+              [ok] tmux found: tmux
+             [ok] codex found: codex
+        [ok] workspace state readable
+        [ok] workspace state writable
 [ok] project root detected: /home/bronz/Projects/app
-[ok] 3 workspaces loaded
-[warn] 1 workspace targets missing
+          [ok] 3 workspaces loaded
+       [warn] 1 workspace targets missing
 ```
 
 </div>
