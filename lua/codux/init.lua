@@ -624,10 +624,12 @@ end
 set_codex_working = function(working)
   state.codex_working = working == true
   if not state.codex_working then
+    M._sync_workspace_activity("idle")
     state.last_working_activity = 0
     stop_working_idle_timer()
     close_working_indicator()
   else
+    M._sync_workspace_activity("working")
     state.last_working_activity = now_ms()
     start_working_idle_timer()
     update_working_indicator()
@@ -899,6 +901,7 @@ local function open_window(focus)
       return open_window(focus)
     end
     close_working_indicator()
+    pcall(vim.api.nvim_set_option_value, "wrap", true, { win = state.win })
     if focus then
       focus_window()
     end
@@ -927,6 +930,7 @@ local function open_window(focus)
   pcall(vim.api.nvim_set_option_value, "relativenumber", false, { win = state.win })
   pcall(vim.api.nvim_set_option_value, "signcolumn", "no", { win = state.win })
   pcall(vim.api.nvim_set_option_value, "winfixbuf", true, { win = state.win })
+  pcall(vim.api.nvim_set_option_value, "wrap", true, { win = state.win })
 
   local win_id = state.win
   if state.focus_lock_autocmd then
@@ -1712,6 +1716,7 @@ local function workspace_from_state(record, fallback)
     git_branch = record.git_branch or fallback.git_branch or "",
     window_name = record.tmux_window or record.window_name or fallback.window_name,
     permission_profile = record.permission_profile or fallback.permission_profile or "default",
+    codex_status = record.codex_status or fallback.codex_status or "idle",
     created_at = record.created_at or fallback.created_at,
   }
 end
@@ -1729,9 +1734,62 @@ local function workspace_state_record(workspace, existing)
     git_branch = workspace.git_branch or "",
     tmux_window = workspace.window_name,
     permission_profile = workspace.permission_profile or "default",
+    codex_status = workspace.codex_status or existing.codex_status or "idle",
     created_at = existing.created_at or workspace.created_at or now,
     last_opened_at = now,
   }
+end
+
+M._sync_workspace_activity = function(codex_status)
+  if codex_status ~= "working" and codex_status ~= "idle" then
+    return false
+  end
+  if type(state.workspace) ~= "table" then
+    return false
+  end
+
+  local root = state.workspace.project_root
+  local safe_name = state.workspace.safe_name
+  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
+    return false
+  end
+
+  if state.workspace.codex_status == codex_status then
+    return true
+  end
+
+  local state_data, state_error = read_workspace_state()
+  if state_error then
+    return false
+  end
+
+  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
+  local workspaces = type(project) == "table" and project.workspaces or nil
+  local record = type(workspaces) == "table" and workspaces[safe_name] or nil
+  if type(record) ~= "table" then
+    return false
+  end
+
+  if record.codex_status == codex_status then
+    state.workspace.codex_status = codex_status
+    return true
+  end
+
+  record.codex_status = codex_status
+  record.last_activity_at = workspace_timestamp()
+  project.updated_at = record.last_activity_at
+
+  local write_ok = write_workspace_state(state_data)
+  if not write_ok then
+    return false
+  end
+
+  state.workspace.codex_status = codex_status
+  if state.workspace_manager_project_root == root and type(render_workspace_manager) == "function" then
+    render_workspace_manager()
+  end
+
+  return true
 end
 
 local function workspace_entries_for_project(root)
@@ -1752,6 +1810,10 @@ local function workspace_entries_for_project(root)
     if type(record) == "table" then
       local window_name = record.tmux_window or record.window_name or safe_name
       local window_id = session and tmux_window_id(session, window_name) or nil
+      local status = "closed"
+      if window_id ~= nil then
+        status = record.codex_status == "working" and "working" or "idle"
+      end
       table.insert(entries, {
         name = record.name or safe_name,
         safe_name = record.safe_name or safe_name,
@@ -1761,7 +1823,7 @@ local function workspace_entries_for_project(root)
         git_branch = record.git_branch or "",
         window_name = window_name,
         window_id = window_id,
-        active = window_id ~= nil,
+        status = status,
       })
     end
   end
@@ -1857,15 +1919,89 @@ local function close_workspace_manager()
   state.workspace_manager_project_root = nil
 end
 
+local WORKSPACE_MANAGER_NAME_WIDTH = 28
+local WORKSPACE_MANAGER_STATUS_WIDTH = 7
+local WORKSPACE_MANAGER_GAP = "  "
+local workspace_manager_window_width
+
+local function display_width(text)
+  local ok, width = pcall(vim.fn.strdisplaywidth, text or "")
+  if ok and type(width) == "number" then
+    return width
+  end
+
+  return #(text or "")
+end
+
+local function truncate_display_tail(text, max_width)
+  text = tostring(text or "")
+
+  if max_width <= 0 then
+    return ""
+  end
+
+  if display_width(text) <= max_width then
+    return text
+  end
+
+  if max_width <= 3 then
+    return string.rep(".", max_width)
+  end
+
+  local suffix_width = max_width - 3
+  local char_count = vim.fn.strchars(text)
+  local suffix = ""
+
+  for start = char_count - 1, 0, -1 do
+    local candidate = vim.fn.strcharpart(text, start)
+    if display_width(candidate) > suffix_width then
+      break
+    end
+    suffix = candidate
+  end
+
+  return "..." .. suffix
+end
+
+local function pad_display_right(text, width)
+  text = truncate_display_tail(text, width)
+  return text .. string.rep(" ", math.max(0, width - display_width(text)))
+end
+
+local function workspace_manager_column_widths()
+  local width = workspace_manager_window_width() or 58
+  local gap_width = display_width(WORKSPACE_MANAGER_GAP)
+  local available = math.max(1, width - WORKSPACE_MANAGER_STATUS_WIDTH - (gap_width * 2))
+  local name_width = math.min(WORKSPACE_MANAGER_NAME_WIDTH, math.max(12, available - 8))
+  local target_width = math.max(0, available - name_width)
+
+  return name_width, target_width
+end
+
 local function workspace_manager_line(entry)
-  local status = entry.active and "active" or "inactive"
+  local status = entry.status or "closed"
   local target = type(entry.target_path) == "string" and entry.target_path ~= "" and vim.fn.fnamemodify(entry.target_path, ":t") or ""
-  local suffix = target ~= "" and "  " .. target or ""
-  return string.format("%-28s %s%s", entry.name, status, suffix)
+  local name_width, target_width = workspace_manager_column_widths()
+
+  return table.concat({
+    pad_display_right(entry.name or "", name_width),
+    WORKSPACE_MANAGER_GAP,
+    pad_display_right(status, WORKSPACE_MANAGER_STATUS_WIDTH),
+    WORKSPACE_MANAGER_GAP,
+    truncate_display_tail(target, target_width),
+  })
 end
 
 local function workspace_manager_header_line()
-  return string.format("%-28s %s  %s", "workspace", "status", "target")
+  local name_width = workspace_manager_column_widths()
+
+  return table.concat({
+    pad_display_right("workspace", name_width),
+    WORKSPACE_MANAGER_GAP,
+    pad_display_right("status", WORKSPACE_MANAGER_STATUS_WIDTH),
+    WORKSPACE_MANAGER_GAP,
+    "target",
+  })
 end
 
 local function workspace_manager_window_height()
@@ -1902,7 +2038,7 @@ local function workspace_manager_footer_line()
   return table.concat(parts, "")
 end
 
-local function workspace_manager_window_width()
+workspace_manager_window_width = function()
   if not is_valid_win(state.workspace_manager_win) then
     return nil
   end
@@ -2152,13 +2288,14 @@ local function workspace_bootstrap_lua(workspace)
   local safe_name = workspace.safe_name or ""
   local branch = workspace.git_branch or ""
   local window_name = workspace.window_name or ""
+  local codex_status = workspace.codex_status or "idle"
 
   return table.concat({
     "local root=" .. lua_string(root),
     "local target=" .. lua_string(target_path),
     "local target_type=" .. lua_string(target_type),
     "local profile=" .. lua_string(profile),
-    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",permission_profile=profile}",
+    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",permission_profile=profile,codex_status=" .. lua_string(codex_status) .. "}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
@@ -2284,6 +2421,7 @@ local function prepare_workspace(name, opts)
     git_branch = context.branch,
     window_name = safe_name_or_error,
     permission_profile = workspace_permission_profile(),
+    codex_status = "idle",
   }
   local workspace = workspace_from_state(existing, fallback)
   workspace.session = session
@@ -2373,6 +2511,7 @@ local function start_terminal(focus, initial_prompt, command, workspace, permiss
       if state.job_id == job_id then
         state.job_id = nil
         state.permission_profile = "default"
+        M._sync_workspace_activity("idle")
         state.workspace = nil
         state.workspace_target_signature = nil
         state.workspace_target_update_pending = false
@@ -2414,6 +2553,9 @@ local function start_terminal(focus, initial_prompt, command, workspace, permiss
   state.last_permission_profile = state.permission_profile
   if workspace ~= nil then
     state.workspace = workspace
+  end
+  if valid_win() then
+    pcall(vim.api.nvim_set_option_value, "wrap", true, { win = state.win })
   end
   set_mode("execute")
   if type(start_token_monitor_timer) == "function" then
@@ -2697,6 +2839,7 @@ function M.exit()
   end
   state.job_id = nil
   state.permission_profile = "default"
+  M._sync_workspace_activity("idle")
   state.workspace = nil
   state.workspace_target_signature = nil
   state.workspace_target_update_pending = false
