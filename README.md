@@ -258,7 +258,7 @@ Codux sends requested files, selections, diagnostics, and health output through 
 </p>
 
 <p align="center">
-  Inside tmux, Codux creates or reuses a <code>codux:backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts a hidden Codux session using the active permission profile.
+  Inside tmux, Codux creates or reuses a <code>backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts a hidden Codux session using the active permission profile.
 </p>
 
 <p align="center">

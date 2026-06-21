@@ -23,7 +23,6 @@ local defaults = {
   workspaces = {
     enabled = true,
     tmux_cmd = vim.env.TMUX_CMD or "tmux",
-    window_prefix = "codux:",
     state_file = nil,
   },
   mappings = {
@@ -1446,15 +1445,6 @@ local function tmux_cmd()
   return defaults.workspaces.tmux_cmd
 end
 
-local function tmux_window_prefix()
-  local value = workspace_config().window_prefix
-  if type(value) == "string" then
-    return value
-  end
-
-  return defaults.workspaces.window_prefix
-end
-
 local function workspace_nvim_cmd()
   local value = workspace_config().nvim_cmd
   if type(value) == "string" and trim(value) ~= "" then
@@ -1752,7 +1742,7 @@ local function workspace_entries_for_project(root)
   local entries = {}
   for safe_name, record in pairs(workspaces) do
     if type(record) == "table" then
-      local window_name = record.tmux_window or record.window_name or (tmux_window_prefix() .. safe_name)
+      local window_name = record.tmux_window or record.window_name or safe_name
       local window_id = session and tmux_window_id(session, window_name) or nil
       table.insert(entries, {
         name = record.name or safe_name,
@@ -1830,6 +1820,10 @@ local function workspace_manager_line(entry)
   local target = type(entry.target_path) == "string" and entry.target_path ~= "" and vim.fn.fnamemodify(entry.target_path, ":t") or ""
   local suffix = target ~= "" and "  " .. target or ""
   return string.format("%-28s %s%s", entry.name, status, suffix)
+end
+
+local function workspace_manager_header_line()
+  return string.format("%-28s %s  %s", "workspace", "status", "target")
 end
 
 local function workspace_manager_window_height()
@@ -1956,7 +1950,7 @@ local function render_workspace_manager()
   local entries, error_message = workspace_entries_for_project(root)
   state.workspace_manager_items = entries
 
-  local lines = {}
+  local lines = { workspace_manager_header_line() }
   if error_message then
     table.insert(lines, error_message)
   elseif #entries == 0 then
@@ -1974,6 +1968,7 @@ local function render_workspace_manager()
 
   pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = state.workspace_manager_buf })
   pcall(vim.api.nvim_buf_set_lines, state.workspace_manager_buf, 0, -1, false, lines)
+  pcall(vim.api.nvim_buf_add_highlight, state.workspace_manager_buf, -1, "WhichKeyDesc", 0, 0, -1)
   pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = state.workspace_manager_buf })
   render_workspace_manager_footer()
   return true
@@ -1989,7 +1984,7 @@ local function selected_workspace_manager_item()
     return nil
   end
 
-  local index = cursor[1]
+  local index = cursor[1] - 1
   return state.workspace_manager_items[index]
 end
 
@@ -2048,7 +2043,7 @@ local function rename_saved_workspace(entry, new_name)
     return false
   end
 
-  local new_window_name = tmux_window_prefix() .. safe_name_or_error
+  local new_window_name = safe_name_or_error
   if not rename_tmux_window(entry.window_id, new_window_name) then
     notify("Failed to rename tmux window " .. tostring(entry.window_name), vim.log.levels.ERROR)
     return false
@@ -2237,13 +2232,13 @@ local function prepare_workspace(name, opts)
     target_path = context.path,
     target_type = context.target and context.target.type or nil,
     git_branch = context.branch,
-    window_name = tmux_window_prefix() .. safe_name_or_error,
+    window_name = safe_name_or_error,
     permission_profile = workspace_permission_profile(),
   }
   local workspace = workspace_from_state(existing, fallback)
   workspace.session = session
   workspace.safe_name = workspace.safe_name or safe_name_or_error
-  workspace.window_name = workspace.window_name or (tmux_window_prefix() .. workspace.safe_name)
+  workspace.window_name = workspace.window_name or workspace.safe_name
   workspace.project_root = workspace.project_root or root
 
   local window_id = ensure_tmux_window(session, workspace.project_root, workspace.window_name, workspace_nvim_command(workspace))
@@ -2586,16 +2581,15 @@ function M.open_workspaces()
     if not item then
       return false
     end
-    vim.ui.select({ "delete", "cancel" }, { prompt = "Delete Codux workspace " .. item.name .. "?" }, function(choice)
-      if choice == "delete" then
-        delete_saved_workspace(item)
-      end
-    end)
+    local choice = vim.fn.confirm("Delete Codux workspace " .. item.name .. "?", "&Yes\n&No", 2)
+    if choice == 1 then
+      delete_saved_workspace(item)
+    end
   end, { buffer = bufnr, silent = true, desc = "Delete Codux Workspace" })
 
   render_workspace_manager()
   if #state.workspace_manager_items > 0 then
-    pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
+    pcall(vim.api.nvim_win_set_cursor, win, { 2, 0 })
   end
   return true
 end
