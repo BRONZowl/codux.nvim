@@ -121,6 +121,32 @@ function M.check()
     else
       health_warn("tmux executable not found: " .. tmux .. " (:CoduxWorkspace requires tmux)")
     end
+
+    local state_file = info.workspace_state_file
+    if type(state_file) == "string" and state_file ~= "" then
+      health_ok("workspace state file: " .. state_file)
+      local state_dir = vim.fn.fnamemodify(state_file, ":h")
+      if vim.fn.isdirectory(state_dir) == 1 then
+        health_ok("workspace state directory is available")
+        if vim.fn.filewritable(state_dir) == 2 then
+          health_ok("workspace state directory is writable")
+        else
+          health_warn("workspace state directory is not writable: " .. state_dir)
+        end
+      else
+        health_warn("workspace state directory does not exist yet: " .. state_dir)
+      end
+      if vim.fn.filereadable(state_file) == 1 then
+        health_ok("workspace state file is readable")
+        if vim.fn.filewritable(state_file) == 1 then
+          health_ok("workspace state file is writable")
+        else
+          health_warn("workspace state file is not writable: " .. state_file)
+        end
+      elseif vim.fn.filereadable(state_file) == 0 and vim.fn.isdirectory(state_dir) == 1 then
+        health_ok("workspace state file will be created on first workspace use")
+      end
+    end
   end
 
   local commands = {

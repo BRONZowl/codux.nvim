@@ -195,9 +195,14 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td><code>:CoduxOpenDanger</code></td>
 </tr>
 <tr>
-<td>Open a named tmux workspace</td>
+<td>Create a named tmux workspace</td>
 <td><code>&lt;leader&gt;zw</code></td>
 <td><code>:CoduxWorkspace &lt;name&gt;</code></td>
+</tr>
+<tr>
+<td>Manage current Codux workspaces</td>
+<td><code>&lt;leader&gt;zW</code></td>
+<td><code>:CoduxWorkspaces</code></td>
 </tr>
 <tr>
 <td>Send current file or explorer node</td>
@@ -248,12 +253,22 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <h2 align="center">Custom Codex Workspaces</h2>
 
 <p align="center">
-  Use <code>:CoduxWorkspace backend-debug</code> inside tmux to create or open a named Codex workspace.
-  New workspace windows launch <code>nvim .</code> in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
+  Use <code>:CoduxWorkspace backend-debug</code> inside tmux to create a named Codex workspace.
+  New workspace windows launch in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
 </p>
 
 <p align="center">
-  Inside tmux, Codux creates or reuses a <code>codux:backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and opens a fresh Codux popup using the active permission profile.
+  Inside tmux, Codux creates or reuses a <code>codux:backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts a hidden Codux session using the active permission profile.
+</p>
+
+<p align="center">
+  Workspace names are persisted per project in <code>stdpath("data")/codux/workspaces.json</code>.
+  Creating a workspace with an existing name shows <code>workspace already exists</code>.
+</p>
+
+<p align="center">
+  Use <code>:CoduxWorkspaces</code> or <code>&lt;leader&gt;zW</code> to open <code>current codux workspaces</code>.
+  From that window, press <code>&lt;CR&gt;</code> to open a saved workspace, <code>r</code> to rename it, or <code>d</code> to delete it.
 </p>
 
 <p align="center">
@@ -261,7 +276,8 @@ Codux sends requested files, selections, diagnostics, and health output through 
 </p>
 
 <p align="center">
-  Workspace names are user-defined and sanitized for tmux window safety. Codux does not create predefined workspaces.
+  Workspace names are user-defined and sanitized for tmux window safety.
+  Empty names and sanitized-name collisions are rejected with a clear error.
 </p>
 
 <p align="center">

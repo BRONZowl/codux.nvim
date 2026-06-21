@@ -24,6 +24,7 @@ local defaults = {
     enabled = true,
     tmux_cmd = vim.env.TMUX_CMD or "tmux",
     window_prefix = "codux:",
+    state_file = nil,
   },
   mappings = {
     open = "<leader>zc",
@@ -34,6 +35,7 @@ local defaults = {
     diagnostics = "<leader>zd",
     diff = "<leader>zg",
     workspace = "<leader>zw",
+    workspaces = "<leader>zW",
     mode = "<leader>zp",
   },
   prompts = {
@@ -79,6 +81,10 @@ local state = {
   permission_profile = "default",
   last_permission_profile = "default",
   workspace = nil,
+  workspace_manager_buf = nil,
+  workspace_manager_win = nil,
+  workspace_manager_items = {},
+  workspace_manager_project_root = nil,
   closing_popup = false,
   focus_lock_pending = false,
   focus_lock_autocmd = nil,
@@ -1612,6 +1618,363 @@ local function workspace_permission_profile()
   return state.last_permission_profile or "default"
 end
 
+local function workspace_state_file()
+  local value = workspace_config().state_file
+  if type(value) == "string" and trim(value) ~= "" then
+    return vim.fn.expand(value)
+  end
+
+  return vim.fn.stdpath("data") .. "/codux/workspaces.json"
+end
+
+local function empty_workspace_state()
+  return {
+    version = 1,
+    projects = vim.empty_dict and vim.empty_dict() or {},
+  }
+end
+
+local function normalize_workspace_state(state_data)
+  if type(state_data) ~= "table" then
+    return empty_workspace_state()
+  end
+
+  state_data.version = tonumber(state_data.version) or 1
+  if type(state_data.projects) ~= "table" then
+    state_data.projects = {}
+  end
+
+  return state_data
+end
+
+local function read_workspace_state()
+  local path = workspace_state_file()
+  if vim.fn.filereadable(path) ~= 1 then
+    return empty_workspace_state(), nil
+  end
+
+  local ok, lines = pcall(vim.fn.readfile, path)
+  if not ok then
+    return empty_workspace_state(), "Failed to read Codux workspace state"
+  end
+
+  local decoded = json_decode(table.concat(lines, "\n"))
+  if type(decoded) ~= "table" then
+    return empty_workspace_state(), "Failed to parse Codux workspace state"
+  end
+
+  return normalize_workspace_state(decoded), nil
+end
+
+local function write_workspace_state(state_data)
+  local path = workspace_state_file()
+  local directory = vim.fn.fnamemodify(path, ":h")
+  if directory ~= "" then
+    local mkdir_ok = pcall(vim.fn.mkdir, directory, "p")
+    if not mkdir_ok then
+      return false, "Failed to create Codux workspace state directory"
+    end
+  end
+
+  local encoded = json_encode(normalize_workspace_state(state_data))
+  local ok = pcall(vim.fn.writefile, { encoded }, path)
+  if not ok then
+    return false, "Failed to write Codux workspace state"
+  end
+
+  return true, nil
+end
+
+local function workspace_timestamp()
+  return os.date("!%Y-%m-%dT%H:%M:%SZ")
+end
+
+local function workspace_project_state(state_data, root)
+  state_data.projects[root] = type(state_data.projects[root]) == "table" and state_data.projects[root]
+    or (vim.empty_dict and vim.empty_dict() or {})
+  local project = state_data.projects[root]
+  project.project_root = root
+  project.workspaces = type(project.workspaces) == "table" and project.workspaces
+    or (vim.empty_dict and vim.empty_dict() or {})
+  return project
+end
+
+local function workspace_from_state(record, fallback)
+  record = type(record) == "table" and record or {}
+  fallback = type(fallback) == "table" and fallback or {}
+
+  return {
+    name = record.name or fallback.name,
+    safe_name = record.safe_name or fallback.safe_name,
+    project_root = record.project_root or fallback.project_root,
+    target_path = record.target_path or fallback.target_path,
+    target_type = record.target_type or fallback.target_type,
+    git_branch = record.git_branch or fallback.git_branch or "",
+    window_name = record.tmux_window or record.window_name or fallback.window_name,
+    permission_profile = record.permission_profile or fallback.permission_profile or "default",
+    created_at = record.created_at or fallback.created_at,
+  }
+end
+
+local function workspace_state_record(workspace, existing)
+  existing = type(existing) == "table" and existing or {}
+  local now = workspace_timestamp()
+
+  return {
+    name = workspace.name,
+    safe_name = workspace.safe_name,
+    project_root = workspace.project_root,
+    target_path = workspace.target_path,
+    target_type = workspace.target_type,
+    git_branch = workspace.git_branch or "",
+    tmux_window = workspace.window_name,
+    permission_profile = workspace.permission_profile or "default",
+    created_at = existing.created_at or workspace.created_at or now,
+    last_opened_at = now,
+  }
+end
+
+local function workspace_entries_for_project(root)
+  local state_data, state_error = read_workspace_state()
+  if state_error then
+    return {}, state_error
+  end
+
+  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
+  local workspaces = type(project) == "table" and project.workspaces or nil
+  if type(workspaces) ~= "table" then
+    return {}, nil
+  end
+
+  local session = current_tmux_session()
+  local entries = {}
+  for safe_name, record in pairs(workspaces) do
+    if type(record) == "table" then
+      local window_name = record.tmux_window or record.window_name or (tmux_window_prefix() .. safe_name)
+      local window_id = session and tmux_window_id(session, window_name) or nil
+      table.insert(entries, {
+        name = record.name or safe_name,
+        safe_name = record.safe_name or safe_name,
+        project_root = record.project_root or root,
+        target_path = record.target_path,
+        target_type = record.target_type,
+        git_branch = record.git_branch or "",
+        window_name = window_name,
+        window_id = window_id,
+        active = window_id ~= nil,
+      })
+    end
+  end
+
+  table.sort(entries, function(left, right)
+    return tostring(left.name):lower() < tostring(right.name):lower()
+  end)
+
+  return entries, nil
+end
+
+local function workspace_manager_project_root()
+  return workspace_target_context().root
+end
+
+local function workspace_manager_config(line_count)
+  local total_width = math.max(1, vim.o.columns)
+  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local width = math.min(58, math.max(38, math.floor(total_width * 0.45)))
+  local height = math.min(12, math.max(3, line_count or 1))
+
+  return {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = " current codux workspaces ",
+    title_pos = "center",
+    width = width,
+    height = height,
+    col = math.max(0, math.floor((total_width - width) / 2)),
+    row = math.max(0, math.floor((total_height - height) / 2)),
+  }
+end
+
+local function close_workspace_manager()
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    local bufnr = window_buffer(win)
+    if is_loaded_buf(bufnr) and buffer_filetype(bufnr) == "codux-workspaces" then
+      pcall(vim.api.nvim_win_close, win, true)
+    end
+  end
+
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if is_loaded_buf(bufnr) and buffer_filetype(bufnr) == "codux-workspaces" then
+      pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    end
+  end
+
+  state.workspace_manager_win = nil
+  state.workspace_manager_buf = nil
+  state.workspace_manager_items = {}
+  state.workspace_manager_project_root = nil
+end
+
+local function workspace_manager_line(entry)
+  local status = entry.active and "active" or "inactive"
+  local target = type(entry.target_path) == "string" and entry.target_path ~= "" and vim.fn.fnamemodify(entry.target_path, ":t") or ""
+  local suffix = target ~= "" and "  " .. target or ""
+  return string.format("%-28s %s%s", entry.name, status, suffix)
+end
+
+local function render_workspace_manager()
+  if not is_loaded_buf(state.workspace_manager_buf) then
+    return false
+  end
+
+  local root = state.workspace_manager_project_root or workspace_manager_project_root()
+  local entries, error_message = workspace_entries_for_project(root)
+  state.workspace_manager_items = entries
+
+  local lines = {}
+  if error_message then
+    table.insert(lines, error_message)
+  elseif #entries == 0 then
+    table.insert(lines, "No saved Codux workspaces")
+  else
+    for _, entry in ipairs(entries) do
+      table.insert(lines, workspace_manager_line(entry))
+    end
+  end
+
+  pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = state.workspace_manager_buf })
+  pcall(vim.api.nvim_buf_set_lines, state.workspace_manager_buf, 0, -1, false, lines)
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = state.workspace_manager_buf })
+  return true
+end
+
+local function selected_workspace_manager_item()
+  if not is_valid_win(state.workspace_manager_win) then
+    return nil
+  end
+
+  local ok, cursor = pcall(vim.api.nvim_win_get_cursor, state.workspace_manager_win)
+  if not ok then
+    return nil
+  end
+
+  local index = cursor[1]
+  return state.workspace_manager_items[index]
+end
+
+local function rename_tmux_window(window_id, new_window_name)
+  if not window_id then
+    return true
+  end
+
+  local _, code = tmux_system({ "rename-window", "-t", window_id, new_window_name })
+  return code == 0
+end
+
+local function kill_tmux_window(window_id)
+  if not window_id then
+    return true
+  end
+
+  local _, code = tmux_system({ "kill-window", "-t", window_id })
+  return code == 0
+end
+
+local function kill_tmux_window_deferred(window_id, window_name)
+  if not window_id then
+    return
+  end
+
+  vim.defer_fn(function()
+    if not kill_tmux_window(window_id) then
+      notify("Failed to kill tmux window " .. tostring(window_name), vim.log.levels.WARN)
+    end
+  end, 100)
+end
+
+local function rename_saved_workspace(entry, new_name)
+  local display_name, safe_name_or_error = sanitize_workspace_name(new_name)
+  if not display_name then
+    notify(safe_name_or_error, vim.log.levels.ERROR)
+    return false
+  end
+
+  local root = state.workspace_manager_project_root or entry.project_root
+  local state_data, state_error = read_workspace_state()
+  if state_error then
+    notify(state_error, vim.log.levels.ERROR)
+    return false
+  end
+
+  local project = workspace_project_state(state_data, root)
+  local existing = project.workspaces[entry.safe_name]
+  if type(existing) ~= "table" then
+    notify("workspace not found", vim.log.levels.ERROR)
+    return false
+  end
+  if safe_name_or_error ~= entry.safe_name and project.workspaces[safe_name_or_error] ~= nil then
+    notify("workspace already exists", vim.log.levels.ERROR)
+    return false
+  end
+
+  local new_window_name = tmux_window_prefix() .. safe_name_or_error
+  if not rename_tmux_window(entry.window_id, new_window_name) then
+    notify("Failed to rename tmux window " .. tostring(entry.window_name), vim.log.levels.ERROR)
+    return false
+  end
+
+  project.workspaces[entry.safe_name] = nil
+  existing.name = display_name
+  existing.safe_name = safe_name_or_error
+  existing.tmux_window = new_window_name
+  existing.last_opened_at = workspace_timestamp()
+  project.workspaces[safe_name_or_error] = existing
+  project.updated_at = workspace_timestamp()
+
+  local write_ok, write_error = write_workspace_state(state_data)
+  if not write_ok then
+    notify(write_error, vim.log.levels.ERROR)
+    return false
+  end
+
+  notify("Renamed Codux workspace to " .. display_name)
+  close_workspace_manager()
+  return true
+end
+
+local function delete_saved_workspace(entry)
+  local root = entry.project_root or state.workspace_manager_project_root
+  local state_data, state_error = read_workspace_state()
+  if state_error then
+    notify(state_error, vim.log.levels.ERROR)
+    return false
+  end
+
+  local project = workspace_project_state(state_data, root)
+  if type(project.workspaces[entry.safe_name]) ~= "table" then
+    notify("workspace not found", vim.log.levels.ERROR)
+    render_workspace_manager()
+    return false
+  end
+
+  project.workspaces[entry.safe_name] = nil
+  if next(project.workspaces) == nil and vim.empty_dict then
+    project.workspaces = vim.empty_dict()
+  end
+  project.updated_at = workspace_timestamp()
+  local write_ok, write_error = write_workspace_state(state_data)
+  if not write_ok then
+    notify(write_error, vim.log.levels.ERROR)
+    return false
+  end
+
+  notify("Deleted Codux workspace " .. entry.name)
+  close_workspace_manager()
+  kill_tmux_window_deferred(entry.window_id, entry.window_name)
+  return true
+end
+
 local function workspace_bootstrap_lua(workspace)
   local root = workspace.project_root or "."
   local target_path = workspace.target_path or ""
@@ -1698,7 +2061,8 @@ local function switch_tmux_window(window_id)
   return code == 0
 end
 
-local function prepare_workspace(name)
+local function prepare_workspace(name, opts)
+  opts = opts or {}
   if not workspaces_enabled() then
     return nil, "Codux workspaces are disabled"
   end
@@ -1712,32 +2076,60 @@ local function prepare_workspace(name)
     return nil, safe_name_or_error
   end
 
-  local context = workspace_target_context()
-  local root = context.root
-  local window_name = tmux_window_prefix() .. safe_name_or_error
   local session = current_tmux_session()
   if not session then
     return nil, "no tmux session running"
   end
 
-  local workspace = {
+  local context = workspace_target_context()
+  local root = opts.project_root or context.root
+  local state_data, state_error = read_workspace_state()
+  if state_error then
+    notify(state_error .. "; starting with empty workspace state", vim.log.levels.WARN)
+  end
+
+  local project = workspace_project_state(state_data, root)
+  local existing = project.workspaces[safe_name_or_error]
+  if type(existing) == "table" and not opts.allow_existing then
+    return nil, "workspace already exists"
+  end
+  if type(existing) == "table" and existing.name ~= display_name and not opts.allow_existing then
+    return nil, "workspace already exists"
+  end
+  if opts.require_existing and type(existing) ~= "table" then
+    return nil, "workspace not found"
+  end
+
+  local fallback = {
     name = display_name,
     safe_name = safe_name_or_error,
     project_root = root,
     target_path = context.path,
     target_type = context.target and context.target.type or nil,
     git_branch = context.branch,
-    session = session,
-    window_name = window_name,
+    window_name = tmux_window_prefix() .. safe_name_or_error,
     permission_profile = workspace_permission_profile(),
   }
+  local workspace = workspace_from_state(existing, fallback)
+  workspace.session = session
+  workspace.safe_name = workspace.safe_name or safe_name_or_error
+  workspace.window_name = workspace.window_name or (tmux_window_prefix() .. workspace.safe_name)
+  workspace.project_root = workspace.project_root or root
 
-  local window_id = ensure_tmux_window(session, root, window_name, workspace_nvim_command(workspace))
+  local window_id = ensure_tmux_window(session, workspace.project_root, workspace.window_name, workspace_nvim_command(workspace))
   if not window_id then
-    return nil, "Failed to create tmux window " .. window_name
+    return nil, "Failed to create tmux window " .. workspace.window_name
   end
 
   workspace.window_id = window_id
+  project.workspaces[workspace.safe_name] = workspace_state_record(workspace, existing)
+  project.updated_at = workspace_timestamp()
+
+  local write_ok, write_error = write_workspace_state(state_data)
+  if not write_ok then
+    return nil, write_error
+  end
+
   return workspace
 end
 
@@ -1942,6 +2334,27 @@ function M.open_workspace(name)
   return true
 end
 
+function M.open_saved_workspace(name, project_root)
+  local workspace, error_message = prepare_workspace(name, {
+    allow_existing = true,
+    require_existing = true,
+    project_root = project_root,
+  })
+  if not workspace then
+    notify(error_message or "Failed to open Codux workspace", vim.log.levels.ERROR)
+    return false
+  end
+
+  if not switch_tmux_window(workspace.window_id) then
+    notify("Failed to switch to Codux workspace " .. workspace.name, vim.log.levels.ERROR)
+    return false
+  end
+
+  local branch = workspace.git_branch ~= "" and " on " .. workspace.git_branch or ""
+  notify("Opened Codux workspace " .. workspace.name .. branch)
+  return true
+end
+
 function M.open_workspace_prompt()
   if not current_tmux_session() then
     notify("no tmux session running", vim.log.levels.ERROR)
@@ -1956,6 +2369,95 @@ function M.open_workspace_prompt()
 
     M.open_workspace(name)
   end)
+  return true
+end
+
+function M.open_workspaces()
+  if not workspaces_enabled() then
+    notify("Codux workspaces are disabled", vim.log.levels.ERROR)
+    return false
+  end
+
+  close_workspace_manager()
+  local buf_ok, bufnr = pcall(vim.api.nvim_create_buf, false, true)
+  if not buf_ok or not is_loaded_buf(bufnr) then
+    notify("Failed to create Codux workspaces window", vim.log.levels.ERROR)
+    return false
+  end
+
+  state.workspace_manager_buf = bufnr
+  state.workspace_manager_project_root = workspace_manager_project_root()
+  local preview_entries = workspace_entries_for_project(state.workspace_manager_project_root)
+  local line_count = math.max(1, #preview_entries)
+  pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspaces", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, workspace_manager_config(line_count))
+  if not win_ok then
+    state.workspace_manager_buf = nil
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    notify("Failed to open Codux workspaces window", vim.log.levels.ERROR)
+    return false
+  end
+
+  state.workspace_manager_win = win
+  pcall(vim.api.nvim_set_option_value, "number", false, { win = win })
+  pcall(vim.api.nvim_set_option_value, "relativenumber", false, { win = win })
+  pcall(vim.api.nvim_set_option_value, "signcolumn", "no", { win = win })
+  pcall(vim.api.nvim_set_option_value, "winfixbuf", true, { win = win })
+  pcall(vim.api.nvim_set_option_value, "cursorline", true, { win = win })
+
+  local function selected_or_notify()
+    local item = selected_workspace_manager_item()
+    if not item then
+      notify("No Codux workspace selected", vim.log.levels.WARN)
+      return nil
+    end
+    return item
+  end
+
+  pcall(vim.keymap.set, "n", "q", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
+  pcall(vim.keymap.set, "n", "<Esc>", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
+  pcall(vim.keymap.set, "n", "<C-q>", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
+  pcall(vim.keymap.set, "n", "<CR>", function()
+    local item = selected_or_notify()
+    if not item then
+      return false
+    end
+    local root = state.workspace_manager_project_root
+    close_workspace_manager()
+    return M.open_saved_workspace(item.name, root)
+  end, { buffer = bufnr, silent = true, desc = "Open Codux Workspace" })
+  pcall(vim.keymap.set, "n", "r", function()
+    local item = selected_or_notify()
+    if not item then
+      return false
+    end
+    vim.ui.input({ prompt = "Rename Codux workspace: ", default = item.name }, function(input)
+      local new_name = trim(input)
+      if new_name == "" then
+        return
+      end
+      rename_saved_workspace(item, new_name)
+    end)
+  end, { buffer = bufnr, silent = true, desc = "Rename Codux Workspace" })
+  pcall(vim.keymap.set, "n", "d", function()
+    local item = selected_or_notify()
+    if not item then
+      return false
+    end
+    vim.ui.select({ "delete", "cancel" }, { prompt = "Delete Codux workspace " .. item.name .. "?" }, function(choice)
+      if choice == "delete" then
+        delete_saved_workspace(item)
+      end
+    end)
+  end, { buffer = bufnr, silent = true, desc = "Delete Codux Workspace" })
+
+  render_workspace_manager()
+  if #state.workspace_manager_items > 0 then
+    pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
+  end
   return true
 end
 
@@ -2739,6 +3241,7 @@ function M.health_info()
       last_error = state.token_usage.last_error,
     },
     workspace = state.workspace,
+    workspace_state_file = workspace_state_file(),
   }
 end
 
@@ -2761,7 +3264,11 @@ local function create_commands()
 
   vim.api.nvim_create_user_command("CoduxWorkspace", function(opts)
     M.open_workspace(opts.args)
-  end, { force = true, nargs = 1, desc = "Open a named Codux tmux workspace" })
+  end, { force = true, nargs = 1, desc = "Create a named Codux tmux workspace" })
+
+  vim.api.nvim_create_user_command("CoduxWorkspaces", function()
+    M.open_workspaces()
+  end, { force = true, desc = "Show current Codux workspaces" })
 
   vim.api.nvim_create_user_command("CoduxToggle", function()
     M.toggle()
@@ -2903,6 +3410,7 @@ local function codux_menu_marker(value)
     "send diagnostics to codex",
     "send git diff to codex",
     "open codux workspace",
+    "current codux workspaces",
     "switch to execute mode",
     "switch to plan mode",
   }
@@ -3157,6 +3665,7 @@ local function register_which_key_group(mappings)
     { lhs = mappings.diagnostics, desc = "send diagnostics to codex" },
     { lhs = mappings.diff, desc = "send git diff to codex" },
     { lhs = mappings.workspace, desc = "open codux workspace" },
+    { lhs = mappings.workspaces, desc = "current codux workspaces" },
   }
   if mode_action_desc() then
     table.insert(normal_entries, { lhs = mappings.mode, desc = mode_action_desc() })
@@ -3242,6 +3751,7 @@ function M.setup(opts)
   set_mapping("n", mappings.diagnostics, M.send_diagnostics, "send diagnostics to codex")
   set_mapping("n", mappings.diff, M.send_git_diff, "send git diff to codex")
   set_mapping("n", mappings.workspace, M.open_workspace_prompt, "open codux workspace")
+  set_mapping("n", mappings.workspaces, M.open_workspaces, "current codux workspaces")
   if mode_action_desc() then
     set_mapping("n", mappings.mode, M.toggle_plan_mode, mode_action_desc())
   end
