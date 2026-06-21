@@ -53,47 +53,81 @@
   Fast toggling between code and AI
 </p>
 
-<h2 align="center">Why codux.nvim pairs well with tmux</h2>
+<div align="center">
 
-<p align="center">
+<h2>Codux Workspaces with tmux</h2>
+
+<p>
   Large development tasks rarely involve a single conversation.
 </p>
 
-<p align="center">
+<p>
   With tmux, you can dedicate a Codux session to a specific objective and keep that context alive while you work.
 </p>
 
-<p align="center">
+<p>
   <strong>Window 1 - Feature Development</strong><br>
   Implementing a new gameplay system<br>
   Codux focused on design decisions, code generation, and implementation details
 </p>
 
-<p align="center">
+<p>
   <strong>Window 2 - Code Review</strong><br>
   Reviewing your current branch<br>
   Codux focused on bugs, edge cases, performance issues, and refactoring opportunities
 </p>
 
-<p align="center">
+<p>
   <strong>Window 3 - Debugging</strong><br>
   Investigating a failing test or runtime issue<br>
   Codux focused on logs, diagnostics, stack traces, and root-cause analysis
 </p>
 
-<p align="center">
+<p>
   <strong>Window 4 - Architecture</strong><br>
   Planning larger changes<br>
   Codux focused on project structure, APIs, and long-term design decisions
 </p>
 
-<p align="center">
+<p>
   Each Codux session maintains its own conversation and context.
 </p>
 
-<p align="center">
+<p>
   Instead of constantly changing topics within a single AI conversation, you can keep dedicated Codux sessions attached to specific workflows and switch between them instantly with tmux.
 </p>
+
+<p>
+  Use <code>:CoduxWorkspace backend-debug</code> or <code>&lt;leader&gt;zw</code> inside tmux to create a named Codex workspace.
+  New workspace windows launch in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
+</p>
+
+<p>
+  Inside tmux, Codux creates or reuses a <code>backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts a hidden Codux session using the active permission profile.
+</p>
+
+<p>
+  Workspace names are persisted per project in <code>stdpath("data")/codux/workspaces.json</code>.
+  Creating a workspace with an existing name shows <code>workspace already exists</code>.
+</p>
+
+<p>
+  Use <code>:CoduxWorkspaces</code> or <code>&lt;leader&gt;zW</code> to open <code>current codux workspaces</code>.
+  From that window, press <code>&lt;CR&gt;</code> to open a saved workspace, <code>r</code> to rename it, or <code>d</code> to delete it.
+  Statuses show <code>closed</code>, <code>idle</code>, or <code>working</code>.
+  The target column updates as each workspace moves between files or supported file explorer targets.
+</p>
+
+<p>
+  Outside tmux, Codux shows <code>no tmux session running</code> and does not create a workspace.
+</p>
+
+<p>
+  Workspace names are user-defined and sanitized for tmux window safety.
+  Empty names and sanitized-name collisions are rejected with a clear error.
+</p>
+
+</div>
 
 ## Manual Install
 
@@ -250,37 +284,7 @@ Codux sends requested files, selections, diagnostics, and health output through 
   <code>:CoduxOpenDanger</code> starts Codex with no approval prompts and no sandbox. Use it only in repositories you trust.
 </p>
 
-<h2 align="center">Custom Codex Workspaces</h2>
-
-<p align="center">
-  Use <code>:CoduxWorkspace backend-debug</code> inside tmux to create a named Codex workspace.
-  New workspace windows launch in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
-</p>
-
-<p align="center">
-  Inside tmux, Codux creates or reuses a <code>backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts a hidden Codux session using the active permission profile.
-</p>
-
-<p align="center">
-  Workspace names are persisted per project in <code>stdpath("data")/codux/workspaces.json</code>.
-  Creating a workspace with an existing name shows <code>workspace already exists</code>.
-</p>
-
-<p align="center">
-  Use <code>:CoduxWorkspaces</code> or <code>&lt;leader&gt;zW</code> to open <code>current codux workspaces</code>.
-  From that window, press <code>&lt;CR&gt;</code> to open a saved workspace, <code>r</code> to rename it, or <code>d</code> to delete it.
-  Statuses show <code>closed</code>, <code>idle</code>, or <code>working</code>.
-  The target column updates as each workspace moves between files or supported file explorer targets.
-</p>
-
-<p align="center">
-  Outside tmux, Codux shows <code>no tmux session running</code> and does not create a workspace.
-</p>
-
-<p align="center">
-  Workspace names are user-defined and sanitized for tmux window safety.
-  Empty names and sanitized-name collisions are rejected with a clear error.
-</p>
+<h2 align="center">Token Monitoring</h2>
 
 <p align="center">
   The <code>&lt;leader&gt;z</code> menu header shows the current Codux-tracked status and token usage while Codux is running:<br>
