@@ -269,6 +269,7 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <p align="center">
   Use <code>:CoduxWorkspaces</code> or <code>&lt;leader&gt;zW</code> to open <code>current codux workspaces</code>.
   From that window, press <code>&lt;CR&gt;</code> to open a saved workspace, <code>r</code> to rename it, or <code>d</code> to delete it.
+  The target column updates as each workspace moves between files or supported file explorer targets.
 </p>
 
 <p align="center">

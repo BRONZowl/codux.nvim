@@ -86,6 +86,10 @@ local state = {
   workspace_manager_footer_win = nil,
   workspace_manager_items = {},
   workspace_manager_project_root = nil,
+  workspace_manager_refresh_timer = nil,
+  workspace_manager_ns = vim.api.nvim_create_namespace("codux.workspace_manager"),
+  workspace_target_signature = nil,
+  workspace_target_update_pending = false,
   closing_popup = false,
   focus_lock_pending = false,
   focus_lock_autocmd = nil,
@@ -106,6 +110,7 @@ local stop_token_monitor_timer
 local current_target
 local git_branch_for
 local git_root_for
+local render_workspace_manager
 local codux_icon = "󰚩"
 local which_key_header_hooked = false
 
@@ -1772,6 +1777,38 @@ local function workspace_manager_project_root()
   return workspace_target_context().root
 end
 
+M._stop_workspace_manager_refresh_timer = function()
+  local timer = state.workspace_manager_refresh_timer
+  state.workspace_manager_refresh_timer = nil
+  if timer then
+    pcall(timer.stop, timer)
+    pcall(timer.close, timer)
+  end
+end
+
+M._start_workspace_manager_refresh_timer = function()
+  if state.workspace_manager_refresh_timer then
+    return
+  end
+
+  local loop = vim.uv or vim.loop
+  local timer = loop and loop.new_timer()
+  if not timer then
+    return
+  end
+
+  state.workspace_manager_refresh_timer = timer
+  timer:start(1000, 1000, vim.schedule_wrap(function()
+    if not is_valid_win(state.workspace_manager_win) or not is_loaded_buf(state.workspace_manager_buf) then
+      M._stop_workspace_manager_refresh_timer()
+      return
+    end
+    if type(render_workspace_manager) == "function" then
+      render_workspace_manager()
+    end
+  end))
+end
+
 local function workspace_manager_config(line_count)
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
@@ -1792,6 +1829,8 @@ local function workspace_manager_config(line_count)
 end
 
 local function close_workspace_manager()
+  M._stop_workspace_manager_refresh_timer()
+
   local dashboard_filetypes = {
     ["codux-workspaces"] = true,
     ["codux-workspaces-footer"] = true,
@@ -1888,14 +1927,14 @@ local function render_workspace_manager_footer()
 
   pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = state.workspace_manager_footer_buf })
   pcall(vim.api.nvim_buf_set_lines, state.workspace_manager_footer_buf, 0, -1, false, { text })
-  pcall(vim.api.nvim_buf_clear_namespace, state.workspace_manager_footer_buf, -1, 0, -1)
+  pcall(vim.api.nvim_buf_clear_namespace, state.workspace_manager_footer_buf, state.workspace_manager_ns, 0, -1)
 
   local col = padding
   for index, segment in ipairs(workspace_manager_footer_segments()) do
     local key_end = col + #segment.key
-    pcall(vim.api.nvim_buf_add_highlight, state.workspace_manager_footer_buf, -1, "WhichKey", 0, col, key_end)
+    pcall(vim.api.nvim_buf_add_highlight, state.workspace_manager_footer_buf, state.workspace_manager_ns, "WhichKey", 0, col, key_end)
     local desc_end = key_end + 1 + #segment.desc
-    pcall(vim.api.nvim_buf_add_highlight, state.workspace_manager_footer_buf, -1, "WhichKeySeparator", 0, key_end, desc_end)
+    pcall(vim.api.nvim_buf_add_highlight, state.workspace_manager_footer_buf, state.workspace_manager_ns, "WhichKeySeparator", 0, key_end, desc_end)
     col = desc_end
     if index < #workspace_manager_footer_segments() then
       col = col + 2
@@ -1944,7 +1983,7 @@ local function open_workspace_manager_footer()
   return true
 end
 
-local function render_workspace_manager()
+render_workspace_manager = function()
   if not is_loaded_buf(state.workspace_manager_buf) then
     return false
   end
@@ -1971,7 +2010,8 @@ local function render_workspace_manager()
 
   pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = state.workspace_manager_buf })
   pcall(vim.api.nvim_buf_set_lines, state.workspace_manager_buf, 0, -1, false, lines)
-  pcall(vim.api.nvim_buf_add_highlight, state.workspace_manager_buf, -1, "WhichKeyDesc", 0, 0, -1)
+  pcall(vim.api.nvim_buf_clear_namespace, state.workspace_manager_buf, state.workspace_manager_ns, 0, -1)
+  pcall(vim.api.nvim_buf_add_highlight, state.workspace_manager_buf, state.workspace_manager_ns, "WhichKeyDesc", 0, 0, -1)
   pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = state.workspace_manager_buf })
   render_workspace_manager_footer()
   return true
@@ -2108,12 +2148,17 @@ local function workspace_bootstrap_lua(workspace)
   local target_path = workspace.target_path or ""
   local target_type = workspace.target_type or ""
   local profile = workspace.permission_profile or "default"
+  local name = workspace.name or workspace.safe_name or ""
+  local safe_name = workspace.safe_name or ""
+  local branch = workspace.git_branch or ""
+  local window_name = workspace.window_name or ""
 
   return table.concat({
     "local root=" .. lua_string(root),
     "local target=" .. lua_string(target_path),
     "local target_type=" .. lua_string(target_type),
     "local profile=" .. lua_string(profile),
+    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",permission_profile=profile}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
@@ -2124,6 +2169,8 @@ local function workspace_bootstrap_lua(workspace)
     "pcall(vim.cmd,cmd)",
     "end",
     "if target~='' and target_type~='directory' then if vim.api.nvim_win_is_valid(target_win) then pcall(vim.api.nvim_set_current_win,target_win) else pcall(vim.cmd,'edit '..vim.fn.fnameescape(target)) end end",
+    "local ok_attach,codux_attach=pcall(require,'codux')",
+    "if ok_attach and type(codux_attach.attach_workspace)=='function' then codux_attach.attach_workspace(workspace) end",
     "vim.defer_fn(function()",
     "local function open_hidden(fallback)",
     "local ok,codux=pcall(require,'codux')",
@@ -2327,6 +2374,8 @@ local function start_terminal(focus, initial_prompt, command, workspace, permiss
         state.job_id = nil
         state.permission_profile = "default"
         state.workspace = nil
+        state.workspace_target_signature = nil
+        state.workspace_target_update_pending = false
         if type(stop_token_monitor_timer) == "function" then
           stop_token_monitor_timer()
         end
@@ -2363,7 +2412,9 @@ local function start_terminal(focus, initial_prompt, command, workspace, permiss
   state.job_id = job_id
   state.permission_profile = permission_profile or "default"
   state.last_permission_profile = state.permission_profile
-  state.workspace = workspace
+  if workspace ~= nil then
+    state.workspace = workspace
+  end
   set_mode("execute")
   if type(start_token_monitor_timer) == "function" then
     start_token_monitor_timer()
@@ -2601,6 +2652,7 @@ function M.open_workspaces()
   end, { buffer = bufnr, silent = true, desc = "Delete Codux Workspace" })
 
   render_workspace_manager()
+  M._start_workspace_manager_refresh_timer()
   if #state.workspace_manager_items > 0 then
     pcall(vim.api.nvim_win_set_cursor, win, { 2, 0 })
   end
@@ -2646,6 +2698,8 @@ function M.exit()
   state.job_id = nil
   state.permission_profile = "default"
   state.workspace = nil
+  state.workspace_target_signature = nil
+  state.workspace_target_update_pending = false
   if type(stop_token_monitor_timer) == "function" then
     stop_token_monitor_timer()
   end
@@ -2895,6 +2949,123 @@ git_root_for = function(path)
   end
 
   return root
+end
+
+M._workspace_target_signature = function(path, target_type, branch)
+  return table.concat({
+    tostring(path or ""),
+    tostring(target_type or ""),
+    tostring(branch or ""),
+  }, "\0")
+end
+
+M._workspace_target_sync_allowed = function(event)
+  if type(state.workspace) ~= "table" or type(state.workspace.safe_name) ~= "string" then
+    return false
+  end
+
+  local filetype = current_filetype()
+  if filetype == "codux" or filetype == "codux-workspaces" or filetype == "codux-workspaces-footer" then
+    return false
+  end
+
+  if event == "CursorMoved" and not is_explorer_filetype(filetype) then
+    return false
+  end
+
+  return true
+end
+
+M._sync_workspace_target = function(event)
+  if not M._workspace_target_sync_allowed(event) then
+    return false
+  end
+
+  local workspace = state.workspace
+  local root = workspace.project_root
+  local safe_name = workspace.safe_name
+  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
+    return false
+  end
+
+  local context = workspace_target_context()
+  local path = context.path
+  if type(path) ~= "string" or path == "" or path:match("^term://") or path:match("^codux://") then
+    return false
+  end
+
+  local target_type = context.target and context.target.type or (vim.fn.isdirectory(path) == 1 and "directory" or "file")
+  local branch = context.branch or ""
+  local signature = M._workspace_target_signature(path, target_type, branch)
+  if signature == state.workspace_target_signature then
+    return true
+  end
+
+  local state_data, state_error = read_workspace_state()
+  if state_error then
+    return false
+  end
+
+  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
+  local workspaces = type(project) == "table" and project.workspaces or nil
+  local record = type(workspaces) == "table" and workspaces[safe_name] or nil
+  if type(record) ~= "table" then
+    return false
+  end
+
+  record.target_path = path
+  record.target_type = target_type
+  record.git_branch = branch
+  record.last_target_at = workspace_timestamp()
+  project.updated_at = record.last_target_at
+
+  local write_ok = write_workspace_state(state_data)
+  if not write_ok then
+    return false
+  end
+
+  workspace.target_path = path
+  workspace.target_type = target_type
+  workspace.git_branch = branch
+  state.workspace_target_signature = signature
+
+  if state.workspace_manager_project_root == root and type(render_workspace_manager) == "function" then
+    render_workspace_manager()
+  end
+
+  return true
+end
+
+M._schedule_workspace_target_sync = function(event)
+  if state.workspace_target_update_pending then
+    return
+  end
+
+  state.workspace_target_update_pending = true
+  vim.defer_fn(function()
+    state.workspace_target_update_pending = false
+    M._sync_workspace_target(event)
+  end, 150)
+end
+
+function M.attach_workspace(workspace)
+  if type(workspace) ~= "table" then
+    return false
+  end
+
+  local attached = workspace_from_state(workspace, workspace)
+  if type(attached.safe_name) ~= "string" or attached.safe_name == "" then
+    return false
+  end
+  if type(attached.project_root) ~= "string" or attached.project_root == "" then
+    return false
+  end
+
+  state.workspace = attached
+  state.workspace_target_signature =
+    M._workspace_target_signature(attached.target_path, attached.target_type, attached.git_branch)
+  M._schedule_workspace_target_sync("attach")
+  return true
 end
 
 local function git_output(root, ...)
@@ -3880,6 +4051,27 @@ refresh_which_key = function()
   update_terminal_mode_mapping()
 end
 
+M._install_workspace_target_autocmds = function()
+  pcall(vim.api.nvim_clear_autocmds, {
+    group = augroup,
+    event = { "BufEnter", "BufWinEnter", "WinEnter", "DirChanged", "CursorMoved" },
+  })
+  pcall(vim.api.nvim_create_autocmd, { "BufEnter", "BufWinEnter", "WinEnter", "DirChanged" }, {
+    group = augroup,
+    callback = function(args)
+      M._schedule_workspace_target_sync(args.event)
+    end,
+  })
+  pcall(vim.api.nvim_create_autocmd, "CursorMoved", {
+    group = augroup,
+    callback = function(args)
+      if is_explorer_filetype(current_filetype()) then
+        M._schedule_workspace_target_sync(args.event)
+      end
+    end,
+  })
+end
+
 function M.setup(opts)
   stop_token_monitor_timer()
   config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
@@ -3901,6 +4093,7 @@ function M.setup(opts)
   if mode_action_desc() then
     set_mapping("n", mappings.mode, M.toggle_plan_mode, mode_action_desc())
   end
+  M._install_workspace_target_autocmds()
 
   pcall(vim.api.nvim_clear_autocmds, { group = augroup, event = "VimLeavePre" })
   pcall(vim.api.nvim_create_autocmd, "VimLeavePre", {
