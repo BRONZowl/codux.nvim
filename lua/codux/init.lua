@@ -83,6 +83,8 @@ local state = {
   workspace = nil,
   workspace_manager_buf = nil,
   workspace_manager_win = nil,
+  workspace_manager_footer_buf = nil,
+  workspace_manager_footer_win = nil,
   workspace_manager_items = {},
   workspace_manager_project_root = nil,
   closing_popup = false,
@@ -1781,7 +1783,7 @@ local function workspace_manager_config(line_count)
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local width = math.min(58, math.max(38, math.floor(total_width * 0.45)))
-  local height = math.min(12, math.max(3, line_count or 1))
+  local height = math.min(12, math.max(5, line_count or 1))
 
   return {
     relative = "editor",
@@ -1797,21 +1799,28 @@ local function workspace_manager_config(line_count)
 end
 
 local function close_workspace_manager()
+  local dashboard_filetypes = {
+    ["codux-workspaces"] = true,
+    ["codux-workspaces-footer"] = true,
+  }
+
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     local bufnr = window_buffer(win)
-    if is_loaded_buf(bufnr) and buffer_filetype(bufnr) == "codux-workspaces" then
+    if is_loaded_buf(bufnr) and dashboard_filetypes[buffer_filetype(bufnr)] then
       pcall(vim.api.nvim_win_close, win, true)
     end
   end
 
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if is_loaded_buf(bufnr) and buffer_filetype(bufnr) == "codux-workspaces" then
+    if is_loaded_buf(bufnr) and dashboard_filetypes[buffer_filetype(bufnr)] then
       pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
     end
   end
 
   state.workspace_manager_win = nil
   state.workspace_manager_buf = nil
+  state.workspace_manager_footer_win = nil
+  state.workspace_manager_footer_buf = nil
   state.workspace_manager_items = {}
   state.workspace_manager_project_root = nil
 end
@@ -1821,6 +1830,121 @@ local function workspace_manager_line(entry)
   local target = type(entry.target_path) == "string" and entry.target_path ~= "" and vim.fn.fnamemodify(entry.target_path, ":t") or ""
   local suffix = target ~= "" and "  " .. target or ""
   return string.format("%-28s %s%s", entry.name, status, suffix)
+end
+
+local function workspace_manager_window_height()
+  if not is_valid_win(state.workspace_manager_win) then
+    return nil
+  end
+
+  local ok, height = pcall(vim.api.nvim_win_get_height, state.workspace_manager_win)
+  if ok and type(height) == "number" and height > 0 then
+    return height
+  end
+
+  return nil
+end
+
+local function workspace_manager_footer_segments()
+  return {
+    { key = "enter", desc = "open" },
+    { key = "r", desc = "rename" },
+    { key = "d", desc = "delete" },
+    { key = "<c-q>", desc = "close dashboard" },
+  }
+end
+
+local function workspace_manager_footer_line()
+  local parts = {}
+  for index, segment in ipairs(workspace_manager_footer_segments()) do
+    table.insert(parts, segment.key .. " " .. segment.desc)
+    if index < #workspace_manager_footer_segments() then
+      table.insert(parts, "  ")
+    end
+  end
+
+  return table.concat(parts, "")
+end
+
+local function workspace_manager_window_width()
+  if not is_valid_win(state.workspace_manager_win) then
+    return nil
+  end
+
+  local ok, width = pcall(vim.api.nvim_win_get_width, state.workspace_manager_win)
+  if ok and type(width) == "number" and width > 0 then
+    return width
+  end
+
+  return nil
+end
+
+local function render_workspace_manager_footer()
+  if not is_loaded_buf(state.workspace_manager_footer_buf) then
+    return false
+  end
+
+  local width = workspace_manager_window_width() or 1
+  local line = workspace_manager_footer_line()
+  local padding = math.max(0, math.floor((width - #line) / 2))
+  local text = string.rep(" ", padding) .. line
+
+  pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = state.workspace_manager_footer_buf })
+  pcall(vim.api.nvim_buf_set_lines, state.workspace_manager_footer_buf, 0, -1, false, { text })
+  pcall(vim.api.nvim_buf_clear_namespace, state.workspace_manager_footer_buf, -1, 0, -1)
+
+  local col = padding
+  for index, segment in ipairs(workspace_manager_footer_segments()) do
+    local key_end = col + #segment.key
+    pcall(vim.api.nvim_buf_add_highlight, state.workspace_manager_footer_buf, -1, "WhichKey", 0, col, key_end)
+    local desc_end = key_end + 1 + #segment.desc
+    pcall(vim.api.nvim_buf_add_highlight, state.workspace_manager_footer_buf, -1, "WhichKeySeparator", 0, key_end, desc_end)
+    col = desc_end
+    if index < #workspace_manager_footer_segments() then
+      col = col + 2
+    end
+  end
+
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = state.workspace_manager_footer_buf })
+  return true
+end
+
+local function open_workspace_manager_footer()
+  if not is_valid_win(state.workspace_manager_win) then
+    return false
+  end
+
+  local buf_ok, bufnr = pcall(vim.api.nvim_create_buf, false, true)
+  if not buf_ok or not is_loaded_buf(bufnr) then
+    return false
+  end
+
+  pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspaces-footer", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+
+  local height = workspace_manager_window_height() or 1
+  local width = workspace_manager_window_width() or 1
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, {
+    relative = "win",
+    win = state.workspace_manager_win,
+    col = 0,
+    row = height - 1,
+    width = width,
+    height = 1,
+    border = "none",
+    style = "minimal",
+    zindex = 51,
+  })
+  if not win_ok then
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    return false
+  end
+
+  state.workspace_manager_footer_buf = bufnr
+  state.workspace_manager_footer_win = win
+  render_workspace_manager_footer()
+  return true
 end
 
 local function render_workspace_manager()
@@ -1843,9 +1967,15 @@ local function render_workspace_manager()
     end
   end
 
+  local footer_line = math.max(1, workspace_manager_window_height() or (#lines + 1))
+  while #lines < footer_line do
+    table.insert(lines, "")
+  end
+
   pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = state.workspace_manager_buf })
   pcall(vim.api.nvim_buf_set_lines, state.workspace_manager_buf, 0, -1, false, lines)
   pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = state.workspace_manager_buf })
+  render_workspace_manager_footer()
   return true
 end
 
@@ -2407,6 +2537,7 @@ function M.open_workspaces()
   pcall(vim.api.nvim_set_option_value, "signcolumn", "no", { win = win })
   pcall(vim.api.nvim_set_option_value, "winfixbuf", true, { win = win })
   pcall(vim.api.nvim_set_option_value, "cursorline", true, { win = win })
+  open_workspace_manager_footer()
 
   local function selected_or_notify()
     local item = selected_workspace_manager_item()
@@ -2420,6 +2551,14 @@ function M.open_workspaces()
   pcall(vim.keymap.set, "n", "q", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
   pcall(vim.keymap.set, "n", "<Esc>", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
   pcall(vim.keymap.set, "n", "<C-q>", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
+  pcall(vim.keymap.set, "n", "<leader>z", function()
+    close_workspace_manager()
+    vim.schedule(function()
+      local leader = tostring(vim.g.mapleader or "\\")
+      local keys = vim.api.nvim_replace_termcodes(leader .. "z", true, false, true)
+      vim.api.nvim_feedkeys(keys, "m", false)
+    end)
+  end, { buffer = bufnr, silent = true, nowait = true, desc = "Open Codux Menu" })
   pcall(vim.keymap.set, "n", "<CR>", function()
     local item = selected_or_notify()
     if not item then
@@ -3409,7 +3548,7 @@ local function codux_menu_marker(value)
     "send selection to codex",
     "send diagnostics to codex",
     "send git diff to codex",
-    "open codux workspace",
+    "create codux workspace",
     "current codux workspaces",
     "switch to execute mode",
     "switch to plan mode",
@@ -3664,7 +3803,7 @@ local function register_which_key_group(mappings)
     { lhs = mappings.review_selection, desc = "send selection to codex" },
     { lhs = mappings.diagnostics, desc = "send diagnostics to codex" },
     { lhs = mappings.diff, desc = "send git diff to codex" },
-    { lhs = mappings.workspace, desc = "open codux workspace" },
+    { lhs = mappings.workspace, desc = "create codux workspace" },
     { lhs = mappings.workspaces, desc = "current codux workspaces" },
   }
   if mode_action_desc() then
@@ -3750,7 +3889,7 @@ function M.setup(opts)
   set_mapping("v", mappings.review_selection, M.send_selection, "send selection to codex")
   set_mapping("n", mappings.diagnostics, M.send_diagnostics, "send diagnostics to codex")
   set_mapping("n", mappings.diff, M.send_git_diff, "send git diff to codex")
-  set_mapping("n", mappings.workspace, M.open_workspace_prompt, "open codux workspace")
+  set_mapping("n", mappings.workspace, M.open_workspace_prompt, "create codux workspace")
   set_mapping("n", mappings.workspaces, M.open_workspaces, "current codux workspaces")
   if mode_action_desc() then
     set_mapping("n", mappings.mode, M.toggle_plan_mode, mode_action_desc())
