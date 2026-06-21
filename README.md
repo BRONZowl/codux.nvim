@@ -111,7 +111,7 @@
 <p>
   Inside tmux, Codux creates or reuses a <code>backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts new workspaces with your current Codex permission profile.
   Reopened saved workspaces keep their stored profile.
-  Template workspaces append the template name to the tmux window, so <code>fix-tests</code> with the <code>debug</code> template opens as <code>fix-tests-debug</code>.
+  Template workspaces use the requested workspace name for the tmux window.
   New template and custom-instruction workspaces open the Codux popup so you can confirm the startup prompt is running.
 </p>
 

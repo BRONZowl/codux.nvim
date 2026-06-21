@@ -1781,21 +1781,12 @@ function M._v5.save_custom_template_for_workspace(name, instruction, existing_te
   return candidate, nil
 end
 
-function M._v5.workspace_window_name(safe_name, template)
+function M._v5.workspace_window_name(safe_name, _template)
   safe_name = tostring(safe_name or "")
   if safe_name == "" then
     return safe_name
   end
-  if type(template) ~= "string" or trim(template) == "" then
-    return safe_name
-  end
-
-  local _, template_safe = sanitize_workspace_name(template)
-  if type(template_safe) ~= "string" or template_safe == "" then
-    return safe_name
-  end
-
-  return safe_name .. "-" .. template_safe
+  return safe_name
 end
 
 local function current_tmux_session()

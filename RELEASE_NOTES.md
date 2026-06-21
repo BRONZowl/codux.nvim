@@ -12,3 +12,4 @@ Guided workspace creation with custom template prompts.
 - Stored the resolved startup instruction with each workspace so existing workspaces keep the prompt they were created with.
 - Added shorter template commands: `:CoduxTemplateList` and `:CoduxTemplatePreview <template>`.
 - Added template removal from the workspace template picker and `:CoduxTemplateDelete <template>`.
+- Stopped appending template names to new workspace tmux window names.
