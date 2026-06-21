@@ -155,6 +155,7 @@
 
 <p>
   Templates provide task-specific starting instructions for Codex without starting autonomous loops.
+  The template picker supports <code>&lt;CR&gt;</code> to select, <code>d</code> to delete the highlighted template, or <code>q</code> to cancel.
   The guided create preview lets you press <code>&lt;CR&gt;</code> to create, <code>e</code> to edit the instruction for just this workspace, or <code>q</code> to cancel.
   Custom instructions open in a Vim-like multi-line scratch editor with bottom command hints; use <code>:w</code> to save or <code>:q</code> to cancel.
   Saved custom instructions become reusable templates named after the workspace and appear in future template lists.
@@ -179,7 +180,8 @@ require("codux").setup({
 
 <p>
   Use <code>:CoduxTemplateList</code> and <code>:CoduxTemplatePreview &lt;template&gt;</code> to inspect available templates.
-  The older <code>:CoduxWorkspaceTemplateList</code> and <code>:CoduxWorkspaceTemplatePreview</code> commands remain available.
+  Use <code>:CoduxTemplateDelete &lt;template&gt;</code> to remove a saved template or hide a built-in/configured template from future template lists.
+  Long-form commands are also available: <code>:CoduxWorkspaceTemplateList</code>, <code>:CoduxWorkspaceTemplatePreview</code>, and <code>:CoduxWorkspaceTemplateDelete</code>.
   Workspace and template commands support tab completion.
 </p>
 

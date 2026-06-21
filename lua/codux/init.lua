@@ -1458,6 +1458,21 @@ local function workspace_config()
 end
 
 function M._v5.templates()
+  local templates = M._v5.all_templates()
+  local state_data = type(read_workspace_state) == "function" and read_workspace_state() or nil
+  local hidden = type(state_data) == "table" and state_data.hidden_templates or nil
+  if type(hidden) == "table" then
+    for name, value in pairs(hidden) do
+      if type(name) == "string" and value == true then
+        templates[name] = nil
+      end
+    end
+  end
+
+  return templates
+end
+
+function M._v5.all_templates()
   local templates = vim.deepcopy(M._v5.built_in_templates)
   if type(read_workspace_state) == "function" then
     local state_data = read_workspace_state()
@@ -1483,6 +1498,35 @@ function M._v5.templates()
   return templates
 end
 
+function M._v5.template_source(name)
+  if type(name) ~= "string" or trim(name) == "" then
+    return nil
+  end
+
+  local configured = workspace_config().templates
+  if
+    type(configured) == "table"
+    and type(configured[name]) == "string"
+    and trim(configured[name]) ~= ""
+  then
+    return "configured"
+  end
+
+  if type(read_workspace_state) == "function" then
+    local state_data = read_workspace_state()
+    local saved = type(state_data) == "table" and state_data.templates or nil
+    if type(saved) == "table" and type(saved[name]) == "string" and trim(saved[name]) ~= "" then
+      return "saved"
+    end
+  end
+
+  if type(M._v5.built_in_templates[name]) == "string" and trim(M._v5.built_in_templates[name]) ~= "" then
+    return "built-in"
+  end
+
+  return nil
+end
+
 function M._v5.template_names()
   local names = {}
   for name, _ in pairs(M._v5.templates()) do
@@ -1498,6 +1542,62 @@ function M._v5.template_instruction(name)
   end
 
   return M._v5.templates()[name]
+end
+
+function M._v5.delete_template(name)
+  name = type(name) == "string" and trim(name) or ""
+  if name == "" then
+    return false, "Workspace template name is required"
+  end
+  if name == "none" or name == "custom" then
+    return false, "Cannot delete Codux workspace template: " .. name
+  end
+  if not M._v5.template_instruction(name) then
+    return false, "unknown workspace template: " .. name
+  end
+
+  local state_data, state_error = read_workspace_state()
+  if state_error then
+    return false, state_error
+  end
+
+  state_data.templates = type(state_data.templates) == "table" and state_data.templates
+    or (vim.empty_dict and vim.empty_dict() or {})
+  state_data.hidden_templates = type(state_data.hidden_templates) == "table" and state_data.hidden_templates
+    or (vim.empty_dict and vim.empty_dict() or {})
+
+  local had_saved = type(state_data.templates[name]) == "string" and trim(state_data.templates[name]) ~= ""
+  state_data.templates[name] = nil
+
+  local configured = workspace_config().templates
+  local has_configured = type(configured) == "table"
+    and type(configured[name]) == "string"
+    and trim(configured[name]) ~= ""
+  local has_builtin = type(M._v5.built_in_templates[name]) == "string" and trim(M._v5.built_in_templates[name]) ~= ""
+  if has_configured or has_builtin then
+    state_data.hidden_templates[name] = true
+  else
+    state_data.hidden_templates[name] = nil
+  end
+
+  if next(state_data.templates) == nil and vim.empty_dict then
+    state_data.templates = vim.empty_dict()
+  end
+  if next(state_data.hidden_templates) == nil and vim.empty_dict then
+    state_data.hidden_templates = vim.empty_dict()
+  end
+
+  local ok, write_error = write_workspace_state(state_data)
+  if not ok then
+    return false, write_error
+  end
+
+  local source = M._v5.template_source(name)
+  if had_saved and not source then
+    source = "saved"
+  end
+
+  return true, nil, source
 end
 
 local function workspaces_enabled()
@@ -1660,7 +1760,7 @@ function M._v5.save_custom_template_for_workspace(name, instruction, existing_te
     return existing_template, nil
   end
 
-  local existing = M._v5.templates()
+  local existing = M._v5.all_templates()
   existing.none = existing.none or true
   existing.custom = existing.custom or true
 
@@ -1803,6 +1903,7 @@ local function empty_workspace_state()
   return {
     version = 2,
     templates = vim.empty_dict and vim.empty_dict() or {},
+    hidden_templates = vim.empty_dict and vim.empty_dict() or {},
     projects = vim.empty_dict and vim.empty_dict() or {},
   }
 end
@@ -1858,6 +1959,13 @@ local function normalize_workspace_state(state_data)
         end
       end
     end
+    if type(state_data.hidden_templates) == "table" then
+      for name, hidden in pairs(state_data.hidden_templates) do
+        if type(name) == "string" and trim(name) ~= "" and hidden == true then
+          migrated.hidden_templates[name] = true
+        end
+      end
+    end
     for safe_name, record in pairs(state_data.workspaces) do
       if type(record) == "table" and type(record.project_root) == "string" and record.project_root ~= "" then
         local project = migrated.projects[record.project_root]
@@ -1881,6 +1989,15 @@ local function normalize_workspace_state(state_data)
     for name, instruction in pairs(state_data.templates) do
       if type(name) ~= "string" or trim(name) == "" or type(instruction) ~= "string" or trim(instruction) == "" then
         state_data.templates[name] = nil
+      end
+    end
+  end
+  if type(state_data.hidden_templates) ~= "table" then
+    state_data.hidden_templates = vim.empty_dict and vim.empty_dict() or {}
+  else
+    for name, hidden in pairs(state_data.hidden_templates) do
+      if type(name) ~= "string" or trim(name) == "" or hidden ~= true then
+        state_data.hidden_templates[name] = nil
       end
     end
   end
@@ -3249,6 +3366,17 @@ function M.workspace_template_preview(name)
   return true
 end
 
+function M.workspace_template_delete(name)
+  local ok, error_message = M._v5.delete_template(name)
+  if not ok then
+    notify(error_message or "Failed to delete Codux workspace template", vim.log.levels.ERROR)
+    return false
+  end
+
+  notify("Deleted Codux workspace template " .. tostring(name))
+  return true
+end
+
 function M._v5.workspace_create_template_choices()
   local choices = { "none" }
   for _, name in ipairs(M._v5.template_names()) do
@@ -3258,6 +3386,233 @@ function M._v5.workspace_create_template_choices()
   end
   table.insert(choices, "custom")
   return choices
+end
+
+function M._v5.workspace_template_picker_items()
+  local items = {
+    { kind = "none", label = "none" },
+  }
+  for _, name in ipairs(M._v5.template_names()) do
+    if name ~= "custom" then
+      table.insert(items, { kind = "template", name = name, label = name })
+    end
+  end
+  table.insert(items, { kind = "custom", label = "custom..." })
+  return items
+end
+
+function M._v5.workspace_template_picker_config(line_count)
+  local total_width = math.max(1, vim.o.columns)
+  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local width = math.min(52, math.max(30, math.floor(total_width * 0.38)))
+  local height = math.min(math.max(4, line_count or 1), math.max(3, total_height - 4))
+
+  return {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = " codux workspace template ",
+    title_pos = "center",
+    width = width,
+    height = height,
+    col = math.max(0, math.floor((total_width - width) / 2)),
+    row = math.max(0, math.floor((total_height - height) / 2)),
+  }
+end
+
+function M._v5.workspace_template_picker_footer_segments()
+  return {
+    { key = "enter", desc = "select" },
+    { key = "d", desc = "delete" },
+    { key = "q", desc = "cancel" },
+  }
+end
+
+function M._v5.workspace_template_picker_footer_line()
+  local parts = {}
+  local segments = M._v5.workspace_template_picker_footer_segments()
+  for index, segment in ipairs(segments) do
+    table.insert(parts, segment.key .. " " .. segment.desc)
+    if index < #segments then
+      table.insert(parts, "  ")
+    end
+  end
+
+  return table.concat(parts, "")
+end
+
+function M._v5.render_workspace_template_picker_footer(bufnr, width)
+  if not is_loaded_buf(bufnr) then
+    return false
+  end
+
+  width = type(width) == "number" and width > 0 and width or 1
+  local line = M._v5.workspace_template_picker_footer_line()
+  local padding = math.max(0, math.floor((width - #line) / 2))
+  local text = string.rep(" ", padding) .. line
+
+  pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = bufnr })
+  pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, { text })
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, state.workspace_manager_ns, 0, -1)
+
+  local col = padding
+  local segments = M._v5.workspace_template_picker_footer_segments()
+  for index, segment in ipairs(segments) do
+    local key_end = col + #segment.key
+    pcall(vim.api.nvim_buf_add_highlight, bufnr, state.workspace_manager_ns, "WhichKey", 0, col, key_end)
+    local desc_end = key_end + 1 + #segment.desc
+    pcall(vim.api.nvim_buf_add_highlight, bufnr, state.workspace_manager_ns, "WhichKeySeparator", 0, key_end, desc_end)
+    col = desc_end
+    if index < #segments then
+      col = col + 2
+    end
+  end
+
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+  return true
+end
+
+function M._v5.open_workspace_template_picker_footer(win)
+  if not is_valid_win(win) then
+    return nil, nil
+  end
+
+  local buf_ok, bufnr = pcall(vim.api.nvim_create_buf, false, true)
+  if not buf_ok or not is_loaded_buf(bufnr) then
+    return nil, nil
+  end
+
+  pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspace-template-footer", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+
+  local height_ok, height = pcall(vim.api.nvim_win_get_height, win)
+  local width_ok, width = pcall(vim.api.nvim_win_get_width, win)
+  height = height_ok and type(height) == "number" and height > 0 and height or 1
+  width = width_ok and type(width) == "number" and width > 0 and width or 1
+
+  local win_ok, footer_win = pcall(vim.api.nvim_open_win, bufnr, false, {
+    relative = "win",
+    win = win,
+    col = 0,
+    row = height - 1,
+    width = width,
+    height = 1,
+    border = "none",
+    style = "minimal",
+    zindex = 51,
+  })
+  if not win_ok then
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    return nil, nil
+  end
+
+  M._v5.render_workspace_template_picker_footer(bufnr, width)
+  return bufnr, footer_win
+end
+
+function M._v5.open_workspace_template_picker(name)
+  local items = M._v5.workspace_template_picker_items()
+  local lines = {}
+  for _, item in ipairs(items) do
+    table.insert(lines, item.label)
+  end
+  table.insert(lines, "")
+
+  local buf_ok, bufnr = pcall(vim.api.nvim_create_buf, false, true)
+  if not buf_ok or not is_loaded_buf(bufnr) then
+    notify("Failed to create Codux workspace template picker", vim.log.levels.ERROR)
+    return false
+  end
+
+  pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspace-template", { buf = bufnr })
+  pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, lines)
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, M._v5.workspace_template_picker_config(#lines))
+  if not win_ok then
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    notify("Failed to open Codux workspace template picker", vim.log.levels.ERROR)
+    return false
+  end
+  pcall(vim.api.nvim_set_option_value, "cursorline", true, { win = win })
+
+  local footer_buf, footer_win = M._v5.open_workspace_template_picker_footer(win)
+
+  local function close_picker()
+    if is_valid_win(footer_win) then
+      pcall(vim.api.nvim_win_close, footer_win, true)
+    end
+    if is_loaded_buf(footer_buf) then
+      pcall(vim.api.nvim_buf_delete, footer_buf, { force = true })
+    end
+    if is_valid_win(win) then
+      pcall(vim.api.nvim_win_close, win, true)
+    end
+    if is_loaded_buf(bufnr) then
+      pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    end
+  end
+
+  local function selected_item()
+    if not is_valid_win(win) then
+      return nil
+    end
+    local cursor = vim.api.nvim_win_get_cursor(win)
+    return items[cursor[1]]
+  end
+
+  local function select_template()
+    local item = selected_item()
+    if type(item) ~= "table" then
+      return
+    end
+
+    close_picker()
+    if item.kind == "none" then
+      M._v5.open_workspace_create_preview({ name = name })
+      return
+    end
+    if item.kind == "custom" then
+      M._v5.open_custom_workspace_instruction_prompt(name)
+      return
+    end
+
+    M._v5.open_workspace_create_preview({
+      name = name,
+      template = item.name,
+      resolved_instruction = M._v5.template_instruction(item.name),
+    })
+  end
+
+  local function delete_template()
+    local item = selected_item()
+    if type(item) ~= "table" then
+      return
+    end
+    if item.kind ~= "template" then
+      notify("Cannot delete Codux workspace template: " .. item.label, vim.log.levels.WARN)
+      return
+    end
+
+    local choice = vim.fn.confirm("Delete Codux workspace template " .. item.name .. "?", "&Yes\n&No", 2)
+    if choice ~= 1 then
+      return
+    end
+
+    if M.workspace_template_delete(item.name) then
+      close_picker()
+      M._v5.open_workspace_template_picker(name)
+    end
+  end
+
+  pcall(vim.keymap.set, "n", "<CR>", select_template, { buffer = bufnr, silent = true, desc = "Select Codux Workspace Template" })
+  pcall(vim.keymap.set, "n", "d", delete_template, { buffer = bufnr, silent = true, desc = "Delete Codux Workspace Template" })
+  pcall(vim.keymap.set, "n", "q", close_picker, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Template" })
+  pcall(vim.keymap.set, "n", "<Esc>", close_picker, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Template" })
+  pcall(vim.keymap.set, "n", "<C-q>", close_picker, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Template" })
+  return true
 end
 
 function M._v5.workspace_create_template_label(request)
@@ -3746,25 +4101,7 @@ function M.open_workspace_prompt()
       return
     end
 
-    vim.ui.select(M._v5.workspace_create_template_choices(), { prompt = "Codux workspace template: " }, function(choice)
-      if type(choice) ~= "string" or choice == "" then
-        return
-      end
-      if choice == "none" then
-        M._v5.open_workspace_create_preview({ name = name })
-        return
-      end
-      if choice == "custom" then
-        M._v5.open_custom_workspace_instruction_prompt(name)
-        return
-      end
-
-      M._v5.open_workspace_create_preview({
-        name = name,
-        template = choice,
-        resolved_instruction = M._v5.template_instruction(choice),
-      })
-    end)
+    M._v5.open_workspace_template_picker(name)
   end)
   return true
 end
@@ -4182,6 +4519,8 @@ M._workspace_target_sync_allowed = function(event)
     filetype == "codux"
     or filetype == "codux-workspaces"
     or filetype == "codux-workspaces-footer"
+    or filetype == "codux-workspace-template"
+    or filetype == "codux-workspace-template-footer"
     or filetype == "codux-workspace-create"
     or filetype == "codux-workspace-create-footer"
     or filetype == "codux-workspace-instruction"
@@ -5005,6 +5344,10 @@ local function create_commands()
     M.workspace_template_preview(opts.args)
   end, { force = true, nargs = 1, complete = M._v5.complete_template_names, desc = "Preview a Codux workspace template" })
 
+  vim.api.nvim_create_user_command("CoduxWorkspaceTemplateDelete", function(opts)
+    M.workspace_template_delete(opts.args)
+  end, { force = true, nargs = 1, complete = M._v5.complete_template_names, desc = "Delete a Codux workspace template" })
+
   vim.api.nvim_create_user_command("CoduxTemplateList", function()
     M.workspace_template_list()
   end, { force = true, desc = "List Codux workspace templates" })
@@ -5012,6 +5355,10 @@ local function create_commands()
   vim.api.nvim_create_user_command("CoduxTemplatePreview", function(opts)
     M.workspace_template_preview(opts.args)
   end, { force = true, nargs = 1, complete = M._v5.complete_template_names, desc = "Preview a Codux workspace template" })
+
+  vim.api.nvim_create_user_command("CoduxTemplateDelete", function(opts)
+    M.workspace_template_delete(opts.args)
+  end, { force = true, nargs = 1, complete = M._v5.complete_template_names, desc = "Delete a Codux workspace template" })
 
   vim.api.nvim_create_user_command("CoduxWorkspaces", function()
     M.open_workspaces()

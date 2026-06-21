@@ -11,3 +11,4 @@ Guided workspace creation with custom template prompts.
 - Added a create preview where users can create, edit the resolved instruction, or cancel safely.
 - Stored the resolved startup instruction with each workspace so existing workspaces keep the prompt they were created with.
 - Added shorter template commands: `:CoduxTemplateList` and `:CoduxTemplatePreview <template>`.
+- Added template removal from the workspace template picker and `:CoduxTemplateDelete <template>`.
