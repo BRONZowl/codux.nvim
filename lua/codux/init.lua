@@ -112,6 +112,8 @@ local current_target
 local git_branch_for
 local git_root_for
 local render_workspace_manager
+local read_workspace_state
+local write_workspace_state
 local codux_icon = "󰚩"
 local which_key_header_hooked = false
 
@@ -1457,6 +1459,18 @@ end
 
 function M._v5.templates()
   local templates = vim.deepcopy(M._v5.built_in_templates)
+  if type(read_workspace_state) == "function" then
+    local state_data = read_workspace_state()
+    local saved = type(state_data) == "table" and state_data.templates or nil
+    if type(saved) == "table" then
+      for name, instruction in pairs(saved) do
+        if type(name) == "string" and trim(name) ~= "" and type(instruction) == "string" and trim(instruction) ~= "" then
+          templates[name] = instruction
+        end
+      end
+    end
+  end
+
   local configured = workspace_config().templates
   if type(configured) == "table" then
     for name, instruction in pairs(configured) do
@@ -1614,6 +1628,59 @@ local function sanitize_workspace_name(name)
   return display_name, safe
 end
 
+function M._v5.save_custom_template_for_workspace(name, instruction, existing_template)
+  instruction = type(instruction) == "string" and trim(instruction) or ""
+  if instruction == "" then
+    return nil, "Workspace instruction is required"
+  end
+
+  local display_name, safe_name_or_error = sanitize_workspace_name(name)
+  if not display_name then
+    return nil, safe_name_or_error
+  end
+
+  local state_data, state_error = read_workspace_state()
+  if state_error then
+    return nil, state_error
+  end
+
+  state_data.templates = type(state_data.templates) == "table" and state_data.templates
+    or (vim.empty_dict and vim.empty_dict() or {})
+
+  if
+    type(existing_template) == "string"
+    and trim(existing_template) ~= ""
+    and type(state_data.templates[existing_template]) == "string"
+  then
+    state_data.templates[existing_template] = instruction
+    local ok, write_error = write_workspace_state(state_data)
+    if not ok then
+      return nil, write_error
+    end
+    return existing_template, nil
+  end
+
+  local existing = M._v5.templates()
+  existing.none = existing.none or true
+  existing.custom = existing.custom or true
+
+  local base = safe_name_or_error
+  local candidate = base
+  local suffix = 2
+  while existing[candidate] or state_data.templates[candidate] do
+    candidate = base .. "-" .. tostring(suffix)
+    suffix = suffix + 1
+  end
+
+  state_data.templates[candidate] = instruction
+  local ok, write_error = write_workspace_state(state_data)
+  if not ok then
+    return nil, write_error
+  end
+
+  return candidate, nil
+end
+
 function M._v5.workspace_window_name(safe_name, template)
   safe_name = tostring(safe_name or "")
   if safe_name == "" then
@@ -1735,6 +1802,7 @@ end
 local function empty_workspace_state()
   return {
     version = 2,
+    templates = vim.empty_dict and vim.empty_dict() or {},
     projects = vim.empty_dict and vim.empty_dict() or {},
   }
 end
@@ -1763,6 +1831,8 @@ function M._v5.normalize_record(record, safe_name, root)
     tmux_window = window_name,
     tmux_target = record.tmux_target,
     template = record.template,
+    custom_instruction = record.custom_instruction,
+    resolved_instruction = record.resolved_instruction,
     permission_profile = record.permission_profile or "default",
     status = status,
     codex_status = record.codex_status or "idle",
@@ -1781,6 +1851,13 @@ local function normalize_workspace_state(state_data)
 
   if type(state_data.projects) ~= "table" and type(state_data.workspaces) == "table" then
     local migrated = empty_workspace_state()
+    if type(state_data.templates) == "table" then
+      for name, instruction in pairs(state_data.templates) do
+        if type(name) == "string" and trim(name) ~= "" and type(instruction) == "string" and trim(instruction) ~= "" then
+          migrated.templates[name] = instruction
+        end
+      end
+    end
     for safe_name, record in pairs(state_data.workspaces) do
       if type(record) == "table" and type(record.project_root) == "string" and record.project_root ~= "" then
         local project = migrated.projects[record.project_root]
@@ -1798,6 +1875,16 @@ local function normalize_workspace_state(state_data)
   end
 
   state_data.version = 2
+  if type(state_data.templates) ~= "table" then
+    state_data.templates = vim.empty_dict and vim.empty_dict() or {}
+  else
+    for name, instruction in pairs(state_data.templates) do
+      if type(name) ~= "string" or trim(name) == "" or type(instruction) ~= "string" or trim(instruction) == "" then
+        state_data.templates[name] = nil
+      end
+    end
+  end
+
   if type(state_data.projects) ~= "table" then
     state_data.projects = vim.empty_dict and vim.empty_dict() or {}
   end
@@ -1823,7 +1910,7 @@ local function normalize_workspace_state(state_data)
   return state_data
 end
 
-local function read_workspace_state()
+read_workspace_state = function()
   local path = workspace_state_file()
   if vim.fn.filereadable(path) ~= 1 then
     return empty_workspace_state(), nil
@@ -1842,7 +1929,7 @@ local function read_workspace_state()
   return normalize_workspace_state(decoded), nil
 end
 
-local function write_workspace_state(state_data)
+write_workspace_state = function(state_data)
   local path = workspace_state_file()
   local directory = vim.fn.fnamemodify(path, ":h")
   if directory ~= "" then
@@ -1889,6 +1976,8 @@ local function workspace_from_state(record, fallback)
     window_name = record.tmux_window or record.window_name or fallback.window_name,
     tmux_target = record.tmux_target or fallback.tmux_target,
     template = record.template or fallback.template,
+    custom_instruction = record.custom_instruction or fallback.custom_instruction,
+    resolved_instruction = record.resolved_instruction or fallback.resolved_instruction,
     permission_profile = record.permission_profile or fallback.permission_profile or "default",
     codex_status = record.codex_status or fallback.codex_status or "idle",
     status = record.status or fallback.status or "missing",
@@ -1910,6 +1999,8 @@ local function workspace_state_record(workspace, existing)
     tmux_window = workspace.window_name,
     tmux_target = workspace.tmux_target,
     template = workspace.template,
+    custom_instruction = workspace.custom_instruction,
+    resolved_instruction = workspace.resolved_instruction,
     permission_profile = workspace.permission_profile or "default",
     status = workspace.status or existing.status or "active",
     codex_status = workspace.codex_status or existing.codex_status or "idle",
@@ -2576,6 +2667,8 @@ local function workspace_bootstrap_lua(workspace)
   local window_name = workspace.window_name or ""
   local codex_status = workspace.codex_status or "idle"
   local template = workspace.template or ""
+  local custom_instruction = workspace.custom_instruction or ""
+  local resolved_instruction = workspace.resolved_instruction or ""
   local initial_prompt = workspace.initial_prompt or ""
   local show_codux = initial_prompt ~= ""
 
@@ -2586,7 +2679,7 @@ local function workspace_bootstrap_lua(workspace)
     "local profile=" .. lua_string(profile),
     "local prompt=" .. lua_string(initial_prompt),
     "local show_codux=" .. tostring(show_codux),
-    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",template=" .. lua_string(template) .. ",permission_profile=profile,codex_status=" .. lua_string(codex_status) .. ",status='active'}",
+    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",template=" .. lua_string(template) .. ",custom_instruction=" .. lua_string(custom_instruction) .. ",resolved_instruction=" .. lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. lua_string(codex_status) .. ",status='active'}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
@@ -2687,6 +2780,14 @@ local function prepare_workspace(name, opts)
   if type(template) == "string" and template ~= "" and not M._v5.template_instruction(template) then
     return nil, "unknown workspace template: " .. template
   end
+  local custom_instruction = type(opts.custom_instruction) == "string" and trim(opts.custom_instruction) or nil
+  if custom_instruction == "" then
+    custom_instruction = nil
+  end
+  local resolved_instruction = type(opts.resolved_instruction) == "string" and trim(opts.resolved_instruction) or nil
+  if resolved_instruction == "" then
+    resolved_instruction = nil
+  end
 
   local state_data, state_error = read_workspace_state()
   if state_error then
@@ -2714,6 +2815,8 @@ local function prepare_workspace(name, opts)
     git_branch = context.branch,
     window_name = M._v5.workspace_window_name(safe_name_or_error, template),
     template = template,
+    custom_instruction = custom_instruction,
+    resolved_instruction = resolved_instruction,
     permission_profile = workspace_permission_profile(),
     codex_status = "idle",
     status = "active",
@@ -2722,15 +2825,25 @@ local function prepare_workspace(name, opts)
   if type(template) == "string" and template ~= "" then
     workspace.template = template
   end
+  if custom_instruction then
+    workspace.custom_instruction = custom_instruction
+  end
   workspace.session = session
   workspace.safe_name = workspace.safe_name or safe_name_or_error
   workspace.window_name = M._v5.workspace_window_name(workspace.safe_name, workspace.template)
   workspace.project_root = workspace.project_root or root
   workspace.tmux_target = M._v5.tmux_target(session, workspace.window_name)
 
+  if not resolved_instruction and type(workspace.resolved_instruction) == "string" and trim(workspace.resolved_instruction) ~= "" then
+    resolved_instruction = workspace.resolved_instruction
+  end
   local template_prompt = M._v5.template_instruction(workspace.template)
-  if type(template_prompt) == "string" and template_prompt ~= "" then
-    workspace.initial_prompt = template_prompt
+  if not resolved_instruction and type(template_prompt) == "string" and template_prompt ~= "" then
+    resolved_instruction = template_prompt
+  end
+  if resolved_instruction then
+    workspace.resolved_instruction = resolved_instruction
+    workspace.initial_prompt = resolved_instruction
   end
 
   local window_id, created = ensure_tmux_window(session, workspace.project_root, workspace.window_name, workspace_nvim_command(workspace))
@@ -2759,31 +2872,42 @@ function M._v5.parse_create_args(args)
   args = type(args) == "table" and args or {}
   local name = args[1]
   if type(name) ~= "string" or trim(name) == "" then
-    return nil, nil, "Workspace name is required"
+    return nil, nil, false, "Workspace name is required"
+  end
+  if name:match("^%-%-") then
+    return nil, nil, false, "Workspace name is required"
   end
 
   local template = nil
+  local custom_requested = false
   local index = 2
   while index <= #args do
     local arg = args[index]
     if arg == "--template" then
       template = args[index + 1]
       if type(template) ~= "string" or trim(template) == "" then
-        return nil, nil, "--template requires a template name"
+        return nil, nil, false, "--template requires a template name"
       end
       index = index + 2
+    elseif arg == "--custom" then
+      custom_requested = true
+      index = index + 1
     else
       local inline_template = type(arg) == "string" and arg:match("^%-%-template=(.+)$") or nil
       if inline_template then
         template = inline_template
         index = index + 1
       else
-        return nil, nil, "unknown workspace option: " .. tostring(arg)
+        return nil, nil, false, "unknown workspace option: " .. tostring(arg)
       end
     end
   end
 
-  return name, template, nil
+  if custom_requested and type(template) == "string" and trim(template) ~= "" then
+    return nil, nil, false, "--custom cannot be combined with --template"
+  end
+
+  return name, template, custom_requested, nil
 end
 
 local function start_terminal(focus, initial_prompt, command, workspace, permission_profile, opts)
@@ -3009,6 +3133,8 @@ function M.create_workspace(name, opts)
   opts = opts or {}
   local workspace, error_message = prepare_workspace(name, {
     template = opts.template,
+    custom_instruction = opts.custom_instruction,
+    resolved_instruction = opts.resolved_instruction,
   })
   if not workspace then
     notify(error_message or "Failed to prepare Codux workspace", vim.log.levels.ERROR)
@@ -3123,6 +3249,491 @@ function M.workspace_template_preview(name)
   return true
 end
 
+function M._v5.workspace_create_template_choices()
+  local choices = { "none" }
+  for _, name in ipairs(M._v5.template_names()) do
+    if name ~= "custom" then
+      table.insert(choices, name)
+    end
+  end
+  table.insert(choices, "custom")
+  return choices
+end
+
+function M._v5.workspace_create_template_label(request)
+  if type(request.template) == "string" and request.template ~= "" then
+    return request.template
+  end
+  if type(request.resolved_instruction) == "string" and trim(request.resolved_instruction) ~= "" then
+    return "custom"
+  end
+  return "none"
+end
+
+function M._v5.workspace_create_preview_lines(request)
+  local lines = {
+    "Create Codux workspace?",
+    "",
+    "Name: " .. tostring(request.name or ""),
+    "Template: " .. M._v5.workspace_create_template_label(request),
+    "",
+    "Instruction:",
+  }
+  local instruction = type(request.resolved_instruction) == "string" and trim(request.resolved_instruction) or ""
+  if instruction == "" then
+    table.insert(lines, "(none)")
+  else
+    for _, line in ipairs(vim.split(instruction, "\n", { plain = true })) do
+      table.insert(lines, line)
+    end
+  end
+  table.insert(lines, "")
+  return lines
+end
+
+function M._v5.workspace_create_preview_config(line_count)
+  local total_width = math.max(1, vim.o.columns)
+  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local width = math.min(82, math.max(50, math.floor(total_width * 0.62)))
+  local height = math.min(math.max(10, (line_count or 1) + 1), math.max(6, total_height - 4))
+
+  return {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = " create codux workspace ",
+    title_pos = "center",
+    width = width,
+    height = height,
+    col = math.max(0, math.floor((total_width - width) / 2)),
+    row = math.max(0, math.floor((total_height - height) / 2)),
+  }
+end
+
+function M._v5.workspace_create_footer_segments()
+  return {
+    { key = "enter", desc = "create" },
+    { key = "e", desc = "edit instruction" },
+    { key = "q", desc = "cancel" },
+  }
+end
+
+function M._v5.workspace_create_footer_line()
+  local parts = {}
+  local segments = M._v5.workspace_create_footer_segments()
+  for index, segment in ipairs(segments) do
+    table.insert(parts, segment.key .. " " .. segment.desc)
+    if index < #segments then
+      table.insert(parts, "  ")
+    end
+  end
+
+  return table.concat(parts, "")
+end
+
+function M._v5.render_workspace_create_footer(bufnr, width)
+  if not is_loaded_buf(bufnr) then
+    return false
+  end
+
+  width = type(width) == "number" and width > 0 and width or 1
+  local line = M._v5.workspace_create_footer_line()
+  local padding = math.max(0, math.floor((width - #line) / 2))
+  local text = string.rep(" ", padding) .. line
+
+  pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = bufnr })
+  pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, { text })
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, state.workspace_manager_ns, 0, -1)
+
+  local col = padding
+  local segments = M._v5.workspace_create_footer_segments()
+  for index, segment in ipairs(segments) do
+    local key_end = col + #segment.key
+    pcall(vim.api.nvim_buf_add_highlight, bufnr, state.workspace_manager_ns, "WhichKey", 0, col, key_end)
+    local desc_end = key_end + 1 + #segment.desc
+    pcall(vim.api.nvim_buf_add_highlight, bufnr, state.workspace_manager_ns, "WhichKeySeparator", 0, key_end, desc_end)
+    col = desc_end
+    if index < #segments then
+      col = col + 2
+    end
+  end
+
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+  return true
+end
+
+function M._v5.open_workspace_create_footer(win)
+  if not is_valid_win(win) then
+    return nil, nil
+  end
+
+  local buf_ok, bufnr = pcall(vim.api.nvim_create_buf, false, true)
+  if not buf_ok or not is_loaded_buf(bufnr) then
+    return nil, nil
+  end
+
+  pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspace-create-footer", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+
+  local height_ok, height = pcall(vim.api.nvim_win_get_height, win)
+  local width_ok, width = pcall(vim.api.nvim_win_get_width, win)
+  height = height_ok and type(height) == "number" and height > 0 and height or 1
+  width = width_ok and type(width) == "number" and width > 0 and width or 1
+
+  local win_ok, footer_win = pcall(vim.api.nvim_open_win, bufnr, false, {
+    relative = "win",
+    win = win,
+    col = 0,
+    row = height - 1,
+    width = width,
+    height = 1,
+    border = "none",
+    style = "minimal",
+    zindex = 51,
+  })
+  if not win_ok then
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    return nil, nil
+  end
+
+  M._v5.render_workspace_create_footer(bufnr, width)
+  return bufnr, footer_win
+end
+
+function M._v5.workspace_instruction_editor_config(line_count)
+  local total_width = math.max(1, vim.o.columns)
+  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local width = math.min(96, math.max(58, math.floor(total_width * 0.72)))
+  local height = math.min(math.max(11, (line_count or 1) + 1), math.max(8, total_height - 4))
+
+  return {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = " workspace instruction · vim-mode ",
+    title_pos = "center",
+    width = width,
+    height = height,
+    col = math.max(0, math.floor((total_width - width) / 2)),
+    row = math.max(0, math.floor((total_height - height) / 2)),
+  }
+end
+
+function M._v5.workspace_instruction_footer_segments()
+  return {
+    { key = ":w", desc = "save" },
+    { key = ":q", desc = "cancel" },
+  }
+end
+
+function M._v5.workspace_instruction_footer_line()
+  local parts = {}
+  local segments = M._v5.workspace_instruction_footer_segments()
+  for index, segment in ipairs(segments) do
+    table.insert(parts, segment.key .. " " .. segment.desc)
+    if index < #segments then
+      table.insert(parts, "  ")
+    end
+  end
+
+  return table.concat(parts, "")
+end
+
+function M._v5.render_workspace_instruction_footer(bufnr, width)
+  if not is_loaded_buf(bufnr) then
+    return false
+  end
+
+  width = type(width) == "number" and width > 0 and width or 1
+  local line = M._v5.workspace_instruction_footer_line()
+  local padding = math.max(0, math.floor((width - #line) / 2))
+  local text = string.rep(" ", padding) .. line
+
+  pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = bufnr })
+  pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, { text })
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, state.workspace_manager_ns, 0, -1)
+
+  local col = padding
+  local segments = M._v5.workspace_instruction_footer_segments()
+  for index, segment in ipairs(segments) do
+    local key_end = col + #segment.key
+    pcall(vim.api.nvim_buf_add_highlight, bufnr, state.workspace_manager_ns, "WhichKey", 0, col, key_end)
+    local desc_end = key_end + 1 + #segment.desc
+    pcall(vim.api.nvim_buf_add_highlight, bufnr, state.workspace_manager_ns, "WhichKeySeparator", 0, key_end, desc_end)
+    col = desc_end
+    if index < #segments then
+      col = col + 2
+    end
+  end
+
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+  return true
+end
+
+function M._v5.open_workspace_instruction_footer(win)
+  if not is_valid_win(win) then
+    return nil, nil
+  end
+
+  local buf_ok, bufnr = pcall(vim.api.nvim_create_buf, false, true)
+  if not buf_ok or not is_loaded_buf(bufnr) then
+    return nil, nil
+  end
+
+  pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspace-instruction-footer", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+
+  local height_ok, height = pcall(vim.api.nvim_win_get_height, win)
+  local width_ok, width = pcall(vim.api.nvim_win_get_width, win)
+  height = height_ok and type(height) == "number" and height > 0 and height or 1
+  width = width_ok and type(width) == "number" and width > 0 and width or 1
+
+  local win_ok, footer_win = pcall(vim.api.nvim_open_win, bufnr, false, {
+    relative = "win",
+    win = win,
+    col = 0,
+    row = height - 1,
+    width = width,
+    height = 1,
+    border = "none",
+    style = "minimal",
+    zindex = 51,
+  })
+  if not win_ok then
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    return nil, nil
+  end
+
+  M._v5.render_workspace_instruction_footer(bufnr, width)
+  return bufnr, footer_win
+end
+
+function M._v5.open_workspace_instruction_editor(request, opts)
+  request = type(request) == "table" and request or {}
+  opts = type(opts) == "table" and opts or {}
+  local instruction = type(request.resolved_instruction) == "string" and request.resolved_instruction or ""
+  local lines = vim.split(instruction, "\n", { plain = true })
+  if #lines == 0 then
+    lines = { "" }
+  end
+
+  local buf_ok, bufnr = pcall(vim.api.nvim_create_buf, false, true)
+  if not buf_ok or not is_loaded_buf(bufnr) then
+    notify("Failed to create Codux workspace instruction editor", vim.log.levels.ERROR)
+    return false
+  end
+
+  pcall(vim.api.nvim_set_option_value, "buftype", "acwrite", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "swapfile", false, { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspace-instruction", { buf = bufnr })
+  pcall(vim.api.nvim_buf_set_name, bufnr, "codux://workspace-instruction/" .. tostring(bufnr))
+  pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, lines)
+  pcall(vim.api.nvim_set_option_value, "modified", false, { buf = bufnr })
+
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, M._v5.workspace_instruction_editor_config(#lines + 2))
+  if not win_ok then
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    notify("Failed to open Codux workspace instruction editor", vim.log.levels.ERROR)
+    return false
+  end
+
+  pcall(vim.api.nvim_set_option_value, "wrap", true, { win = win })
+  pcall(vim.api.nvim_set_option_value, "linebreak", true, { win = win })
+  local footer_buf, footer_win = M._v5.open_workspace_instruction_footer(win)
+  local closed = false
+  local saved = false
+  local autocmd_group = vim.api.nvim_create_augroup("codux-workspace-instruction-" .. tostring(bufnr), { clear = true })
+
+  local function close_editor()
+    closed = true
+    if is_valid_win(footer_win) then
+      pcall(vim.api.nvim_win_close, footer_win, true)
+    end
+    if is_loaded_buf(footer_buf) then
+      pcall(vim.api.nvim_buf_delete, footer_buf, { force = true })
+    end
+    if is_valid_win(win) then
+      pcall(vim.api.nvim_win_close, win, true)
+    end
+    if is_loaded_buf(bufnr) then
+      pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    end
+    pcall(vim.api.nvim_del_augroup_by_id, autocmd_group)
+  end
+
+  local function cancel_editor()
+    close_editor()
+    if type(opts.on_cancel) == "function" then
+      opts.on_cancel(request)
+    end
+  end
+
+  local function save_editor()
+    pcall(vim.cmd, "stopinsert")
+    if not is_loaded_buf(bufnr) then
+      return
+    end
+
+    local saved_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local saved_instruction = trim(table.concat(saved_lines, "\n"))
+    if saved_instruction == "" then
+      notify("Workspace instruction is required", vim.log.levels.WARN)
+      if is_valid_win(win) then
+        pcall(vim.api.nvim_set_current_win, win)
+      end
+      return
+    end
+
+    request.resolved_instruction = saved_instruction
+    if
+      type(request.template) ~= "string"
+      or request.template == ""
+      or type(request.custom_template_name) == "string"
+    then
+      local template_name, template_error =
+        M._v5.save_custom_template_for_workspace(request.name, saved_instruction, request.custom_template_name)
+      if not template_name then
+        notify(template_error or "Failed to save Codux workspace template", vim.log.levels.ERROR)
+        if is_valid_win(win) then
+          pcall(vim.api.nvim_set_current_win, win)
+        end
+        return
+      end
+
+      request.template = template_name
+      request.custom_template_name = template_name
+      request.custom_instruction = saved_instruction
+    end
+
+    saved = true
+    close_editor()
+    if type(opts.on_save) == "function" then
+      opts.on_save(request)
+    else
+      M._v5.open_workspace_create_preview(request)
+    end
+  end
+
+  vim.api.nvim_create_autocmd("BufWriteCmd", {
+    group = autocmd_group,
+    buffer = bufnr,
+    callback = save_editor,
+  })
+  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
+    group = autocmd_group,
+    buffer = bufnr,
+    callback = function()
+      if is_loaded_buf(bufnr) then
+        pcall(vim.api.nvim_set_option_value, "modified", false, { buf = bufnr })
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = autocmd_group,
+    pattern = tostring(win),
+    callback = function()
+      if is_valid_win(footer_win) then
+        pcall(vim.api.nvim_win_close, footer_win, true)
+      end
+      if is_loaded_buf(footer_buf) then
+        pcall(vim.api.nvim_buf_delete, footer_buf, { force = true })
+      end
+      if not closed and not saved and type(opts.on_cancel) == "function" then
+        vim.schedule(function()
+          opts.on_cancel(request)
+        end)
+      end
+      pcall(vim.api.nvim_del_augroup_by_id, autocmd_group)
+    end,
+  })
+
+  pcall(vim.keymap.set, "n", "<C-s>", save_editor, { buffer = bufnr, silent = true, desc = "Save Codux Workspace Instruction" })
+  pcall(vim.keymap.set, "i", "<C-s>", save_editor, { buffer = bufnr, silent = true, desc = "Save Codux Workspace Instruction" })
+  pcall(vim.keymap.set, "n", "<C-q>", cancel_editor, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Instruction" })
+  pcall(vim.keymap.set, "i", "<C-q>", cancel_editor, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Instruction" })
+  return true
+end
+
+function M._v5.open_workspace_create_preview(request)
+  request = type(request) == "table" and request or {}
+  local lines = M._v5.workspace_create_preview_lines(request)
+  local buf_ok, bufnr = pcall(vim.api.nvim_create_buf, false, true)
+  if not buf_ok or not is_loaded_buf(bufnr) then
+    notify("Failed to create Codux workspace preview", vim.log.levels.ERROR)
+    return false
+  end
+
+  pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspace-create", { buf = bufnr })
+  pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, lines)
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, M._v5.workspace_create_preview_config(#lines))
+  if not win_ok then
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    notify("Failed to open Codux workspace preview", vim.log.levels.ERROR)
+    return false
+  end
+  pcall(vim.api.nvim_set_option_value, "wrap", true, { win = win })
+  pcall(vim.api.nvim_set_option_value, "linebreak", true, { win = win })
+  local footer_buf, footer_win = M._v5.open_workspace_create_footer(win)
+
+  local function close_preview()
+    if is_valid_win(footer_win) then
+      pcall(vim.api.nvim_win_close, footer_win, true)
+    end
+    if is_loaded_buf(footer_buf) then
+      pcall(vim.api.nvim_buf_delete, footer_buf, { force = true })
+    end
+    if is_valid_win(win) then
+      pcall(vim.api.nvim_win_close, win, true)
+    end
+    if is_loaded_buf(bufnr) then
+      pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    end
+  end
+
+  local function create_workspace_from_preview()
+    close_preview()
+    M.create_workspace(request.name, {
+      template = request.template,
+      custom_instruction = request.custom_instruction,
+      resolved_instruction = request.resolved_instruction,
+    })
+  end
+
+  local function edit_instruction_from_preview()
+    close_preview()
+    M._v5.open_workspace_instruction_editor(request, {
+      on_cancel = M._v5.open_workspace_create_preview,
+      on_save = M._v5.open_workspace_create_preview,
+    })
+  end
+
+  pcall(vim.keymap.set, "n", "<CR>", create_workspace_from_preview, { buffer = bufnr, silent = true, desc = "Create Codux Workspace" })
+  pcall(vim.keymap.set, "n", "e", edit_instruction_from_preview, { buffer = bufnr, silent = true, desc = "Edit Codux Workspace Instruction" })
+  pcall(vim.keymap.set, "n", "q", close_preview, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Create" })
+  pcall(vim.keymap.set, "n", "<Esc>", close_preview, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Create" })
+  pcall(vim.keymap.set, "n", "<C-q>", close_preview, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Create" })
+  return true
+end
+
+function M._v5.open_custom_workspace_instruction_prompt(name)
+  if not current_tmux_session() then
+    notify("no tmux session running", vim.log.levels.ERROR)
+    return false
+  end
+
+  return M._v5.open_workspace_instruction_editor({
+    name = name,
+  }, {
+    on_save = M._v5.open_workspace_create_preview,
+  })
+end
+
 function M.open_workspace_prompt()
   if not current_tmux_session() then
     notify("no tmux session running", vim.log.levels.ERROR)
@@ -3135,18 +3746,24 @@ function M.open_workspace_prompt()
       return
     end
 
-    local choices = { "none" }
-    vim.list_extend(choices, M._v5.template_names())
-    vim.ui.select(choices, { prompt = "Codux workspace template: " }, function(choice)
+    vim.ui.select(M._v5.workspace_create_template_choices(), { prompt = "Codux workspace template: " }, function(choice)
       if type(choice) ~= "string" or choice == "" then
         return
       end
       if choice == "none" then
-        M.create_workspace(name)
+        M._v5.open_workspace_create_preview({ name = name })
+        return
+      end
+      if choice == "custom" then
+        M._v5.open_custom_workspace_instruction_prompt(name)
         return
       end
 
-      M.create_workspace(name, { template = choice })
+      M._v5.open_workspace_create_preview({
+        name = name,
+        template = choice,
+        resolved_instruction = M._v5.template_instruction(choice),
+      })
     end)
   end)
   return true
@@ -3561,7 +4178,15 @@ M._workspace_target_sync_allowed = function(event)
   end
 
   local filetype = current_filetype()
-  if filetype == "codux" or filetype == "codux-workspaces" or filetype == "codux-workspaces-footer" then
+  if
+    filetype == "codux"
+    or filetype == "codux-workspaces"
+    or filetype == "codux-workspaces-footer"
+    or filetype == "codux-workspace-create"
+    or filetype == "codux-workspace-create-footer"
+    or filetype == "codux-workspace-instruction"
+    or filetype == "codux-workspace-instruction-footer"
+  then
     return false
   end
 
@@ -4276,7 +4901,7 @@ function M._v5.complete_template_names(arglead)
 end
 
 function M._v5.complete_create(arglead, cmdline, cursorpos)
-  local before_cursor = cmdline:sub(1, math.max(1, cursorpos - 1))
+  local before_cursor = cmdline:sub(1, math.max(0, cursorpos or #cmdline))
   if before_cursor:match("%-%-template%s+[^%s]*$") then
     return M._v5.complete_template_names(arglead)
   end
@@ -4290,7 +4915,7 @@ function M._v5.complete_create(arglead, cmdline, cursorpos)
     return matches
   end
 
-  return M._v5.filter_completion({ "--template" }, arglead)
+  return M._v5.filter_completion({ "--custom", "--template" }, arglead)
 end
 
 local function create_commands()
@@ -4311,22 +4936,40 @@ local function create_commands()
   end, { force = true, desc = "Open Codex danger zone with no sandbox" })
 
   vim.api.nvim_create_user_command("CoduxWorkspace", function(opts)
-    local name, template, error_message = M._v5.parse_create_args(opts.fargs)
+    if #opts.fargs == 0 then
+      M.open_workspace_prompt()
+      return
+    end
+
+    local name, template, custom_requested, error_message = M._v5.parse_create_args(opts.fargs)
     if error_message then
       notify(error_message, vim.log.levels.ERROR)
       return
     end
+    if custom_requested then
+      M._v5.open_custom_workspace_instruction_prompt(name)
+      return
+    end
     M.create_workspace(name, { template = template })
-  end, { force = true, nargs = "+", complete = M._v5.complete_create, desc = "Create a named Codux tmux workspace" })
+  end, { force = true, nargs = "*", complete = M._v5.complete_create, desc = "Create a named Codux tmux workspace" })
 
   vim.api.nvim_create_user_command("CoduxWorkspaceCreate", function(opts)
-    local name, template, error_message = M._v5.parse_create_args(opts.fargs)
+    if #opts.fargs == 0 then
+      M.open_workspace_prompt()
+      return
+    end
+
+    local name, template, custom_requested, error_message = M._v5.parse_create_args(opts.fargs)
     if error_message then
       notify(error_message, vim.log.levels.ERROR)
       return
     end
+    if custom_requested then
+      M._v5.open_custom_workspace_instruction_prompt(name)
+      return
+    end
     M.create_workspace(name, { template = template })
-  end, { force = true, nargs = "+", complete = M._v5.complete_create, desc = "Create a named Codux tmux workspace" })
+  end, { force = true, nargs = "*", complete = M._v5.complete_create, desc = "Create a named Codux tmux workspace" })
 
   vim.api.nvim_create_user_command("CoduxWorkspaceOpen", function(opts)
     M.open_saved_workspace(opts.args, workspace_manager_project_root())
@@ -4359,6 +5002,14 @@ local function create_commands()
   end, { force = true, desc = "List Codux workspace templates" })
 
   vim.api.nvim_create_user_command("CoduxWorkspaceTemplatePreview", function(opts)
+    M.workspace_template_preview(opts.args)
+  end, { force = true, nargs = 1, complete = M._v5.complete_template_names, desc = "Preview a Codux workspace template" })
+
+  vim.api.nvim_create_user_command("CoduxTemplateList", function()
+    M.workspace_template_list()
+  end, { force = true, desc = "List Codux workspace templates" })
+
+  vim.api.nvim_create_user_command("CoduxTemplatePreview", function(opts)
     M.workspace_template_preview(opts.args)
   end, { force = true, nargs = 1, complete = M._v5.complete_template_names, desc = "Preview a Codux workspace template" })
 

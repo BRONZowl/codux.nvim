@@ -103,8 +103,8 @@
 </p>
 
 <p>
-  Use <code>:CoduxWorkspaceCreate backend-debug</code> or <code>&lt;leader&gt;zw</code> inside tmux to create a named Codex workspace.
-  The <code>&lt;leader&gt;zw</code> flow prompts for a name, then lets you choose <code>none</code> or a workspace template.
+  Use <code>:CoduxWorkspaceCreate</code> or <code>&lt;leader&gt;zw</code> inside tmux to create a guided Codex workspace.
+  The create flow prompts for a name, lets you choose <code>none</code>, a workspace template, or <code>custom</code>, then previews the instruction before launch.
   New workspace windows launch in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
 </p>
 
@@ -112,7 +112,7 @@
   Inside tmux, Codux creates or reuses a <code>backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts new workspaces with your current Codex permission profile.
   Reopened saved workspaces keep their stored profile.
   Template workspaces append the template name to the tmux window, so <code>fix-tests</code> with the <code>debug</code> template opens as <code>fix-tests-debug</code>.
-  New template workspaces open the Codux popup so you can confirm the template prompt is running.
+  New template and custom-instruction workspaces open the Codux popup so you can confirm the startup prompt is running.
 </p>
 
 <p>
@@ -148,14 +148,19 @@
 :CoduxWorkspaceCreate fix-tests --template debug
 :CoduxWorkspaceCreate add-feature --template implementation
 :CoduxWorkspaceCreate review-pr --template review
+:CoduxWorkspaceCreate token-review --custom
 ```
 
 </div>
 
 <p>
   Templates provide task-specific starting instructions for Codex without starting autonomous loops.
+  The guided create preview lets you press <code>&lt;CR&gt;</code> to create, <code>e</code> to edit the instruction for just this workspace, or <code>q</code> to cancel.
+  Custom instructions open in a Vim-like multi-line scratch editor with bottom command hints; use <code>:w</code> to save or <code>:q</code> to cancel.
+  Saved custom instructions become reusable templates named after the workspace and appear in future template lists.
   A newly created template workspace opens Codux visibly for confirmation; regular workspaces keep the hidden startup behavior.
   Built-in templates include <code>implementation</code>, <code>debug</code>, <code>review</code>, <code>planning</code>, and <code>docs</code>.
+  Codux stores the resolved startup instruction with the workspace so future template edits do not change what that workspace was created with.
 </p>
 
 <div align="left">
@@ -173,7 +178,8 @@ require("codux").setup({
 </div>
 
 <p>
-  Use <code>:CoduxWorkspaceTemplateList</code> and <code>:CoduxWorkspaceTemplatePreview &lt;template&gt;</code> to inspect available templates.
+  Use <code>:CoduxTemplateList</code> and <code>:CoduxTemplatePreview &lt;template&gt;</code> to inspect available templates.
+  The older <code>:CoduxWorkspaceTemplateList</code> and <code>:CoduxWorkspaceTemplatePreview</code> commands remain available.
   Workspace and template commands support tab completion.
 </p>
 
@@ -290,9 +296,9 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td><code>:CoduxOpenDanger</code></td>
 </tr>
 <tr>
-<td>Create a named tmux workspace and choose a template</td>
+<td>Create a guided tmux workspace</td>
 <td><code>&lt;leader&gt;zw</code></td>
-<td><code>:CoduxWorkspaceCreate &lt;name&gt;</code></td>
+<td><code>:CoduxWorkspaceCreate</code></td>
 </tr>
 <tr>
 <td>Manage current Codux workspaces</td>
@@ -371,5 +377,5 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <p align="center">
   codux.nvim is focused on persistent, organized Codex context rather than autonomous background loops.
   Future task-run features should be bounded and human-approved, with explicit step limits, token awareness, and pauses before continuing.
-  Custom user-defined template management is also planned, so users can save and reuse their own workspace prompts without editing plugin config.
+  Full reusable template management is also planned, so users can save and reuse their own workspace prompts without editing plugin config.
 </p>
