@@ -2397,7 +2397,7 @@ local function workspace_manager_footer_segments()
     { key = "r", desc = "rename" },
     { key = "d", desc = "delete" },
     { key = "h", desc = "doctor" },
-    { key = "<c-q>", desc = "close dashboard" },
+    { key = "<c-q>", desc = "close" },
   }
 end
 
