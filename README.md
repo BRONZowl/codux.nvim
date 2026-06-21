@@ -97,6 +97,10 @@
   Instead of constantly changing topics within a single AI conversation, you can keep dedicated Codux sessions attached to specific workflows and switch between them instantly with tmux.
 </p>
 
+<p align="center">
+  <img src="assets/codux-workspaces.gif?v=20260621-workspaces" alt="codux.nvim creating and managing named Codex workspaces in tmux" width="900">
+</p>
+
 <p>
   Use <code>:CoduxWorkspace backend-debug</code> or <code>&lt;leader&gt;zw</code> inside tmux to create a named Codex workspace.
   New workspace windows launch in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
