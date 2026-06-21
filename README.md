@@ -184,17 +184,9 @@ require("codux").setup({
   Use <code>:CoduxDoctor</code>, or press <code>h</code> in the workspace dashboard, when troubleshooting external dependencies and saved workspace targets.
 </p>
 
-```text
-codux.nvim doctor
-
-[ok] tmux found: tmux
-[ok] codex found: codex
-[ok] workspace state readable
-[ok] workspace state writable
-[ok] project root detected: /home/bronz/Projects/app
-[ok] 3 workspaces loaded
-[warn] 1 workspace targets missing
-```
+<p align="center">
+  <img src="assets/codux-doctor.png?v=20260621-doctor" alt="codux.nvim doctor output showing tmux, codex, workspace state, project root, loaded workspaces, and missing workspace target checks" width="700">
+</p>
 
 </div>
 
