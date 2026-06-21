@@ -13,6 +13,7 @@
 
 <p align="center">
   Close the window at any time; the Codex session keeps running in the background.
+  Codux helps preserve and organize Codex context so you waste fewer tokens rebuilding prompts.
 </p>
 
 <h2 align="center">Why Codux?</h2>
@@ -102,12 +103,16 @@
 </p>
 
 <p>
-  Use <code>:CoduxWorkspace backend-debug</code> or <code>&lt;leader&gt;zw</code> inside tmux to create a named Codex workspace.
+  Use <code>:CoduxWorkspaceCreate backend-debug</code> or <code>&lt;leader&gt;zw</code> inside tmux to create a named Codex workspace.
+  The <code>&lt;leader&gt;zw</code> flow prompts for a name, then lets you choose <code>none</code> or a workspace template.
   New workspace windows launch in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
 </p>
 
 <p>
-  Inside tmux, Codux creates or reuses a <code>backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts a hidden Codux session using the active permission profile.
+  Inside tmux, Codux creates or reuses a <code>backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts new workspaces with your current Codex permission profile.
+  Reopened saved workspaces keep their stored profile.
+  Template workspaces append the template name to the tmux window, so <code>fix-tests</code> with the <code>debug</code> template opens as <code>fix-tests-debug</code>.
+  New template workspaces open the Codux popup so you can confirm the template prompt is running.
 </p>
 
 <p>
@@ -117,8 +122,8 @@
 
 <p>
   Use <code>:CoduxWorkspaces</code> or <code>&lt;leader&gt;zW</code> to open <code>current codux workspaces</code>.
-  From that window, press <code>&lt;CR&gt;</code> to open a saved workspace, <code>r</code> to rename it, or <code>d</code> to delete it.
-  Statuses show <code>closed</code>, <code>idle</code>, or <code>working</code>.
+  From that window, press <code>&lt;CR&gt;</code> to open a saved workspace, <code>r</code> to rename it, <code>d</code> to delete it, or <code>h</code> to run doctor.
+  Statuses show <code>active</code>, <code>inactive</code>, or <code>missing</code>.
   The target column updates as each workspace moves between files or supported file explorer targets.
 </p>
 
@@ -130,6 +135,58 @@
   Workspace names are user-defined and sanitized for tmux window safety.
   Empty names and sanitized-name collisions are rejected with a clear error.
 </p>
+
+<h3>Workspace Templates</h3>
+
+<p>
+  Create task-specific Codex workspaces with built-in templates:
+</p>
+
+```vim
+:CoduxWorkspaceCreate fix-tests --template debug
+:CoduxWorkspaceCreate add-feature --template implementation
+:CoduxWorkspaceCreate review-pr --template review
+```
+
+<p>
+  Templates provide task-specific starting instructions for Codex without starting autonomous loops.
+  A newly created template workspace opens Codux visibly for confirmation; regular workspaces keep the hidden startup behavior.
+  Built-in templates include <code>implementation</code>, <code>debug</code>, <code>review</code>, <code>planning</code>, and <code>docs</code>.
+</p>
+
+```lua
+require("codux").setup({
+  workspaces = {
+    templates = {
+      release = "You are working in a release workspace. Focus on verification, notes, and final checks.",
+    },
+  },
+})
+```
+
+<p>
+  Use <code>:CoduxWorkspaceTemplateList</code> and <code>:CoduxWorkspaceTemplatePreview &lt;template&gt;</code> to inspect available templates.
+  Workspace and template commands support tab completion.
+</p>
+
+<h3>Workspace Restore and Doctor</h3>
+
+<p>
+  Use <code>:CoduxWorkspaceRestore</code> to reconcile saved workspace state with tmux after restarts.
+  Use <code>:CoduxDoctor</code>, or press <code>h</code> in the workspace dashboard, when troubleshooting external dependencies and saved workspace targets.
+</p>
+
+```text
+codux.nvim doctor
+
+[ok] tmux found: tmux
+[ok] codex found: codex
+[ok] workspace state readable
+[ok] workspace state writable
+[ok] project root detected: /home/bronz/Projects/app
+[ok] 3 workspaces loaded
+[warn] 1 workspace targets missing
+```
 
 </div>
 
@@ -194,7 +251,7 @@ nvim
 Optional:
 
 - which-key.nvim for the `<leader>z` group label
-- tmux for `:CoduxWorkspace <name>`
+- tmux for `:CoduxWorkspaceCreate <name>`
 - Neo-tree, Oil.nvim, nvim-tree, or mini.files for file explorer targets
 
 This plugin was developed using Neo-tree in LazyVim.
@@ -233,9 +290,9 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td><code>:CoduxOpenDanger</code></td>
 </tr>
 <tr>
-<td>Create a named tmux workspace</td>
+<td>Create a named tmux workspace and choose a template</td>
 <td><code>&lt;leader&gt;zw</code></td>
-<td><code>:CoduxWorkspace &lt;name&gt;</code></td>
+<td><code>:CoduxWorkspaceCreate &lt;name&gt;</code></td>
 </tr>
 <tr>
 <td>Manage current Codux workspaces</td>
@@ -282,6 +339,11 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td></td>
 <td><code>:CoduxExit</code></td>
 </tr>
+<tr>
+<td>Troubleshoot Codux setup</td>
+<td><code>h</code> in workspace dashboard</td>
+<td><code>:CoduxDoctor</code></td>
+</tr>
 </table>
 
 <p align="center">
@@ -302,4 +364,11 @@ Codux sends requested files, selections, diagnostics, and health output through 
 
 <p align="center">
   When Codex is actively working and the popup is hidden, Codux shows a small <code>codex is working...</code> indicator near the bottom-right of the editor. The indicator clears when Codex goes idle, is interrupted, or exits.
+</p>
+
+<h2 align="center">Roadmap</h2>
+
+<p align="center">
+  codux.nvim is focused on persistent, organized Codex context rather than autonomous background loops.
+  Future task-run features should be bounded and human-approved, with explicit step limits, token awareness, and pauses before continuing.
 </p>
