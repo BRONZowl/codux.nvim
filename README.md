@@ -376,6 +376,6 @@ Codux sends requested files, selections, diagnostics, and health output through 
 
 <p align="center">
   codux.nvim is focused on persistent, organized Codex context rather than autonomous background loops.
-  Future task-run features should be bounded and human-approved, with explicit step limits, token awareness, and pauses before continuing.
-  Full reusable template management is also planned, so users can save and reuse their own workspace prompts without editing plugin config.
+  Upcoming work will focus on saved template management, including editing, renaming, and deleting reusable workspace prompts.
+  Future task-run features should stay bounded and human-approved, with explicit step limits, visible token awareness, and pauses before continuing.
 </p>
