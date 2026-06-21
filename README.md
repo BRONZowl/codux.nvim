@@ -185,7 +185,7 @@ require("codux").setup({
 </p>
 
 <p align="center">
-  <img src="assets/codux-doctor.png?v=20260621-doctor-simple" alt="codux.nvim doctor output showing tmux, codex, workspace state, project root, loaded workspaces, and missing workspace target checks" width="700">
+  <img src="assets/codux-doctor.png?v=20260621-doctor-full-simple" alt="codux.nvim doctor output showing tmux, codex, workspace state, project root, loaded workspaces, and missing workspace target checks" width="700">
 </p>
 
 </div>
