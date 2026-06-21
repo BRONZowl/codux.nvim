@@ -156,6 +156,7 @@ nvim
 Optional:
 
 - which-key.nvim for the `<leader>z` group label
+- tmux for `:CoduxWorkspace <name>`
 - Neo-tree, Oil.nvim, nvim-tree, or mini.files for file explorer targets
 
 This plugin was developed using Neo-tree in LazyVim.
@@ -192,6 +193,11 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td>Open Codex danger zone with no sandbox</td>
 <td><code>&lt;leader&gt;zA</code></td>
 <td><code>:CoduxOpenDanger</code></td>
+</tr>
+<tr>
+<td>Open a named tmux workspace</td>
+<td><code>&lt;leader&gt;zw</code></td>
+<td><code>:CoduxWorkspace &lt;name&gt;</code></td>
 </tr>
 <tr>
 <td>Send current file or explorer node</td>
@@ -237,6 +243,25 @@ Codux sends requested files, selections, diagnostics, and health output through 
 
 <p align="center">
   <code>:CoduxOpenDanger</code> starts Codex with no approval prompts and no sandbox. Use it only in repositories you trust.
+</p>
+
+<h2 align="center">Custom Codex Workspaces</h2>
+
+<p align="center">
+  Use <code>:CoduxWorkspace backend-debug</code> inside tmux to create or open a named Codex workspace.
+  New workspace windows launch <code>nvim .</code> in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
+</p>
+
+<p align="center">
+  Inside tmux, Codux creates or reuses a <code>codux:backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and opens a fresh Codux popup using the active permission profile.
+</p>
+
+<p align="center">
+  Outside tmux, Codux shows <code>no tmux session running</code> and does not create a workspace.
+</p>
+
+<p align="center">
+  Workspace names are user-defined and sanitized for tmux window safety. Codux does not create predefined workspaces.
 </p>
 
 <p align="center">

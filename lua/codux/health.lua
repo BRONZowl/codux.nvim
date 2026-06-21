@@ -110,6 +110,19 @@ function M.check()
   end
 
   local info = codux.health_info()
+  local workspace_config = info.config and info.config.workspaces
+  if workspace_config ~= false then
+    local tmux = type(workspace_config) == "table" and workspace_config.tmux_cmd or "tmux"
+    if type(tmux) ~= "string" or tmux == "" then
+      tmux = "tmux"
+    end
+    if executable(tmux) then
+      health_ok("tmux executable found: " .. tmux)
+    else
+      health_warn("tmux executable not found: " .. tmux .. " (:CoduxWorkspace requires tmux)")
+    end
+  end
+
   local commands = {
     { label = "default", value = info.config and info.config.codex_cmd },
     { label = "workspace auto", value = info.config and info.config.workspace_auto_cmd },
@@ -146,6 +159,10 @@ function M.check()
   if info.terminal_running then
     health_ok("Codex terminal job is running")
     health_ok("Codex mode: " .. tostring(info.mode or "unknown"))
+    health_ok("Codex permission profile: " .. tostring(info.permission_profile or "default"))
+    if type(info.workspace) == "table" then
+      health_ok("Codux workspace: " .. tostring(info.workspace.name or "unknown"))
+    end
   else
     health_ok("Codex terminal job is not running (starts on demand)")
   end

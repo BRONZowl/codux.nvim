@@ -19,6 +19,11 @@ local defaults = {
     refresh_ms = 60000,
     timeout_ms = 5000,
   },
+  workspaces = {
+    enabled = true,
+    tmux_cmd = vim.env.TMUX_CMD or "tmux",
+    window_prefix = "codux:",
+  },
   mappings = {
     open = "<leader>zc",
     open_auto = "<leader>za",
@@ -27,6 +32,7 @@ local defaults = {
     review_selection = "<leader>zs",
     diagnostics = "<leader>zd",
     diff = "<leader>zg",
+    workspace = "<leader>zw",
     mode = "<leader>zp",
   },
   prompts = {
@@ -69,6 +75,9 @@ local state = {
   },
   terminal_attached_buf = nil,
   terminal_command_tail = "",
+  permission_profile = "default",
+  last_permission_profile = "default",
+  workspace = nil,
   exiting_jobs = {},
   pending_delete_buffers = {},
 }
@@ -83,6 +92,9 @@ local refresh_which_key_header
 local refresh_token_usage
 local start_token_monitor_timer
 local stop_token_monitor_timer
+local current_target
+local git_branch_for
+local git_root_for
 local codux_icon = "󰚩"
 local which_key_header_hooked = false
 
@@ -943,6 +955,27 @@ local function command_executable(command)
   return nil
 end
 
+local function shell_command(command)
+  if type(command) == "string" then
+    return command
+  end
+
+  if type(command) ~= "table" then
+    return tostring(command)
+  end
+
+  local parts = {}
+  for _, part in ipairs(command) do
+    local value = tostring(part)
+    if value:find("%s") or value:find("[\"'\\$`;&|<>]") then
+      value = vim.fn.shellescape(value)
+    end
+    table.insert(parts, value)
+  end
+
+  return table.concat(parts, " ")
+end
+
 local function token_monitor_config()
   if config.token_monitor == false then
     return { enabled = false }
@@ -1330,9 +1363,340 @@ stop_token_monitor_timer = function()
   end
 end
 
-local function start_terminal(focus, initial_prompt, command)
+local function workspace_config()
+  if config.workspaces == false then
+    return { enabled = false }
+  end
+
+  if type(config.workspaces) ~= "table" then
+    return defaults.workspaces
+  end
+
+  return config.workspaces
+end
+
+local function workspaces_enabled()
+  return workspace_config().enabled ~= false
+end
+
+local function tmux_cmd()
+  local value = workspace_config().tmux_cmd
+  if type(value) == "string" and trim(value) ~= "" then
+    return value
+  end
+
+  return defaults.workspaces.tmux_cmd
+end
+
+local function tmux_window_prefix()
+  local value = workspace_config().window_prefix
+  if type(value) == "string" then
+    return value
+  end
+
+  return defaults.workspaces.window_prefix
+end
+
+local function workspace_nvim_cmd()
+  local value = workspace_config().nvim_cmd
+  if type(value) == "string" and trim(value) ~= "" then
+    return value
+  end
+
+  if type(vim.v.progpath) == "string" and vim.v.progpath ~= "" then
+    return vim.v.progpath
+  end
+
+  return "nvim"
+end
+
+local function tmux_system(args)
+  return system(vim.list_extend({ tmux_cmd() }, args))
+end
+
+local function path_directory(path)
+  if type(path) ~= "string" or path == "" then
+    return nil
+  end
+  if path:match("^term://") then
+    return nil
+  end
+
+  if vim.fn.isdirectory(path) == 1 then
+    return path
+  end
+
+  local directory = vim.fn.fnamemodify(path, ":h")
+  if directory ~= "" then
+    return directory
+  end
+
+  return nil
+end
+
+local function workspace_buffer_target(bufnr)
+  if not is_loaded_buf(bufnr) then
+    return nil
+  end
+
+  local ok, path = pcall(vim.api.nvim_buf_get_name, bufnr)
+  if not ok or path_directory(path) == nil then
+    return nil
+  end
+
+  return {
+    path = path,
+    type = vim.fn.isdirectory(path) == 1 and "directory" or "file",
+    source = "buffer",
+  }
+end
+
+local function workspace_fallback_buffer_target()
+  local current = vim.api.nvim_get_current_buf()
+  local alternate = vim.fn.bufnr("#")
+  local alternate_target = workspace_buffer_target(alternate)
+  if alternate_target and alternate ~= current then
+    return alternate_target
+  end
+
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if bufnr ~= current then
+      local target = workspace_buffer_target(bufnr)
+      if target then
+        return target
+      end
+    end
+  end
+
+  return nil
+end
+
+local function workspace_target_context()
+  local target = type(current_target) == "function" and current_target() or nil
+  local path = target and target.path or current_buffer_name()
+  if path_directory(path) == nil then
+    target = workspace_fallback_buffer_target()
+    path = target and target.path or nil
+  end
+  local directory = path_directory(path) or vim.fn.getcwd()
+  local root = nil
+  local branch = ""
+
+  if type(git_root_for) == "function" then
+    root = git_root_for(path or directory)
+  end
+  if type(git_branch_for) == "function" then
+    branch = git_branch_for(path or directory)
+  end
+
+  return {
+    target = target,
+    path = path,
+    directory = directory,
+    root = root or directory,
+    branch = branch,
+  }
+end
+
+local function sanitize_workspace_name(name)
+  local display_name = trim(name)
+  if display_name == "" then
+    return nil, "Workspace name is required"
+  end
+
+  local safe = display_name:lower():gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
+  if safe == "" then
+    return nil, "Workspace name must contain letters, numbers, dots, dashes, or underscores"
+  end
+
+  return display_name, safe
+end
+
+local function current_tmux_session()
+  if type(vim.env.TMUX) ~= "string" or vim.env.TMUX == "" then
+    return nil
+  end
+
+  local output, code = tmux_system({ "display-message", "-p", "#S" })
+  if code ~= 0 then
+    return nil
+  end
+
+  local session = trim(output)
+  if session == "" then
+    return nil
+  end
+
+  return session
+end
+
+local function tmux_window_id(session, window_name)
+  local output, code = tmux_system({ "list-windows", "-t", session, "-F", "#{window_id}\t#{window_name}" })
+  if code ~= 0 then
+    return nil
+  end
+
+  for line in output:gmatch("[^\r\n]+") do
+    local id, name = line:match("^([^\t]+)\t(.+)$")
+    if name == window_name then
+      return id
+    end
+  end
+
+  return nil
+end
+
+local function shell_env_assignment(name, value)
+  return name .. "=" .. vim.fn.shellescape(tostring(value or ""))
+end
+
+local function lua_string(value)
+  return string.format("%q", tostring(value or ""))
+end
+
+local function workspace_permission_profile()
   if terminal_running() then
-    if focus then
+    return state.permission_profile or "default"
+  end
+
+  return state.last_permission_profile or "default"
+end
+
+local function workspace_bootstrap_lua(workspace)
+  local root = workspace.project_root or "."
+  local target_path = workspace.target_path or ""
+  local target_type = workspace.target_type or ""
+  local profile = workspace.permission_profile or "default"
+
+  return table.concat({
+    "local root=" .. lua_string(root),
+    "local target=" .. lua_string(target_path),
+    "local target_type=" .. lua_string(target_type),
+    "local profile=" .. lua_string(profile),
+    "vim.defer_fn(function()",
+    "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
+    "local target_win=vim.api.nvim_get_current_win()",
+    "if vim.fn.exists(':Neotree')==2 then",
+    "local tree_dir=(target_type=='directory' and target~='' and target) or root",
+    "local cmd='Neotree source=filesystem action=show position=left dir='..vim.fn.fnameescape(tree_dir)",
+    "if target~='' and target_type~='directory' then cmd=cmd..' reveal_file='..vim.fn.fnameescape(target)..' reveal_force_cwd' end",
+    "pcall(vim.cmd,cmd)",
+    "end",
+    "if target~='' and target_type~='directory' then if vim.api.nvim_win_is_valid(target_win) then pcall(vim.api.nvim_set_current_win,target_win) else pcall(vim.cmd,'edit '..vim.fn.fnameescape(target)) end end",
+    "vim.defer_fn(function()",
+    "local function open_hidden(fallback)",
+    "local ok,codux=pcall(require,'codux')",
+    "if ok and type(codux[fallback])=='function' then codux[fallback]() end",
+    "end",
+    "if profile=='auto' then open_hidden('open_workspace_auto_hidden') elseif profile=='danger' then open_hidden('open_danger_full_access_hidden') else open_hidden('open_hidden') end",
+    "end,300)",
+    "end,300)",
+  }, " ")
+end
+
+local function workspace_nvim_command(workspace)
+  local env = {
+    shell_env_assignment("CODEX_CMD", shell_command(config.codex_cmd)),
+    shell_env_assignment("CODEX_WORKSPACE_AUTO_CMD", shell_command(config.workspace_auto_cmd)),
+    shell_env_assignment("CODEX_DANGER_FULL_ACCESS_CMD", shell_command(config.danger_full_access_cmd)),
+  }
+  local nvim_target = "."
+  if
+    workspace.target_type ~= "directory"
+    and type(workspace.target_path) == "string"
+    and workspace.target_path ~= ""
+  then
+    nvim_target = workspace.target_path
+  end
+
+  local parts = {
+    "cd",
+    vim.fn.shellescape(workspace.project_root or "."),
+    "&&",
+    "env",
+    table.concat(env, " "),
+    vim.fn.shellescape(workspace_nvim_cmd()),
+    vim.fn.shellescape(nvim_target),
+    "-c",
+    vim.fn.shellescape("lua " .. workspace_bootstrap_lua(workspace)),
+  }
+
+  return table.concat(parts, " ")
+end
+
+local function ensure_tmux_window(session, root, window_name, command)
+  local existing = tmux_window_id(session, window_name)
+  if existing then
+    return existing, false
+  end
+
+  local args = { "new-window", "-d", "-t", session .. ":", "-n", window_name, "-c", root }
+  if type(command) == "string" and command ~= "" then
+    table.insert(args, command)
+  end
+
+  local _, code = tmux_system(args)
+  if code ~= 0 then
+    return nil, false
+  end
+
+  return tmux_window_id(session, window_name), true
+end
+
+local function switch_tmux_window(window_id)
+  local _, code = tmux_system({ "select-window", "-t", window_id })
+  return code == 0
+end
+
+local function prepare_workspace(name)
+  if not workspaces_enabled() then
+    return nil, "Codux workspaces are disabled"
+  end
+
+  if vim.fn.executable(tmux_cmd()) ~= 1 then
+    return nil, "tmux not found on PATH"
+  end
+
+  local display_name, safe_name_or_error = sanitize_workspace_name(name)
+  if not display_name then
+    return nil, safe_name_or_error
+  end
+
+  local context = workspace_target_context()
+  local root = context.root
+  local window_name = tmux_window_prefix() .. safe_name_or_error
+  local session = current_tmux_session()
+  if not session then
+    return nil, "no tmux session running"
+  end
+
+  local workspace = {
+    name = display_name,
+    safe_name = safe_name_or_error,
+    project_root = root,
+    target_path = context.path,
+    target_type = context.target and context.target.type or nil,
+    git_branch = context.branch,
+    session = session,
+    window_name = window_name,
+    permission_profile = workspace_permission_profile(),
+  }
+
+  local window_id = ensure_tmux_window(session, root, window_name, workspace_nvim_command(workspace))
+  if not window_id then
+    return nil, "Failed to create tmux window " .. window_name
+  end
+
+  workspace.window_id = window_id
+  return workspace
+end
+
+local function start_terminal(focus, initial_prompt, command, workspace, permission_profile, opts)
+  opts = opts or {}
+  local hidden = opts.hidden == true
+
+  if terminal_running() then
+    if focus and not hidden then
       focus_window()
     end
     return true
@@ -1352,32 +1716,38 @@ local function start_terminal(focus, initial_prompt, command)
   end
 
   local previous_win = vim.api.nvim_get_current_win()
-  if not open_window(true) then
-    return false
-  end
-
-  if not valid_win() then
-    notify("Codux popup is not attached to a valid buffer", vim.log.levels.ERROR)
-    return false
-  end
-
-  local current_win_ok, current_win = pcall(vim.api.nvim_get_current_win)
-  if not current_win_ok or current_win ~= state.win then
-    local set_ok = pcall(vim.api.nvim_set_current_win, state.win)
-    if not set_ok then
-      state.win = nil
+  if hidden then
+    if not ensure_buffer() then
       return false
+    end
+  else
+    if not open_window(true) then
+      return false
+    end
+
+    if not valid_win() then
+      notify("Codux popup is not attached to a valid buffer", vim.log.levels.ERROR)
+      return false
+    end
+
+    local current_win_ok, current_win = pcall(vim.api.nvim_get_current_win)
+    if not current_win_ok or current_win ~= state.win then
+      local set_ok = pcall(vim.api.nvim_set_current_win, state.win)
+      if not set_ok then
+        state.win = nil
+        return false
+      end
+    end
+
+    if window_buffer(state.win) ~= state.buf then
+      state.win = nil
+      return start_terminal(focus, initial_prompt, command, workspace, permission_profile, opts)
     end
   end
 
-  if window_buffer(state.win) ~= state.buf then
-    state.win = nil
-    return start_terminal(focus, initial_prompt)
-  end
-
   local job_id
-  local term_ok
-  term_ok, job_id = pcall(vim.fn.termopen, command_with_prompt(command, initial_prompt), {
+  local term_command = command_with_prompt(command, initial_prompt)
+  local term_options = {
     on_exit = function(_, code)
       local expected_exit = state.exiting_jobs[job_id] == true
       local pending_delete_buffer = state.pending_delete_buffers[job_id]
@@ -1385,6 +1755,8 @@ local function start_terminal(focus, initial_prompt, command)
       state.pending_delete_buffers[job_id] = nil
       if state.job_id == job_id then
         state.job_id = nil
+        state.permission_profile = "default"
+        state.workspace = nil
         if type(stop_token_monitor_timer) == "function" then
           stop_token_monitor_timer()
         end
@@ -1398,7 +1770,16 @@ local function start_terminal(focus, initial_prompt, command)
         delete_buffer_deferred(pending_delete_buffer)
       end
     end,
-  })
+  }
+
+  local term_ok
+  if hidden then
+    term_ok, job_id = pcall(vim.api.nvim_buf_call, state.buf, function()
+      return vim.fn.termopen(term_command, term_options)
+    end)
+  else
+    term_ok, job_id = pcall(vim.fn.termopen, term_command, term_options)
+  end
 
   if not term_ok or type(job_id) ~= "number" or job_id <= 0 then
     state.job_id = nil
@@ -1410,13 +1791,20 @@ local function start_terminal(focus, initial_prompt, command)
   end
 
   state.job_id = job_id
+  state.permission_profile = permission_profile or "default"
+  state.last_permission_profile = state.permission_profile
+  state.workspace = workspace
   set_mode("execute")
   if type(start_token_monitor_timer) == "function" then
     start_token_monitor_timer()
   end
   set_codex_working(type(initial_prompt) == "string" and initial_prompt ~= "")
 
-  if focus then
+  if hidden then
+    if is_valid_win(previous_win) then
+      pcall(vim.api.nvim_set_current_win, previous_win)
+    end
+  elseif focus then
     pcall(vim.cmd, "startinsert")
   elseif is_valid_win(previous_win) then
     pcall(vim.api.nvim_set_current_win, previous_win)
@@ -1435,7 +1823,7 @@ local function ensure_codex(focus, initial_prompt)
     return false
   end
 
-  return start_terminal(focus, initial_prompt)
+  return start_terminal(focus, initial_prompt, nil, nil, "default")
 end
 
 function M.open(opts)
@@ -1453,22 +1841,72 @@ function M.open(opts)
     focus_window()
   end
 
-  return start_terminal(focus)
+  return start_terminal(focus, nil, nil, nil, "default")
 end
 
-local function restart_with_command(command, focus)
+local function restart_with_command(command, focus, permission_profile)
   M.exit()
-  return start_terminal(focus ~= false, nil, command)
+  return start_terminal(focus ~= false, nil, command, nil, permission_profile)
+end
+
+local function start_hidden_with_command(command, permission_profile)
+  return start_terminal(false, nil, command, nil, permission_profile, { hidden = true })
 end
 
 function M.open_workspace_auto()
   notify("Starting Codex autopilot with approve-for-me permissions")
-  return restart_with_command(config.workspace_auto_cmd, true)
+  return restart_with_command(config.workspace_auto_cmd, true, "auto")
 end
 
 function M.open_danger_full_access()
   notify("Starting Codex with no approvals and no sandbox", vim.log.levels.WARN)
-  return restart_with_command(config.danger_full_access_cmd, true)
+  return restart_with_command(config.danger_full_access_cmd, true, "danger")
+end
+
+function M.open_hidden()
+  return start_hidden_with_command(config.codex_cmd, "default")
+end
+
+function M.open_workspace_auto_hidden()
+  return start_hidden_with_command(config.workspace_auto_cmd, "auto")
+end
+
+function M.open_danger_full_access_hidden()
+  return start_hidden_with_command(config.danger_full_access_cmd, "danger")
+end
+
+function M.open_workspace(name)
+  local workspace, error_message = prepare_workspace(name)
+  if not workspace then
+    notify(error_message or "Failed to prepare Codux workspace", vim.log.levels.ERROR)
+    return false
+  end
+
+  if not switch_tmux_window(workspace.window_id) then
+    notify("Failed to switch to Codux workspace " .. workspace.name, vim.log.levels.ERROR)
+    return false
+  end
+
+  local branch = workspace.git_branch ~= "" and " on " .. workspace.git_branch or ""
+  notify("Opened Codux workspace " .. workspace.name .. branch)
+  return true
+end
+
+function M.open_workspace_prompt()
+  if not current_tmux_session() then
+    notify("no tmux session running", vim.log.levels.ERROR)
+    return false
+  end
+
+  vim.ui.input({ prompt = "Codux workspace: " }, function(input)
+    local name = trim(input)
+    if name == "" then
+      return
+    end
+
+    M.open_workspace(name)
+  end)
+  return true
 end
 
 function M.close()
@@ -1506,6 +1944,8 @@ function M.exit()
     pcall(vim.fn.jobstop, job_id)
   end
   state.job_id = nil
+  state.permission_profile = "default"
+  state.workspace = nil
   if type(stop_token_monitor_timer) == "function" then
     stop_token_monitor_timer()
   end
@@ -1691,7 +2131,7 @@ local function current_buffer_target()
   }, "buffer")
 end
 
-local function current_target()
+current_target = function()
   local providers = type(config.target_providers) == "table" and config.target_providers or {}
   for _, provider in ipairs(providers) do
     if type(provider) == "function" then
@@ -1716,7 +2156,7 @@ local function target_label(target)
   return "file"
 end
 
-local function git_branch_for(path)
+git_branch_for = function(path)
   local cwd = path
   if path and vim.fn.isdirectory(path) ~= 1 then
     cwd = vim.fn.fnamemodify(path, ":h")
@@ -1734,7 +2174,7 @@ local function git_branch_for(path)
   return trim(output)
 end
 
-local function git_root_for(path)
+git_root_for = function(path)
   local cwd = path
   if cwd and cwd ~= "" and vim.fn.isdirectory(cwd) ~= 1 then
     cwd = vim.fn.fnamemodify(cwd, ":h")
@@ -2236,6 +2676,8 @@ function M.health_info()
     terminal_buffer = valid_buf() and state.buf or nil,
     terminal_job_id = state.job_id,
     mode = state.mode,
+    permission_profile = state.permission_profile,
+    last_permission_profile = state.last_permission_profile,
     codex_working = state.codex_working,
     working_indicator_visible = is_valid_win(state.working_win),
     token_usage = {
@@ -2244,6 +2686,7 @@ function M.health_info()
       in_flight = state.token_usage.in_flight,
       last_error = state.token_usage.last_error,
     },
+    workspace = state.workspace,
   }
 end
 
@@ -2263,6 +2706,10 @@ local function create_commands()
   vim.api.nvim_create_user_command("CoduxOpenDanger", function()
     M.open_danger_full_access()
   end, { force = true, desc = "Open Codex danger zone with no sandbox" })
+
+  vim.api.nvim_create_user_command("CoduxWorkspace", function(opts)
+    M.open_workspace(opts.args)
+  end, { force = true, nargs = 1, desc = "Open a named Codux tmux workspace" })
 
   vim.api.nvim_create_user_command("CoduxToggle", function()
     M.toggle()
@@ -2403,6 +2850,7 @@ local function codux_menu_marker(value)
     "send selection to codex",
     "send diagnostics to codex",
     "send git diff to codex",
+    "open codux workspace",
     "switch to execute mode",
     "switch to plan mode",
   }
@@ -2656,6 +3104,7 @@ local function register_which_key_group(mappings)
     { lhs = mappings.review_selection, desc = "send selection to codex" },
     { lhs = mappings.diagnostics, desc = "send diagnostics to codex" },
     { lhs = mappings.diff, desc = "send git diff to codex" },
+    { lhs = mappings.workspace, desc = "open codux workspace" },
   }
   if mode_action_desc() then
     table.insert(normal_entries, { lhs = mappings.mode, desc = mode_action_desc() })
@@ -2740,6 +3189,7 @@ function M.setup(opts)
   set_mapping("v", mappings.review_selection, M.send_selection, "send selection to codex")
   set_mapping("n", mappings.diagnostics, M.send_diagnostics, "send diagnostics to codex")
   set_mapping("n", mappings.diff, M.send_git_diff, "send git diff to codex")
+  set_mapping("n", mappings.workspace, M.open_workspace_prompt, "open codux workspace")
   if mode_action_desc() then
     set_mapping("n", mappings.mode, M.toggle_plan_mode, mode_action_desc())
   end
