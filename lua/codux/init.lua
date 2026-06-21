@@ -11,6 +11,7 @@ local defaults = {
     width = 0.85,
     height = 0.85,
     border = "rounded",
+    lock_focus = true,
   },
   working_idle_ms = 3000,
   health_timeout_ms = 10000,
@@ -78,6 +79,9 @@ local state = {
   permission_profile = "default",
   last_permission_profile = "default",
   workspace = nil,
+  closing_popup = false,
+  focus_lock_pending = false,
+  focus_lock_autocmd = nil,
   exiting_jobs = {},
   pending_delete_buffers = {},
 }
@@ -480,6 +484,35 @@ local function popup_config()
   }
 end
 
+local function popup_focus_lock_enabled()
+  local popup = config.popup or {}
+  return popup.lock_focus ~= false
+end
+
+local function schedule_popup_focus_lock()
+  if state.closing_popup or state.focus_lock_pending then
+    return
+  end
+  if not popup_focus_lock_enabled() or not valid_win() then
+    return
+  end
+
+  state.focus_lock_pending = true
+  vim.schedule(function()
+    state.focus_lock_pending = false
+    if state.closing_popup or not popup_focus_lock_enabled() or not valid_win() then
+      return
+    end
+
+    local current_ok, current_win = pcall(vim.api.nvim_get_current_win)
+    if current_ok and current_win == state.win then
+      return
+    end
+
+    focus_window()
+  end)
+end
+
 local working_frames = {
   " codex is working    ",
   " codex is working.   ",
@@ -873,6 +906,7 @@ local function open_window(focus)
   end
 
   state.win = win
+  state.closing_popup = false
   close_working_indicator()
   pcall(vim.api.nvim_set_option_value, "number", false, { win = state.win })
   pcall(vim.api.nvim_set_option_value, "relativenumber", false, { win = state.win })
@@ -880,6 +914,10 @@ local function open_window(focus)
   pcall(vim.api.nvim_set_option_value, "winfixbuf", true, { win = state.win })
 
   local win_id = state.win
+  if state.focus_lock_autocmd then
+    pcall(vim.api.nvim_del_autocmd, state.focus_lock_autocmd)
+    state.focus_lock_autocmd = nil
+  end
   vim.api.nvim_create_autocmd("WinClosed", {
     group = augroup,
     pattern = tostring(win_id),
@@ -887,7 +925,19 @@ local function open_window(focus)
     callback = function()
       if state.win == win_id then
         state.win = nil
+        if state.focus_lock_autocmd then
+          pcall(vim.api.nvim_del_autocmd, state.focus_lock_autocmd)
+          state.focus_lock_autocmd = nil
+        end
         update_working_indicator()
+      end
+    end,
+  })
+  state.focus_lock_autocmd = vim.api.nvim_create_autocmd("WinLeave", {
+    group = augroup,
+    callback = function()
+      if state.win == win_id then
+        schedule_popup_focus_lock()
       end
     end,
   })
@@ -1911,8 +1961,10 @@ end
 
 function M.close()
   if valid_win() then
+    state.closing_popup = true
     pcall(vim.api.nvim_win_close, state.win, true)
     state.win = nil
+    state.closing_popup = false
     update_working_indicator()
     if type(refresh_which_key) == "function" then
       refresh_which_key()
