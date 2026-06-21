@@ -142,17 +142,23 @@
   Create task-specific Codex workspaces with built-in templates:
 </p>
 
+<div align="left">
+
 ```vim
 :CoduxWorkspaceCreate fix-tests --template debug
 :CoduxWorkspaceCreate add-feature --template implementation
 :CoduxWorkspaceCreate review-pr --template review
 ```
 
+</div>
+
 <p>
   Templates provide task-specific starting instructions for Codex without starting autonomous loops.
   A newly created template workspace opens Codux visibly for confirmation; regular workspaces keep the hidden startup behavior.
   Built-in templates include <code>implementation</code>, <code>debug</code>, <code>review</code>, <code>planning</code>, and <code>docs</code>.
 </p>
+
+<div align="left">
 
 ```lua
 require("codux").setup({
@@ -163,6 +169,8 @@ require("codux").setup({
   },
 })
 ```
+
+</div>
 
 <p>
   Use <code>:CoduxWorkspaceTemplateList</code> and <code>:CoduxWorkspaceTemplatePreview &lt;template&gt;</code> to inspect available templates.
@@ -176,6 +184,8 @@ require("codux").setup({
   Use <code>:CoduxDoctor</code>, or press <code>h</code> in the workspace dashboard, when troubleshooting external dependencies and saved workspace targets.
 </p>
 
+<div align="center">
+
 ```text
 codux.nvim doctor
 
@@ -187,6 +197,8 @@ codux.nvim doctor
 [ok] 3 workspaces loaded
 [warn] 1 workspace targets missing
 ```
+
+</div>
 
 </div>
 
@@ -371,4 +383,5 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <p align="center">
   codux.nvim is focused on persistent, organized Codex context rather than autonomous background loops.
   Future task-run features should be bounded and human-approved, with explicit step limits, token awareness, and pauses before continuing.
+  Custom user-defined template management is also planned, so users can save and reuse their own workspace prompts without editing plugin config.
 </p>
