@@ -119,6 +119,9 @@ local function set_mode(mode)
   end
 
   state.mode = mode
+  if type(refresh_which_key) == "function" then
+    refresh_which_key()
+  end
   if type(refresh_which_key_header) == "function" then
     refresh_which_key_header()
   end
@@ -2442,6 +2445,16 @@ function M.open_danger_full_access_hidden()
   return start_hidden_with_command(config.danger_full_access_cmd, "danger")
 end
 
+function M.open_workspace_auto_hidden_with_notice()
+  notify("Starting Codex autopilot with approve-for-me permissions")
+  return M.open_workspace_auto_hidden()
+end
+
+function M.open_danger_full_access_hidden_with_notice()
+  notify("Starting Codex with no approvals and no sandbox", vim.log.levels.WARN)
+  return M.open_danger_full_access_hidden()
+end
+
 function M.open_workspace(name)
   local workspace, error_message = prepare_workspace(name)
   if not workspace then
@@ -3876,8 +3889,8 @@ function M.setup(opts)
   local mappings = type(config.mappings) == "table" and config.mappings or {}
   refresh_which_key()
   set_mapping("n", mappings.open, M.open, "open codex")
-  set_mapping("n", mappings.open_auto, M.open_workspace_auto, "codex autopilot")
-  set_mapping("n", mappings.open_danger, M.open_danger_full_access, "codex danger zone")
+  set_mapping("n", mappings.open_auto, M.open_workspace_auto_hidden_with_notice, "codex autopilot")
+  set_mapping("n", mappings.open_danger, M.open_danger_full_access_hidden_with_notice, "codex danger zone")
   set_mapping("n", mappings.review_file, M.send_file_review, "send file/folder to codex")
   set_mapping("n", mappings.review_selection, M.send_selection, "send selection to codex")
   set_mapping("v", mappings.review_selection, M.send_selection, "send selection to codex")
