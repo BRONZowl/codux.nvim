@@ -155,7 +155,7 @@
 
 <p>
   Templates provide task-specific starting instructions for Codex without starting autonomous loops.
-  The template picker supports <code>&lt;CR&gt;</code> to select, <code>d</code> to delete the highlighted template, or <code>q</code> to cancel.
+  The template picker includes a separate search bar and supports <code>&lt;CR&gt;</code> to select, <code>&lt;C-e&gt;</code> to edit a saved template, <code>&lt;C-d&gt;</code> to delete the highlighted template, or <code>&lt;C-q&gt;</code> to cancel.
   The guided create preview lets you press <code>&lt;CR&gt;</code> to create, <code>e</code> to edit the instruction for just this workspace, or <code>q</code> to cancel.
   Custom instructions open in a Vim-like multi-line scratch editor with bottom command hints; use <code>:w</code> to save or <code>:q</code> to cancel.
   Saved custom instructions become reusable templates named after the workspace and appear in future template lists.

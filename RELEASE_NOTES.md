@@ -13,3 +13,5 @@ Guided workspace creation with custom template prompts.
 - Added shorter template commands: `:CoduxTemplateList` and `:CoduxTemplatePreview <template>`.
 - Added template removal from the workspace template picker and `:CoduxTemplateDelete <template>`.
 - Stopped appending template names to new workspace tmux window names.
+- Restored search filtering in the workspace template picker.
+- Added saved-template editing from the workspace template picker.
