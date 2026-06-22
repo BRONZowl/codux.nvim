@@ -2386,7 +2386,9 @@ local function workspace_manager_config(line_count)
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local width = math.min(58, math.max(38, math.floor(total_width * 0.45)))
-  local height = math.min(12, math.max(5, line_count or 1))
+  local max_height = math.max(1, total_height - 2)
+  local min_height = math.min(5, max_height)
+  local height = math.min(max_height, math.max(min_height, line_count or 1))
 
   return {
     relative = "editor",
@@ -2651,6 +2653,7 @@ render_workspace_manager = function()
     end
   end
 
+  table.insert(lines, "")
   local footer_line = math.max(1, workspace_manager_window_height() or (#lines + 1))
   while #lines < footer_line do
     table.insert(lines, "")
@@ -4361,7 +4364,7 @@ function M.open_workspaces()
   state.workspace_manager_project_root = workspace_manager_project_root()
   M.restore_workspaces({ project_root = state.workspace_manager_project_root, silent = true })
   local preview_entries = workspace_entries_for_project(state.workspace_manager_project_root)
-  local line_count = math.max(1, #preview_entries)
+  local line_count = 1 + math.max(1, #preview_entries) + 1
   pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
   pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspaces", { buf = bufnr })
   pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })

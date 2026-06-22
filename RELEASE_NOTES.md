@@ -15,3 +15,4 @@ Guided workspace creation with custom template prompts.
 - Stopped appending template names to new workspace tmux window names.
 - Restored search filtering in the workspace template picker.
 - Added saved-template editing from the workspace template picker.
+- Expanded the current workspaces window so larger saved workspace lists are visible when the editor has room.
