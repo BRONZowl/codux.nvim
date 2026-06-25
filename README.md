@@ -2,7 +2,11 @@
   ⭐ If codux.nvim helps your workflow, consider starring the repo — it helps other Neovim users discover it.
 </p>
 
-<h1 align="center">codux.nvim</h1>
+<br>
+
+<h1 align="center">
+  <strong><code>codux.nvim</code></strong>
+</h1>
 
 <h2 align="center">What is Codux?</h2>
 
