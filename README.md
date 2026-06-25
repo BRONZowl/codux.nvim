@@ -139,7 +139,7 @@
 <h3>Workspace Templates</h3>
 
 <p>
-  Create task-specific Codex workspaces with built-in templates:
+  New workspaces default to custom instructions, and explicit templates remain available for repeatable task-specific starts:
 </p>
 
 <div align="left">
@@ -378,6 +378,6 @@ Codux sends requested files, selections, diagnostics, and health output through 
 
 <p align="center">
   codux.nvim is focused on persistent, organized Codex context rather than autonomous background loops.
-  Upcoming work will focus on saved template management, including editing, renaming, and deleting reusable workspace prompts.
+  Upcoming work will focus on remaining saved template management, including renaming reusable workspace prompts.
   Future task-run features should stay bounded and human-approved, with explicit step limits, visible token awareness, and pauses before continuing.
 </p>
