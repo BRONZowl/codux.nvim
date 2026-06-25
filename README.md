@@ -104,7 +104,7 @@
 
 <p>
   Use <code>:CoduxWorkspaceCreate</code> or <code>&lt;leader&gt;zw</code> inside tmux to create a guided Codex workspace.
-  The create flow prompts for a name, lets you choose <code>none</code>, a workspace template, or <code>custom</code>, then previews the instruction before launch.
+  The create flow prompts for a name, opens the Vim-like instruction editor, then previews the instruction before launch.
   New workspace windows launch in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
 </p>
 
@@ -145,17 +145,17 @@
 <div align="left">
 
 ```vim
+:CoduxWorkspaceCreate token-review
 :CoduxWorkspaceCreate fix-tests --template debug
 :CoduxWorkspaceCreate add-feature --template implementation
 :CoduxWorkspaceCreate review-pr --template review
-:CoduxWorkspaceCreate token-review --custom
 ```
 
 </div>
 
 <p>
   Templates provide task-specific starting instructions for Codex without starting autonomous loops.
-  The template picker includes a separate search bar and supports <code>&lt;CR&gt;</code> to select, <code>&lt;C-e&gt;</code> to edit a saved template, <code>&lt;C-d&gt;</code> to delete the highlighted template, or <code>&lt;C-q&gt;</code> to cancel.
+  New workspaces default to custom instructions; pass <code>--template &lt;template&gt;</code> to create a workspace from a built-in, configured, or saved template.
   The guided create preview lets you press <code>&lt;CR&gt;</code> to create, <code>e</code> to edit the instruction for just this workspace, or <code>q</code> to cancel.
   Custom instructions open in a Vim-like multi-line scratch editor with bottom command hints; use <code>:w</code> to save or <code>:q</code> to cancel.
   Saved custom instructions become reusable templates named after the workspace and appear in future template lists.
