@@ -4,9 +4,9 @@
 
 <br>
 
-<h1 align="center">
-  <strong><code>codux.nvim</code></strong>
-</h1>
+<p align="center">
+  <img src="assets/codux-title.svg" alt="codux.nvim" width="900">
+</p>
 
 <h2 align="center">What is Codux?</h2>
 

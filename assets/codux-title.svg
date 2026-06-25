@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="170" viewBox="0 0 1200 170" role="img" aria-labelledby="title">
+  <title id="title">codux.nvim</title>
+  <style>
+    .title {
+      fill: #24292f;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 118px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .title {
+        fill: #f0f6fc;
+      }
+    }
+  </style>
+  <text class="title" x="600" y="118" text-anchor="middle">codux.nvim</text>
+</svg>
