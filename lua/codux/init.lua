@@ -2534,6 +2534,7 @@ local function workspace_manager_footer_segments()
   return {
     { key = "enter", desc = "open" },
     { key = "r", desc = "rename" },
+    { key = "e", desc = "edit" },
     { key = "d", desc = "delete" },
     { key = "h", desc = "doctor" },
     { key = "<c-q>", desc = "close" },
@@ -4427,6 +4428,48 @@ function M.open_workspaces()
       rename_saved_workspace(item, new_name)
     end)
   end, { buffer = bufnr, silent = true, desc = "Rename Codux Workspace" })
+  pcall(vim.keymap.set, "n", "e", function()
+    local item = selected_or_notify()
+    if not item then
+      return false
+    end
+
+    local template_name = type(item.template) == "string" and trim(item.template) or ""
+    if template_name == "" then
+      notify("Codux workspace has no template to edit", vim.log.levels.WARN)
+      return false
+    end
+    if M._v5.template_source(template_name) ~= "saved" then
+      notify("Codux workspace template is not editable: " .. template_name, vim.log.levels.WARN)
+      return false
+    end
+
+    local instruction = M._v5.template_instruction(template_name)
+    if type(instruction) ~= "string" or trim(instruction) == "" then
+      notify("unknown workspace template: " .. template_name, vim.log.levels.ERROR)
+      return false
+    end
+
+    close_workspace_manager()
+    return M._v5.open_workspace_instruction_editor({
+      name = item.name,
+      template = template_name,
+      template_edit = true,
+      resolved_instruction = instruction,
+    }, {
+      on_cancel = M.open_workspaces,
+      on_save = function(request)
+        local ok, error_message = M._v5.save_existing_template(template_name, request.resolved_instruction)
+        if not ok then
+          notify(error_message or "Failed to save Codux workspace template", vim.log.levels.ERROR)
+          return M.open_workspaces()
+        end
+
+        notify("Saved Codux workspace template " .. template_name)
+        return M.open_workspaces()
+      end,
+    })
+  end, { buffer = bufnr, silent = true, desc = "Edit Codux Workspace Template" })
   pcall(vim.keymap.set, "n", "d", function()
     local item = selected_or_notify()
     if not item then
