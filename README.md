@@ -7,6 +7,10 @@
 </p>
 
 <p align="center">
+  ⭐ If codux.nvim helps your workflow, consider starring the repo — it helps other Neovim users discover it.
+</p>
+
+<p align="center">
   Unlike chat-style AI plugins, Codux keeps you connected to a real Codex CLI session.<br>
   Send files, visual selections, diagnostics, Git diffs, and file explorer targets directly from Neovim without leaving your editor.
 </p>
