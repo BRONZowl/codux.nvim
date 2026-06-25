@@ -1,13 +1,13 @@
+<p align="center">
+  ⭐ If codux.nvim helps your workflow, consider starring the repo — it helps other Neovim users discover it.
+</p>
+
 <h1 align="center">codux.nvim</h1>
 
 <h2 align="center">What is Codux?</h2>
 
 <p align="center">
   Codux is a Neovim plugin that runs OpenAI Codex inside a persistent floating terminal.
-</p>
-
-<p align="center">
-  ⭐ If codux.nvim helps your workflow, consider starring the repo — it helps other Neovim users discover it.
 </p>
 
 <p align="center">
