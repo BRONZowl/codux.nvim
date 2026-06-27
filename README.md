@@ -133,7 +133,7 @@
   Codux opens a <code>Codux workspace:</code> search field above the dashboard; type a fuzzy workspace name to filter the dashboard and preview the closest match.
   Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>&lt;CR&gt;</code> to open, <code>r</code> to rename, <code>e</code> to edit a saved template, <code>d</code> to delete, and <code>h</code> to run doctor.
   Press <code>s</code> from the dashboard to search again, or <code>&lt;C-q&gt;</code> to close the dashboard and search field.
-  Statuses show <code>active</code>, <code>inactive</code>, or <code>missing</code>.
+  Statuses show <code>active</code> when Codex is working, <code>question</code> when plan mode is waiting on your answer, <code>idle</code> when the workspace is open, or <code>inactive</code> when it is not open.
   The target column updates as each workspace moves between files or supported file explorer targets.
 </p>
 

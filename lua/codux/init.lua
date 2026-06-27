@@ -66,6 +66,7 @@ local state = {
   working_frame = 1,
   codex_working = false,
   last_working_activity = 0,
+  last_prompt_line = nil,
   token_usage = {
     five_hour_percent = nil,
     weekly_percent = nil,
@@ -146,6 +147,14 @@ local function set_mode(mode)
   end
 
   state.mode = mode
+  if
+    mode ~= "plan"
+    and type(M._sync_workspace_activity) == "function"
+    and state.workspace
+    and state.workspace.codex_status == "question"
+  then
+    M._sync_workspace_activity("idle")
+  end
   if type(refresh_which_key) == "function" then
     refresh_which_key()
   end
@@ -156,6 +165,23 @@ end
 
 local function trim(value)
   return (value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+function M._v5.output_looks_like_question(lines, first_index)
+  if type(lines) ~= "table" then
+    return false
+  end
+
+  first_index = math.max(1, tonumber(first_index) or 1)
+  local start_index = math.max(first_index, #lines - 79)
+  for index = #lines, start_index, -1 do
+    local line = trim(tostring(lines[index] or ""):gsub("\27%[[0-?]*[ -/]*[@-~]", ""):gsub("\r", ""))
+    if line ~= "" and line:match("%?[%]%)}\"'`%s]*$") then
+      return true
+    end
+  end
+
+  return false
 end
 
 local function system(args, input)
@@ -300,7 +326,8 @@ local function terminal_running()
     if type(stop_token_monitor_timer) == "function" then
       stop_token_monitor_timer()
     end
-    set_codex_working(false)
+    state.last_prompt_line = nil
+    set_codex_working(false, { force_idle = true })
     set_mode("not running")
     return false
   end
@@ -312,7 +339,8 @@ local function terminal_running()
     if type(stop_token_monitor_timer) == "function" then
       stop_token_monitor_timer()
     end
-    set_codex_working(false)
+    state.last_prompt_line = nil
+    set_codex_working(false, { force_idle = true })
     set_mode("not running")
     return false
   end
@@ -324,7 +352,8 @@ local function terminal_running()
     if type(stop_token_monitor_timer) == "function" then
       stop_token_monitor_timer()
     end
-    set_codex_working(false)
+    state.last_prompt_line = nil
+    set_codex_working(false, { force_idle = true })
     set_mode("not running")
     return false
   end
@@ -338,7 +367,8 @@ local function terminal_running()
   if type(stop_token_monitor_timer) == "function" then
     stop_token_monitor_timer()
   end
-  set_codex_working(false)
+  state.last_prompt_line = nil
+  set_codex_working(false, { force_idle = true })
   set_mode("not running")
   return false
 end
@@ -772,7 +802,7 @@ local function start_working_idle_timer()
     end
 
     if not terminal_running() then
-      set_codex_working(false)
+      set_codex_working(false, { force_idle = true })
       return
     end
 
@@ -785,10 +815,36 @@ local function start_working_idle_timer()
   end))
 end
 
-set_codex_working = function(working)
+function M._v5.mark_terminal_prompt_submission()
+  if not valid_buf() then
+    state.last_prompt_line = nil
+    return
+  end
+
+  state.last_prompt_line = vim.api.nvim_buf_line_count(state.buf)
+end
+
+function M._v5.plan_question_pending()
+  if state.mode ~= "plan" or not valid_buf() or type(state.last_prompt_line) ~= "number" then
+    return false
+  end
+
+  local line_count = vim.api.nvim_buf_line_count(state.buf)
+  local start_line = math.max(0, math.min(state.last_prompt_line, line_count))
+  local lines = buffer_lines(state.buf, start_line, line_count)
+  return M._v5.output_looks_like_question(lines)
+end
+
+set_codex_working = function(working, opts)
+  opts = opts or {}
+  local was_working = state.codex_working == true
   state.codex_working = working == true
   if not state.codex_working then
-    M._sync_workspace_activity("idle")
+    local codex_status = "idle"
+    if was_working and opts.force_idle ~= true and M._v5.plan_question_pending() then
+      codex_status = "question"
+    end
+    M._sync_workspace_activity(codex_status)
     state.last_working_activity = 0
     stop_working_idle_timer()
     close_working_indicator()
@@ -945,6 +1001,7 @@ local function submit_terminal_prompt()
     if state.terminal_command_tail == "/plan" then
       toggle_mode_state()
     else
+      M._v5.mark_terminal_prompt_submission()
       set_codex_working(true)
     end
     reset_terminal_command_tail()
@@ -959,7 +1016,7 @@ local function interrupt_terminal_prompt()
     return false
   end
 
-  set_codex_working(false)
+  set_codex_working(false, { force_idle = true })
   reset_terminal_command_tail()
   local send_ok, sent = pcall(vim.fn.chansend, state.job_id, "\3")
   return send_ok and sent ~= 0
@@ -1042,7 +1099,8 @@ local function ensure_buffer()
       if state.buf == bufnr then
         state.buf = nil
         state.job_id = nil
-        set_codex_working(false)
+        state.last_prompt_line = nil
+        set_codex_working(false, { force_idle = true })
         set_mode("not running")
       end
     end,
@@ -2037,6 +2095,22 @@ function M._v5.status_for_window(window_id)
   return "inactive"
 end
 
+function M._v5.dashboard_workspace_status(record, window_id)
+  local window_status = M._v5.status_for_window(window_id)
+  if window_status ~= "active" then
+    return "inactive"
+  end
+
+  record = type(record) == "table" and record or {}
+  if record.codex_status == "working" then
+    return "active"
+  end
+  if record.codex_status == "question" then
+    return "question"
+  end
+  return "idle"
+end
+
 function M._v5.tmux_target(session, window_name)
   if type(session) ~= "string" or session == "" or type(window_name) ~= "string" or window_name == "" then
     return nil
@@ -2089,9 +2163,14 @@ function M._v5.normalize_record(record, safe_name, root)
   local project_root = type(record.project_root) == "string" and record.project_root ~= "" and record.project_root or root
   local window_name = M._v5.workspace_window_name(safe_name, record.template)
   local status = record.status
-  if status ~= "active" and status ~= "inactive" and status ~= "missing" then
-    status = "missing"
+  if status == "missing" then
+    status = "inactive"
+  elseif status ~= "active" and status ~= "question" and status ~= "idle" and status ~= "inactive" then
+    status = "inactive"
   end
+  local codex_status = record.codex_status == "working" and "working"
+    or record.codex_status == "question" and "question"
+    or "idle"
 
   return {
     name = name,
@@ -2107,7 +2186,7 @@ function M._v5.normalize_record(record, safe_name, root)
     resolved_instruction = record.resolved_instruction,
     permission_profile = record.permission_profile or "default",
     status = status,
-    codex_status = record.codex_status or "idle",
+    codex_status = codex_status,
     created_at = record.created_at,
     last_opened_at = record.last_opened_at,
     last_activity_at = record.last_activity_at,
@@ -2268,7 +2347,7 @@ local function workspace_from_state(record, fallback)
     resolved_instruction = record.resolved_instruction or fallback.resolved_instruction,
     permission_profile = record.permission_profile or fallback.permission_profile or "default",
     codex_status = record.codex_status or fallback.codex_status or "idle",
-    status = record.status or fallback.status or "missing",
+    status = record.status or fallback.status or "inactive",
     created_at = record.created_at or fallback.created_at,
   }
 end
@@ -2290,7 +2369,7 @@ local function workspace_state_record(workspace, existing)
     custom_instruction = workspace.custom_instruction,
     resolved_instruction = workspace.resolved_instruction,
     permission_profile = workspace.permission_profile or "default",
-    status = workspace.status or existing.status or "active",
+    status = workspace.status or existing.status or "idle",
     codex_status = workspace.codex_status or existing.codex_status or "idle",
     created_at = existing.created_at or workspace.created_at or now,
     last_opened_at = now,
@@ -2299,7 +2378,7 @@ local function workspace_state_record(workspace, existing)
 end
 
 M._sync_workspace_activity = function(codex_status)
-  if codex_status ~= "working" and codex_status ~= "idle" then
+  if codex_status ~= "working" and codex_status ~= "question" and codex_status ~= "idle" then
     return false
   end
   if type(state.workspace) ~= "table" then
@@ -2310,10 +2389,6 @@ M._sync_workspace_activity = function(codex_status)
   local safe_name = state.workspace.safe_name
   if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
     return false
-  end
-
-  if state.workspace.codex_status == codex_status then
-    return true
   end
 
   local state_data, state_error = read_workspace_state()
@@ -2328,13 +2403,17 @@ M._sync_workspace_activity = function(codex_status)
     return false
   end
 
-  if record.codex_status == codex_status then
+  local workspace_status = codex_status == "working" and "active"
+    or codex_status == "question" and "question"
+    or "idle"
+  if record.codex_status == codex_status and record.status == workspace_status then
     state.workspace.codex_status = codex_status
+    state.workspace.status = workspace_status
     return true
   end
 
   record.codex_status = codex_status
-  record.status = "active"
+  record.status = workspace_status
   record.last_activity_at = workspace_timestamp()
   project.updated_at = record.last_activity_at
 
@@ -2344,7 +2423,7 @@ M._sync_workspace_activity = function(codex_status)
   end
 
   state.workspace.codex_status = codex_status
-  state.workspace.status = "active"
+  state.workspace.status = record.status
   if state.workspace_manager_project_root == root and type(render_workspace_manager) == "function" then
     render_workspace_manager()
   end
@@ -2370,7 +2449,7 @@ local function workspace_entries_for_project(root)
     if type(record) == "table" then
       local window_name = record.tmux_window or record.window_name or safe_name
       local window_id = session and tmux_window_id(session, window_name) or nil
-      local status = M._v5.status_for_window(window_id)
+      local status = M._v5.dashboard_workspace_status(record, window_id)
       table.insert(entries, {
         name = record.name or safe_name,
         safe_name = record.safe_name or safe_name,
@@ -2381,6 +2460,7 @@ local function workspace_entries_for_project(root)
         window_name = window_name,
         tmux_target = M._v5.tmux_target(session, window_name) or record.tmux_target,
         template = record.template,
+        codex_status = record.codex_status or "idle",
         window_id = window_id,
         status = status,
       })
@@ -2442,8 +2522,9 @@ function M._v5.reconcile_project(root)
   local summary = {
     total = 0,
     active = 0,
+    question = 0,
+    idle = 0,
     inactive = 0,
-    missing = 0,
     changed = 0,
   }
 
@@ -2469,19 +2550,25 @@ function M._v5.reconcile_project(root)
       summary.total = summary.total + 1
       local window_name = record.tmux_window or record.window_name or safe_name
       local window_id = session and tmux_window_id(session, window_name) or nil
-      local status = M._v5.status_for_window(window_id)
+      local status = M._v5.dashboard_workspace_status(record, window_id)
       if status == "active" then
         summary.active = summary.active + 1
-      elseif status == "inactive" then
-        summary.inactive = summary.inactive + 1
+      elseif status == "question" then
+        summary.question = summary.question + 1
+      elseif status == "idle" then
+        summary.idle = summary.idle + 1
       else
-        summary.missing = summary.missing + 1
+        summary.inactive = summary.inactive + 1
       end
 
-      if record.status ~= status then
+      local stale_activity = status == "inactive" and (record.codex_status == "working" or record.codex_status == "question")
+      if record.status ~= status or stale_activity then
         summary.changed = summary.changed + 1
       end
       record.status = status
+      if status == "inactive" then
+        record.codex_status = "idle"
+      end
       record.tmux_window = window_name
       record.tmux_target = M._v5.tmux_target(session, window_name) or record.tmux_target
       record.last_reconciled_at = reconciled_at
@@ -2654,7 +2741,7 @@ local function workspace_manager_column_widths()
 end
 
 local function workspace_manager_line(entry)
-  local status = entry.status or "missing"
+  local status = entry.status or "inactive"
   local target = type(entry.target_path) == "string" and entry.target_path ~= "" and vim.fn.fnamemodify(entry.target_path, ":t") or ""
   local name_width, target_width = workspace_manager_column_widths()
 
@@ -3209,7 +3296,7 @@ local function rename_saved_workspace(entry, new_name)
   existing.safe_name = safe_name_or_error
   existing.tmux_window = new_window_name
   existing.tmux_target = M._v5.tmux_target(current_tmux_session(), new_window_name) or existing.tmux_target
-  existing.status = M._v5.status_for_window(entry.window_id)
+  existing.status = M._v5.dashboard_workspace_status(existing, entry.window_id)
   existing.last_opened_at = workspace_timestamp()
   project.workspaces[safe_name_or_error] = existing
   project.updated_at = workspace_timestamp()
@@ -3266,11 +3353,12 @@ local function workspace_bootstrap_lua(workspace)
   local safe_name = workspace.safe_name or ""
   local branch = workspace.git_branch or ""
   local window_name = workspace.window_name or ""
-  local codex_status = workspace.codex_status or "idle"
   local template = workspace.template or ""
   local custom_instruction = workspace.custom_instruction or ""
   local resolved_instruction = workspace.resolved_instruction or ""
   local initial_prompt = workspace.initial_prompt or ""
+  local codex_status = initial_prompt ~= "" and "working" or "idle"
+  local status = initial_prompt ~= "" and "active" or "idle"
   local show_codux = initial_prompt ~= ""
 
   return table.concat({
@@ -3280,7 +3368,7 @@ local function workspace_bootstrap_lua(workspace)
     "local profile=" .. lua_string(profile),
     "local prompt=" .. lua_string(initial_prompt),
     "local show_codux=" .. tostring(show_codux),
-    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",template=" .. lua_string(template) .. ",custom_instruction=" .. lua_string(custom_instruction) .. ",resolved_instruction=" .. lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. lua_string(codex_status) .. ",status='active'}",
+    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",template=" .. lua_string(template) .. ",custom_instruction=" .. lua_string(custom_instruction) .. ",resolved_instruction=" .. lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. lua_string(codex_status) .. ",status=" .. lua_string(status) .. "}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
@@ -3420,7 +3508,7 @@ local function prepare_workspace(name, opts)
     resolved_instruction = resolved_instruction,
     permission_profile = workspace_permission_profile(),
     codex_status = "idle",
-    status = "active",
+    status = "idle",
   }
   local workspace = workspace_from_state(existing, fallback)
   if type(template) == "string" and template ~= "" then
@@ -3453,9 +3541,19 @@ local function prepare_workspace(name, opts)
   end
 
   workspace.window_id = window_id
-  workspace.status = M._v5.status_for_window(window_id)
+  if created and not workspace.initial_prompt then
+    workspace.codex_status = "idle"
+  end
+  workspace.status = M._v5.dashboard_workspace_status(workspace, window_id)
   if created and workspace.initial_prompt then
     workspace.status = "active"
+    workspace.codex_status = "working"
+  elseif workspace.status ~= "active" then
+    if workspace.status == "question" then
+      workspace.codex_status = "question"
+    else
+      workspace.codex_status = "idle"
+    end
   end
   workspace.initial_prompt = nil
   project.workspaces[workspace.safe_name] = workspace_state_record(workspace, existing)
@@ -3466,7 +3564,7 @@ local function prepare_workspace(name, opts)
     return nil, write_error
   end
 
-  return workspace
+  return workspace, nil
 end
 
 function M._v5.parse_create_args(args)
@@ -3577,13 +3675,14 @@ local function start_terminal(focus, initial_prompt, command, workspace, permiss
         state.job_id = nil
         state.permission_profile = "default"
         M._sync_workspace_activity("idle")
+        state.last_prompt_line = nil
         state.workspace = nil
         state.workspace_target_signature = nil
         state.workspace_target_update_pending = false
         if type(stop_token_monitor_timer) == "function" then
           stop_token_monitor_timer()
         end
-        set_codex_working(false)
+        set_codex_working(false, { force_idle = true })
         set_mode("not running")
       end
       if not expected_exit and code ~= 0 then
@@ -3614,6 +3713,7 @@ local function start_terminal(focus, initial_prompt, command, workspace, permiss
   end
 
   state.job_id = job_id
+  state.last_prompt_line = nil
   state.permission_profile = permission_profile or "default"
   state.last_permission_profile = state.permission_profile
   if workspace ~= nil then
@@ -3819,10 +3919,12 @@ function M.restore_workspaces(opts)
         .. " total, "
         .. tostring(summary.active)
         .. " active, "
+        .. tostring(summary.question)
+        .. " question, "
+        .. tostring(summary.idle)
+        .. " idle, "
         .. tostring(summary.inactive)
-        .. " inactive, "
-        .. tostring(summary.missing)
-        .. " missing"
+        .. " inactive"
     )
   end
 
@@ -4617,13 +4719,14 @@ function M.exit()
   state.job_id = nil
   state.permission_profile = "default"
   M._sync_workspace_activity("idle")
+  state.last_prompt_line = nil
   state.workspace = nil
   state.workspace_target_signature = nil
   state.workspace_target_update_pending = false
   if type(stop_token_monitor_timer) == "function" then
     stop_token_monitor_timer()
   end
-  set_codex_working(false)
+  set_codex_working(false, { force_idle = true })
   set_mode("not running")
 
   if valid_win() then
@@ -4635,7 +4738,7 @@ function M.exit()
   if not running and is_valid_buf(bufnr) then
     delete_buffer_deferred(bufnr)
   end
-  set_codex_working(false)
+  set_codex_working(false, { force_idle = true })
 
   return true
 end
@@ -4666,6 +4769,7 @@ local function send_to_codex(message)
     return false
   end
 
+  M._v5.mark_terminal_prompt_submission()
   set_codex_working(true)
   return true
 end
@@ -5544,16 +5648,16 @@ function M.doctor()
     add("[warn]", "dashboard target resolution failed: " .. entries_error)
   else
     add("[ok]", "dashboard can resolve targets")
-    local missing = 0
+    local inactive = 0
     for _, entry in ipairs(entries) do
-      if entry.status == "missing" then
-        missing = missing + 1
+      if entry.status == "inactive" then
+        inactive = inactive + 1
       end
     end
-    if missing > 0 then
-      add("[warn]", tostring(missing) .. " workspace targets missing")
+    if inactive > 0 then
+      add("[warn]", tostring(inactive) .. " workspace windows inactive")
     else
-      add("[ok]", "no workspace targets missing")
+      add("[ok]", "no workspace windows inactive")
     end
   end
 
