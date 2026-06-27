@@ -166,8 +166,8 @@
 <p>
   Templates provide task-specific starting instructions for Codex without starting autonomous loops.
   New workspaces default to custom instructions; pass <code>--template &lt;template&gt;</code> to create a workspace from a built-in, configured, or saved template.
-  The guided create preview lets you press <code>&lt;CR&gt;</code> to create, <code>e</code> to edit the instruction for just this workspace, or <code>q</code> to cancel.
-  Custom instructions open in a Vim-like multi-line scratch editor with bottom command hints; use <code>:w</code> to save or <code>:q</code> to cancel.
+  The guided create preview lets you press <code>&lt;CR&gt;</code> to create, <code>e</code> to edit the instruction for just this workspace, or <code>&lt;C-q&gt;</code> to cancel.
+  Custom instructions open in a Vim-like multi-line scratch editor with bottom command hints; use <code>:w</code> to save or <code>&lt;C-q&gt;</code> to cancel.
   Saved custom instructions become reusable templates named after the workspace and appear in future template lists.
   A newly created template workspace opens Codux visibly for confirmation; regular workspaces keep the hidden startup behavior.
   Built-in templates include <code>implementation</code>, <code>debug</code>, <code>review</code>, <code>planning</code>, and <code>docs</code>.
@@ -346,6 +346,11 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td>Hide the popup</td>
 <td><code>&lt;C-q&gt;</code></td>
 <td><code>:CoduxClose</code></td>
+</tr>
+<tr>
+<td>Close Codux dashboards and prompts</td>
+<td><code>&lt;C-q&gt;</code></td>
+<td></td>
 </tr>
 <tr>
 <td>Start typing after scrolling</td>

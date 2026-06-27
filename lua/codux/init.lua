@@ -411,6 +411,27 @@ local function terminal_prompt_key(input)
   end
 end
 
+function M._v5.set_buffer_keymap(bufnr, modes, lhs, rhs, desc, opts)
+  opts = type(opts) == "table" and opts or {}
+  return pcall(vim.keymap.set, modes, lhs, rhs, {
+    buffer = bufnr,
+    nowait = opts.nowait == true,
+    silent = opts.silent ~= false,
+    desc = desc,
+  })
+end
+
+function M._v5.bind_close_keys(bufnr, close_fn, desc, modes, opts)
+  modes = modes or "n"
+  M._v5.set_buffer_keymap(bufnr, modes, "<C-q>", close_fn, desc, opts)
+  if opts and opts.escape then
+    M._v5.set_buffer_keymap(bufnr, modes, "<Esc>", close_fn, desc, opts)
+  end
+  if opts and opts.q then
+    M._v5.set_buffer_keymap(bufnr, modes, "q", close_fn, desc, opts)
+  end
+end
+
 local function printable_prompt_keys()
   local keys = { { "<Space>", " " } }
 
@@ -464,6 +485,127 @@ local function printable_prompt_keys()
   table.insert(keys, { "<lt>", "<" })
 
   return keys
+end
+
+function M._v5.single_line_prompt(opts, callback)
+  opts = type(opts) == "table" and opts or {}
+  callback = type(callback) == "function" and callback or function() end
+  local prompt = tostring(opts.prompt or "")
+  local value = tostring(opts.default or "")
+  local total_width = math.max(1, vim.o.columns)
+  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local prompt_width_ok, prompt_width = pcall(vim.fn.strdisplaywidth, prompt)
+  prompt_width = prompt_width_ok and type(prompt_width) == "number" and prompt_width or #prompt
+  local min_width = math.max(24, prompt_width + 12)
+  local width = math.min(58, math.max(min_width, math.floor(total_width * 0.38)))
+  local closed = false
+  local bufnr
+  local win
+
+  local function render()
+    if not is_loaded_buf(bufnr) then
+      return false
+    end
+
+    pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = bufnr })
+    pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, { value .. " " })
+    pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+    if is_valid_win(win) then
+      pcall(vim.api.nvim_win_set_cursor, win, { 1, math.min(#value, math.max(0, width - 1)) })
+    end
+    return true
+  end
+
+  local function close_prompt(result)
+    if closed then
+      return false
+    end
+    closed = true
+    if is_valid_win(win) then
+      pcall(vim.api.nvim_win_close, win, true)
+    end
+    if is_loaded_buf(bufnr) then
+      pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    end
+    callback(result)
+    return true
+  end
+
+  local buf_ok, created_bufnr = pcall(vim.api.nvim_create_buf, false, true)
+  if not buf_ok or not is_loaded_buf(created_bufnr) then
+    notify("Failed to create Codux prompt", vim.log.levels.ERROR)
+    return false
+  end
+  bufnr = created_bufnr
+
+  pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "buftype", "nofile", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "filetype", opts.filetype or "codux-prompt", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "swapfile", false, { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+
+  local win_ok, created_win = pcall(vim.api.nvim_open_win, bufnr, true, {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = " " .. prompt,
+    title_pos = "center",
+    width = width,
+    height = 1,
+    col = math.max(0, math.floor((total_width - width) / 2)),
+    row = math.max(0, math.floor((total_height - 1) / 2) - 2),
+    zindex = opts.zindex or 60,
+  })
+  if not win_ok then
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    notify("Failed to open Codux prompt", vim.log.levels.ERROR)
+    return false
+  end
+  win = created_win
+
+  pcall(vim.api.nvim_set_option_value, "number", false, { win = win })
+  pcall(vim.api.nvim_set_option_value, "relativenumber", false, { win = win })
+  pcall(vim.api.nvim_set_option_value, "signcolumn", "no", { win = win })
+  pcall(vim.api.nvim_set_option_value, "winfixbuf", true, { win = win })
+  pcall(vim.api.nvim_set_option_value, "winhighlight", "FloatBorder:WhichKey,FloatTitle:WhichKey", { win = win })
+
+  M._v5.bind_close_keys(bufnr, function()
+    return close_prompt(nil)
+  end, "Cancel Codux Prompt", "n", { escape = true })
+  M._v5.set_buffer_keymap(bufnr, "n", "<CR>", function()
+    return close_prompt(value)
+  end, "Submit Codux Prompt")
+  M._v5.set_buffer_keymap(bufnr, "n", "<BS>", function()
+    local length = vim.fn.strchars(value)
+    if length > 0 then
+      value = vim.fn.strcharpart(value, 0, length - 1)
+      return render()
+    end
+    return true
+  end, "Delete Codux Prompt Character", { nowait = true })
+  M._v5.set_buffer_keymap(bufnr, "n", "<C-h>", function()
+    local length = vim.fn.strchars(value)
+    if length > 0 then
+      value = vim.fn.strcharpart(value, 0, length - 1)
+      return render()
+    end
+    return true
+  end, "Delete Codux Prompt Character", { nowait = true })
+  M._v5.set_buffer_keymap(bufnr, "n", "<C-u>", function()
+    value = ""
+    return render()
+  end, "Clear Codux Prompt", { nowait = true })
+  for _, key in ipairs(printable_prompt_keys()) do
+    local lhs = key[1]
+    local input = key[2]
+    M._v5.set_buffer_keymap(bufnr, "n", lhs, function()
+      value = value .. input
+      return render()
+    end, "Type in Codux Prompt", { nowait = true })
+  end
+
+  render()
+  return true
 end
 
 local function focus_window()
@@ -838,7 +980,7 @@ local function ensure_buffer()
   pcall(vim.api.nvim_set_option_value, "bufhidden", "hide", { buf = bufnr })
   pcall(vim.api.nvim_set_option_value, "filetype", "codux", { buf = bufnr })
   pcall(vim.api.nvim_buf_set_name, bufnr, "codux://codex")
-  pcall(vim.keymap.set, { "n", "t" }, "<C-q>", M.close, { buffer = bufnr, silent = true, desc = "Hide Codux Popup" })
+  M._v5.set_buffer_keymap(bufnr, { "n", "t" }, "<C-q>", M.close, "Hide Codux Popup")
   pcall(vim.keymap.set, "t", "<CR>", submit_terminal_prompt, {
     buffer = bufnr,
     nowait = true,
@@ -888,7 +1030,7 @@ local function ensure_buffer()
       desc = "Type in Codux Prompt",
     })
   end
-  pcall(vim.keymap.set, "n", "q", M.close, { buffer = bufnr, silent = true, desc = "Hide Codux Popup" })
+  M._v5.set_buffer_keymap(bufnr, "n", "q", M.close, "Hide Codux Popup")
 
   pcall(vim.api.nvim_create_autocmd, { "BufUnload", "BufDelete", "BufWipeout" }, {
     group = augroup,
@@ -2925,16 +3067,7 @@ function M._v5.open_workspace_manager_search_input()
     end,
   })
 
-  pcall(vim.keymap.set, "n", "<C-q>", close_workspace_manager, {
-    buffer = bufnr,
-    silent = true,
-    desc = "Close Codux Workspaces",
-  })
-  pcall(vim.keymap.set, "n", "<Esc>", close_workspace_manager, {
-    buffer = bufnr,
-    silent = true,
-    desc = "Close Codux Workspaces",
-  })
+  M._v5.bind_close_keys(bufnr, close_workspace_manager, "Close Codux Workspaces", "n", { escape = true })
   pcall(vim.keymap.set, "n", "<CR>", function()
     if not state.workspace_manager_best_match_index then
       notify("No Codux workspace selected", vim.log.levels.WARN)
@@ -3756,7 +3889,7 @@ function M._v5.workspace_create_footer_segments()
   return {
     { key = "enter", desc = "create" },
     { key = "e", desc = "edit instruction" },
-    { key = "q", desc = "cancel" },
+    { key = "<c-q>", desc = "cancel" },
   }
 end
 
@@ -3865,7 +3998,7 @@ end
 function M._v5.workspace_instruction_footer_segments()
   return {
     { key = ":w", desc = "save" },
-    { key = ":q", desc = "cancel" },
+    { key = "<c-q>", desc = "cancel" },
   }
 end
 
@@ -4097,8 +4230,7 @@ function M._v5.open_workspace_instruction_editor(request, opts)
 
   pcall(vim.keymap.set, "n", "<C-s>", save_editor, { buffer = bufnr, silent = true, desc = "Save Codux Workspace Instruction" })
   pcall(vim.keymap.set, "i", "<C-s>", save_editor, { buffer = bufnr, silent = true, desc = "Save Codux Workspace Instruction" })
-  pcall(vim.keymap.set, "n", "<C-q>", cancel_editor, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Instruction" })
-  pcall(vim.keymap.set, "i", "<C-q>", cancel_editor, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Instruction" })
+  M._v5.bind_close_keys(bufnr, cancel_editor, "Cancel Codux Workspace Instruction", { "n", "i" })
   pcall(vim.cmd, "startinsert")
   return true
 end
@@ -4161,9 +4293,7 @@ function M._v5.open_workspace_create_preview(request)
 
   pcall(vim.keymap.set, "n", "<CR>", create_workspace_from_preview, { buffer = bufnr, silent = true, desc = "Create Codux Workspace" })
   pcall(vim.keymap.set, "n", "e", edit_instruction_from_preview, { buffer = bufnr, silent = true, desc = "Edit Codux Workspace Instruction" })
-  pcall(vim.keymap.set, "n", "q", close_preview, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Create" })
-  pcall(vim.keymap.set, "n", "<Esc>", close_preview, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Create" })
-  pcall(vim.keymap.set, "n", "<C-q>", close_preview, { buffer = bufnr, silent = true, desc = "Cancel Codux Workspace Create" })
+  M._v5.bind_close_keys(bufnr, close_preview, "Cancel Codux Workspace Create", "n", { escape = true, q = true })
   return true
 end
 
@@ -4186,7 +4316,7 @@ function M.open_workspace_prompt()
     return false
   end
 
-  vim.ui.input({ prompt = "Codux workspace: " }, function(input)
+  M._v5.single_line_prompt({ prompt = "Codux workspace: " }, function(input)
     local name = trim(input)
     if name == "" then
       return
@@ -4259,7 +4389,7 @@ function M.open_workspaces()
     if not item then
       return false
     end
-    vim.ui.input({ prompt = "Rename Codux workspace: ", default = item.name }, function(input)
+    M._v5.single_line_prompt({ prompt = "Rename Codux workspace: ", default = item.name }, function(input)
       local new_name = trim(input)
       if new_name == "" then
         return
@@ -4322,9 +4452,7 @@ function M.open_workspaces()
     end
   end
 
-  pcall(vim.keymap.set, "n", "q", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
-  pcall(vim.keymap.set, "n", "<Esc>", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
-  pcall(vim.keymap.set, "n", "<C-q>", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
+  M._v5.bind_close_keys(bufnr, close_workspace_manager, "Close Codux Workspaces", "n", { escape = true, q = true })
   pcall(vim.keymap.set, "n", "<leader>z", function()
     close_workspace_manager()
     vim.schedule(function()
