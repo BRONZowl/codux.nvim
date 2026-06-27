@@ -2623,7 +2623,8 @@ end
 local function workspace_manager_config(line_count)
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
-  local width = math.min(58, math.max(38, math.floor(total_width * 0.45)))
+  local max_width = math.max(1, total_width - 4)
+  local width = math.min(max_width, math.max(80, math.min(88, math.floor(total_width * 0.75))))
   local max_height = math.max(1, total_height - 2)
   local min_height = math.min(5, max_height)
   local height = math.min(max_height, math.max(min_height, line_count or 1))
@@ -2856,6 +2857,7 @@ local function workspace_manager_footer_segments()
     { key = "enter", desc = "open" },
     { key = "r", desc = "rename" },
     { key = "e", desc = "edit" },
+    { key = "x", desc = "close" },
     { key = "d", desc = "delete" },
     { key = "h", desc = "doctor" },
     { key = "<c-q>", desc = "close" },
@@ -3341,6 +3343,48 @@ local function delete_saved_workspace(entry)
   notify("Deleted Codux workspace " .. entry.name)
   close_workspace_manager()
   kill_tmux_window_deferred(entry.window_id, entry.window_name)
+  return true
+end
+
+function M._v5.close_saved_workspace_window(entry)
+  local root = entry.project_root or state.workspace_manager_project_root
+  local state_data, state_error = read_workspace_state()
+  if state_error then
+    notify(state_error, vim.log.levels.ERROR)
+    return false
+  end
+
+  local project = workspace_project_state(state_data, root)
+  local existing = project.workspaces[entry.safe_name]
+  if type(existing) ~= "table" then
+    notify("workspace not found", vim.log.levels.ERROR)
+    render_workspace_manager()
+    return false
+  end
+
+  local session = current_tmux_session()
+  local window_name = existing.tmux_window or existing.window_name or entry.window_name or entry.safe_name
+  local window_id = entry.window_id or (session and tmux_window_id(session, window_name)) or nil
+  if window_id and not kill_tmux_window(window_id) then
+    notify("Failed to close tmux window " .. tostring(window_name), vim.log.levels.ERROR)
+    return false
+  end
+
+  existing.status = "inactive"
+  existing.codex_status = "idle"
+  existing.tmux_window = window_name
+  existing.tmux_target = nil
+  existing.last_reconciled_at = workspace_timestamp()
+  project.updated_at = existing.last_reconciled_at
+
+  local write_ok, write_error = write_workspace_state(state_data)
+  if not write_ok then
+    notify(write_error, vim.log.levels.ERROR)
+    return false
+  end
+
+  notify("Closed Codux workspace " .. tostring(existing.name or entry.name or entry.safe_name))
+  render_workspace_manager()
   return true
 end
 
@@ -4580,6 +4624,14 @@ function M.open_workspaces()
     end
   end
 
+  local function close_selected_workspace_window()
+    local item = selected_or_notify()
+    if not item then
+      return false
+    end
+    return M._v5.close_saved_workspace_window(item)
+  end
+
   local function open_codux_menu()
     close_workspace_manager()
     vim.schedule(function()
@@ -4616,6 +4668,11 @@ function M.open_workspaces()
       buffer = target_bufnr,
       silent = true,
       desc = "Edit Codux Workspace Template",
+    })
+    pcall(vim.keymap.set, "n", "x", close_selected_workspace_window, {
+      buffer = target_bufnr,
+      silent = true,
+      desc = "Close Codux Workspace Window",
     })
     pcall(vim.keymap.set, "n", "d", delete_selected_workspace, {
       buffer = target_bufnr,
