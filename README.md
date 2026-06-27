@@ -103,7 +103,7 @@
 </p>
 
 <p>
-  Instead of constantly changing topics within a single AI conversation, you can keep dedicated Codux sessions attached to specific workflows and switch between them instantly with tmux.
+  Instead of constantly changing topics within a single AI conversation, you can keep dedicated Codux sessions attached to specific workflows and switch between them instantly from the workspace dashboard.
 </p>
 
 <p align="center">
