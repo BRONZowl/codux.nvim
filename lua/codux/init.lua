@@ -87,9 +87,12 @@ local state = {
   workspace_manager_footer_win = nil,
   workspace_manager_search_buf = nil,
   workspace_manager_search_win = nil,
+  workspace_manager_command_buf = nil,
+  workspace_manager_command_win = nil,
   workspace_manager_items = {},
   workspace_manager_query = "",
   workspace_manager_best_match_index = nil,
+  workspace_manager_selected_index = nil,
   workspace_manager_focus_match = false,
   workspace_manager_search_confirmed = false,
   workspace_manager_project_root = nil,
@@ -2558,6 +2561,7 @@ local function close_workspace_manager()
     ["codux-workspaces"] = true,
     ["codux-workspaces-footer"] = true,
     ["codux-workspaces-search"] = true,
+    ["codux-workspaces-command"] = true,
   }
 
   for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -2579,9 +2583,12 @@ local function close_workspace_manager()
   state.workspace_manager_footer_buf = nil
   state.workspace_manager_search_win = nil
   state.workspace_manager_search_buf = nil
+  state.workspace_manager_command_win = nil
+  state.workspace_manager_command_buf = nil
   state.workspace_manager_items = {}
   state.workspace_manager_query = ""
   state.workspace_manager_best_match_index = nil
+  state.workspace_manager_selected_index = nil
   state.workspace_manager_focus_match = false
   state.workspace_manager_search_confirmed = false
   state.workspace_manager_project_root = nil
@@ -2906,15 +2913,26 @@ render_workspace_manager = function()
   )
   if state.workspace_manager_best_match_index then
     local best_row = 2 + state.workspace_manager_best_match_index - 1
-    pcall(
-      vim.api.nvim_buf_add_highlight,
+    local match_highlight = state.workspace_manager_search_confirmed and "IncSearch" or "Visual"
+    local full_line_ok = pcall(
+      vim.api.nvim_buf_set_extmark,
       state.workspace_manager_buf,
       state.workspace_manager_ns,
-      state.workspace_manager_search_confirmed and "IncSearch" or "Visual",
       best_row - 1,
       0,
-      -1
+      { line_hl_group = match_highlight }
     )
+    if not full_line_ok then
+      pcall(
+        vim.api.nvim_buf_add_highlight,
+        state.workspace_manager_buf,
+        state.workspace_manager_ns,
+        match_highlight,
+        best_row - 1,
+        0,
+        -1
+      )
+    end
   end
   pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = state.workspace_manager_buf })
   if state.workspace_manager_focus_match and is_valid_win(state.workspace_manager_win) then
@@ -2932,6 +2950,10 @@ end
 local function selected_workspace_manager_item()
   if not is_valid_win(state.workspace_manager_win) then
     return nil
+  end
+
+  if state.workspace_manager_search_confirmed and state.workspace_manager_selected_index then
+    return state.workspace_manager_items[state.workspace_manager_selected_index]
   end
 
   local ok, cursor = pcall(vim.api.nvim_win_get_cursor, state.workspace_manager_win)
@@ -2970,6 +2992,7 @@ end
 
 function M._v5.update_workspace_manager_query(query)
   state.workspace_manager_query = tostring(query or "")
+  state.workspace_manager_selected_index = nil
   state.workspace_manager_focus_match = true
   state.workspace_manager_search_confirmed = false
   render_workspace_manager()
@@ -3075,9 +3098,12 @@ function M._v5.open_workspace_manager_search_input()
     end
 
     state.workspace_manager_search_confirmed = true
-    state.workspace_manager_focus_match = true
+    state.workspace_manager_selected_index = state.workspace_manager_best_match_index
+    state.workspace_manager_focus_match = false
     render_workspace_manager()
-    if is_valid_win(state.workspace_manager_win) then
+    if is_valid_win(state.workspace_manager_command_win) then
+      pcall(vim.api.nvim_set_current_win, state.workspace_manager_command_win)
+    elseif is_valid_win(state.workspace_manager_win) then
       pcall(vim.api.nvim_set_current_win, state.workspace_manager_win)
     end
     return true
@@ -4452,27 +4478,92 @@ function M.open_workspaces()
     end
   end
 
-  M._v5.bind_close_keys(bufnr, close_workspace_manager, "Close Codux Workspaces", "n", { escape = true, q = true })
-  pcall(vim.keymap.set, "n", "<leader>z", function()
+  local function open_codux_menu()
     close_workspace_manager()
     vim.schedule(function()
       local leader = tostring(vim.g.mapleader or "\\")
       local keys = vim.api.nvim_replace_termcodes(leader .. "z", true, false, true)
       vim.api.nvim_feedkeys(keys, "m", false)
     end)
-  end, { buffer = bufnr, silent = true, nowait = true, desc = "Open Codux Menu" })
-  pcall(vim.keymap.set, "n", "s", M._v5.open_workspace_manager_search_input, {
-    buffer = bufnr,
-    silent = true,
-    desc = "Search Codux Workspaces",
-  })
-  pcall(vim.keymap.set, "n", "<CR>", open_selected_workspace, { buffer = bufnr, silent = true, desc = "Open Codux Workspace" })
-  pcall(vim.keymap.set, "n", "r", rename_selected_workspace, { buffer = bufnr, silent = true, desc = "Rename Codux Workspace" })
-  pcall(vim.keymap.set, "n", "e", edit_selected_workspace_template, { buffer = bufnr, silent = true, desc = "Edit Codux Workspace Template" })
-  pcall(vim.keymap.set, "n", "d", delete_selected_workspace, { buffer = bufnr, silent = true, desc = "Delete Codux Workspace" })
-  pcall(vim.keymap.set, "n", "h", function()
-    return M.doctor()
-  end, { buffer = bufnr, silent = true, desc = "Run Codux Doctor" })
+  end
+
+  local function bind_workspace_manager_commands(target_bufnr)
+    M._v5.bind_close_keys(target_bufnr, close_workspace_manager, "Close Codux Workspaces", "n", { escape = true, q = true })
+    pcall(vim.keymap.set, "n", "<leader>z", open_codux_menu, {
+      buffer = target_bufnr,
+      silent = true,
+      nowait = true,
+      desc = "Open Codux Menu",
+    })
+    pcall(vim.keymap.set, "n", "s", M._v5.open_workspace_manager_search_input, {
+      buffer = target_bufnr,
+      silent = true,
+      desc = "Search Codux Workspaces",
+    })
+    pcall(vim.keymap.set, "n", "<CR>", open_selected_workspace, {
+      buffer = target_bufnr,
+      silent = true,
+      desc = "Open Codux Workspace",
+    })
+    pcall(vim.keymap.set, "n", "r", rename_selected_workspace, {
+      buffer = target_bufnr,
+      silent = true,
+      desc = "Rename Codux Workspace",
+    })
+    pcall(vim.keymap.set, "n", "e", edit_selected_workspace_template, {
+      buffer = target_bufnr,
+      silent = true,
+      desc = "Edit Codux Workspace Template",
+    })
+    pcall(vim.keymap.set, "n", "d", delete_selected_workspace, {
+      buffer = target_bufnr,
+      silent = true,
+      desc = "Delete Codux Workspace",
+    })
+    pcall(vim.keymap.set, "n", "h", function()
+      return M.doctor()
+    end, { buffer = target_bufnr, silent = true, desc = "Run Codux Doctor" })
+  end
+
+  local function open_workspace_manager_command_sink()
+    local sink_buf_ok, sink_bufnr = pcall(vim.api.nvim_create_buf, false, true)
+    if not sink_buf_ok or not is_loaded_buf(sink_bufnr) then
+      return false
+    end
+
+    pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = sink_bufnr })
+    pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspaces-command", { buf = sink_bufnr })
+    pcall(vim.api.nvim_set_option_value, "buftype", "nofile", { buf = sink_bufnr })
+    pcall(vim.api.nvim_set_option_value, "swapfile", false, { buf = sink_bufnr })
+    pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = sink_bufnr })
+
+    local sink_win_ok, sink_win = pcall(vim.api.nvim_open_win, sink_bufnr, false, {
+      relative = "editor",
+      style = "minimal",
+      border = "none",
+      width = 1,
+      height = 1,
+      col = vim.o.columns + 1,
+      row = vim.o.lines + 1,
+      zindex = 1,
+    })
+    if not sink_win_ok then
+      pcall(vim.api.nvim_buf_delete, sink_bufnr, { force = true })
+      return false
+    end
+
+    state.workspace_manager_command_buf = sink_bufnr
+    state.workspace_manager_command_win = sink_win
+    pcall(vim.api.nvim_set_option_value, "number", false, { win = sink_win })
+    pcall(vim.api.nvim_set_option_value, "relativenumber", false, { win = sink_win })
+    pcall(vim.api.nvim_set_option_value, "signcolumn", "no", { win = sink_win })
+    pcall(vim.api.nvim_set_option_value, "winfixbuf", true, { win = sink_win })
+    bind_workspace_manager_commands(sink_bufnr)
+    return true
+  end
+
+  bind_workspace_manager_commands(bufnr)
+  open_workspace_manager_command_sink()
 
   render_workspace_manager()
   M._start_workspace_manager_refresh_timer()
