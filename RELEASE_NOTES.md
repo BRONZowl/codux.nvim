@@ -1,5 +1,15 @@
 # Release Notes
 
+## v0.6.2
+
+Workspace dashboard search.
+
+- Added a search field above the workspace dashboard.
+- Fuzzy search filters saved workspaces and previews the closest match in the dashboard.
+- Pressing `<CR>` in search focuses the highlighted dashboard result so dashboard actions can be run.
+- Added `s` to search again from the dashboard and kept `<C-q>` closing the dashboard/search UI.
+- Documented the workspace dashboard search flow.
+
 ## v0.6.1
 
 Guided workspace creation with custom template prompts.
