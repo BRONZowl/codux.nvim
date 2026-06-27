@@ -85,7 +85,13 @@ local state = {
   workspace_manager_win = nil,
   workspace_manager_footer_buf = nil,
   workspace_manager_footer_win = nil,
+  workspace_manager_search_buf = nil,
+  workspace_manager_search_win = nil,
   workspace_manager_items = {},
+  workspace_manager_query = "",
+  workspace_manager_best_match_index = nil,
+  workspace_manager_focus_match = false,
+  workspace_manager_search_confirmed = false,
   workspace_manager_project_root = nil,
   workspace_manager_refresh_timer = nil,
   workspace_manager_ns = vim.api.nvim_create_namespace("codux.workspace_manager"),
@@ -2409,6 +2415,7 @@ local function close_workspace_manager()
   local dashboard_filetypes = {
     ["codux-workspaces"] = true,
     ["codux-workspaces-footer"] = true,
+    ["codux-workspaces-search"] = true,
   }
 
   for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -2428,7 +2435,13 @@ local function close_workspace_manager()
   state.workspace_manager_buf = nil
   state.workspace_manager_footer_win = nil
   state.workspace_manager_footer_buf = nil
+  state.workspace_manager_search_win = nil
+  state.workspace_manager_search_buf = nil
   state.workspace_manager_items = {}
+  state.workspace_manager_query = ""
+  state.workspace_manager_best_match_index = nil
+  state.workspace_manager_focus_match = false
+  state.workspace_manager_search_confirmed = false
   state.workspace_manager_project_root = nil
 end
 
@@ -2517,6 +2530,77 @@ local function workspace_manager_header_line()
   })
 end
 
+function M._v5.fuzzy_workspace_score(value, query)
+  value = tostring(value or "")
+  query = tostring(query or "")
+  if query == "" then
+    return 0
+  end
+
+  local lower_value = value:lower()
+  local lower_query = query:lower()
+  if #lower_query <= 2 then
+    if lower_value:find(lower_query, 1, true) ~= 1 then
+      return nil
+    end
+    return #value - #query
+  end
+
+  local positions = {}
+  local from = 1
+
+  for index = 1, #lower_query do
+    local char = lower_query:sub(index, index)
+    local found = lower_value:find(char, from, true)
+    if not found then
+      return nil
+    end
+    table.insert(positions, found)
+    from = found + 1
+  end
+
+  local gaps = 0
+  local consecutive = 0
+  for index = 2, #positions do
+    local gap = positions[index] - positions[index - 1] - 1
+    gaps = gaps + gap
+    if gap == 0 then
+      consecutive = consecutive + 1
+    end
+  end
+
+  return (positions[1] * 4) + (gaps * 10) + (#value - #query) - (consecutive * 2)
+end
+
+function M._v5.fuzzy_workspace_filter(entries, query)
+  entries = type(entries) == "table" and entries or {}
+  query = tostring(query or "")
+  if query == "" then
+    return entries
+  end
+
+  local scored = {}
+  for _, entry in ipairs(entries) do
+    local score = M._v5.fuzzy_workspace_score(entry.name, query)
+    if score then
+      table.insert(scored, { entry = entry, score = score })
+    end
+  end
+
+  table.sort(scored, function(left, right)
+    if left.score == right.score then
+      return tostring(left.entry.name):lower() < tostring(right.entry.name):lower()
+    end
+    return left.score < right.score
+  end)
+
+  local matches = {}
+  for _, item in ipairs(scored) do
+    table.insert(matches, item.entry)
+  end
+  return matches
+end
+
 local function workspace_manager_window_height()
   if not is_valid_win(state.workspace_manager_win) then
     return nil
@@ -2532,6 +2616,7 @@ end
 
 local function workspace_manager_footer_segments()
   return {
+    { key = "s", desc = "search" },
     { key = "enter", desc = "open" },
     { key = "r", desc = "rename" },
     { key = "e", desc = "edit" },
@@ -2640,14 +2725,19 @@ render_workspace_manager = function()
   end
 
   local root = state.workspace_manager_project_root or workspace_manager_project_root()
-  local entries, error_message = workspace_entries_for_project(root)
+  local all_entries, error_message = workspace_entries_for_project(root)
+  local query = tostring(state.workspace_manager_query or "")
+  local entries = error_message and all_entries or M._v5.fuzzy_workspace_filter(all_entries, query)
   state.workspace_manager_items = entries
+  state.workspace_manager_best_match_index = query ~= "" and #entries > 0 and 1 or nil
 
   local lines = { workspace_manager_header_line() }
   if error_message then
     table.insert(lines, error_message)
-  elseif #entries == 0 then
+  elseif #all_entries == 0 then
     table.insert(lines, "No saved Codux workspaces")
+  elseif query ~= "" and #entries == 0 then
+    table.insert(lines, "No matching Codux workspaces")
   else
     for _, entry in ipairs(entries) do
       table.insert(lines, workspace_manager_line(entry))
@@ -2663,8 +2753,36 @@ render_workspace_manager = function()
   pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = state.workspace_manager_buf })
   pcall(vim.api.nvim_buf_set_lines, state.workspace_manager_buf, 0, -1, false, lines)
   pcall(vim.api.nvim_buf_clear_namespace, state.workspace_manager_buf, state.workspace_manager_ns, 0, -1)
-  pcall(vim.api.nvim_buf_add_highlight, state.workspace_manager_buf, state.workspace_manager_ns, "WhichKeyDesc", 0, 0, -1)
+  pcall(
+    vim.api.nvim_buf_add_highlight,
+    state.workspace_manager_buf,
+    state.workspace_manager_ns,
+    "WhichKeyDesc",
+    0,
+    0,
+    -1
+  )
+  if state.workspace_manager_best_match_index then
+    local best_row = 2 + state.workspace_manager_best_match_index - 1
+    pcall(
+      vim.api.nvim_buf_add_highlight,
+      state.workspace_manager_buf,
+      state.workspace_manager_ns,
+      state.workspace_manager_search_confirmed and "IncSearch" or "Visual",
+      best_row - 1,
+      0,
+      -1
+    )
+  end
   pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = state.workspace_manager_buf })
+  if state.workspace_manager_focus_match and is_valid_win(state.workspace_manager_win) then
+    local row = 1
+    if #state.workspace_manager_items > 0 then
+      row = 2 + (state.workspace_manager_best_match_index or 1) - 1
+    end
+    pcall(vim.api.nvim_win_set_cursor, state.workspace_manager_win, { row, 0 })
+    state.workspace_manager_focus_match = false
+  end
   render_workspace_manager_footer()
   return true
 end
@@ -2681,6 +2799,189 @@ local function selected_workspace_manager_item()
 
   local index = cursor[1] - 1
   return state.workspace_manager_items[index]
+end
+
+function M._v5.render_workspace_manager_search()
+  if not is_loaded_buf(state.workspace_manager_search_buf) then
+    return false
+  end
+
+  local query = tostring(state.workspace_manager_query or "")
+  pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = state.workspace_manager_search_buf })
+  pcall(
+    vim.api.nvim_buf_set_lines,
+    state.workspace_manager_search_buf,
+    0,
+    -1,
+    false,
+    { query .. " " }
+  )
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = state.workspace_manager_search_buf })
+
+  if is_valid_win(state.workspace_manager_search_win) then
+    local width = workspace_manager_window_width() or 1
+    pcall(vim.api.nvim_win_set_cursor, state.workspace_manager_search_win, { 1, math.min(#query, math.max(0, width - 1)) })
+  end
+
+  return true
+end
+
+function M._v5.update_workspace_manager_query(query)
+  state.workspace_manager_query = tostring(query or "")
+  state.workspace_manager_focus_match = true
+  state.workspace_manager_search_confirmed = false
+  render_workspace_manager()
+  M._v5.render_workspace_manager_search()
+  return true
+end
+
+function M._v5.append_workspace_manager_query(input)
+  return M._v5.update_workspace_manager_query(tostring(state.workspace_manager_query or "") .. tostring(input or ""))
+end
+
+function M._v5.delete_workspace_manager_query_char()
+  local query = tostring(state.workspace_manager_query or "")
+  if query == "" then
+    return true
+  end
+
+  local length = vim.fn.strchars(query)
+  return M._v5.update_workspace_manager_query(vim.fn.strcharpart(query, 0, math.max(0, length - 1)))
+end
+
+function M._v5.clear_workspace_manager_query()
+  if state.workspace_manager_query == "" then
+    return true
+  end
+
+  return M._v5.update_workspace_manager_query("")
+end
+
+function M._v5.open_workspace_manager_search_input()
+  if not is_valid_win(state.workspace_manager_win) then
+    return false
+  end
+
+  if is_valid_win(state.workspace_manager_search_win) then
+    pcall(vim.api.nvim_set_current_win, state.workspace_manager_search_win)
+    return true
+  end
+
+  local buf_ok, bufnr = pcall(vim.api.nvim_create_buf, false, true)
+  if not buf_ok or not is_loaded_buf(bufnr) then
+    notify("Failed to create Codux workspace search", vim.log.levels.ERROR)
+    return false
+  end
+
+  local dashboard_config = vim.api.nvim_win_get_config(state.workspace_manager_win)
+  local dashboard_width = workspace_manager_window_width() or 58
+  local width = math.max(20, dashboard_width)
+  local col = type(dashboard_config.col) == "number" and dashboard_config.col or 0
+  local row = math.max(0, (type(dashboard_config.row) == "number" and dashboard_config.row or 0) - 3)
+
+  pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspaces-search", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "buftype", "nofile", { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "swapfile", false, { buf = bufnr })
+
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = " Codux workspace: ",
+    title_pos = "center",
+    width = width,
+    height = 1,
+    col = col,
+    row = row,
+    zindex = 60,
+  })
+  if not win_ok then
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    notify("Failed to open Codux workspace search", vim.log.levels.ERROR)
+    return false
+  end
+
+  state.workspace_manager_search_buf = bufnr
+  state.workspace_manager_search_win = win
+  pcall(vim.api.nvim_set_option_value, "number", false, { win = win })
+  pcall(vim.api.nvim_set_option_value, "relativenumber", false, { win = win })
+  pcall(vim.api.nvim_set_option_value, "signcolumn", "no", { win = win })
+  pcall(vim.api.nvim_set_option_value, "winfixbuf", true, { win = win })
+  pcall(vim.api.nvim_set_option_value, "winhighlight", "FloatBorder:WhichKey,FloatTitle:WhichKey", { win = win })
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+  M._v5.render_workspace_manager_search()
+
+  local group = vim.api.nvim_create_augroup("codux-workspace-search-" .. tostring(bufnr), { clear = true })
+  vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
+    group = group,
+    buffer = bufnr,
+    callback = function()
+      if state.workspace_manager_search_buf == bufnr then
+        state.workspace_manager_search_buf = nil
+        state.workspace_manager_search_win = nil
+      end
+      pcall(vim.api.nvim_del_augroup_by_id, group)
+    end,
+  })
+
+  pcall(vim.keymap.set, "n", "<C-q>", close_workspace_manager, {
+    buffer = bufnr,
+    silent = true,
+    desc = "Close Codux Workspaces",
+  })
+  pcall(vim.keymap.set, "n", "<Esc>", close_workspace_manager, {
+    buffer = bufnr,
+    silent = true,
+    desc = "Close Codux Workspaces",
+  })
+  pcall(vim.keymap.set, "n", "<CR>", function()
+    if not state.workspace_manager_best_match_index then
+      notify("No Codux workspace selected", vim.log.levels.WARN)
+      return false
+    end
+
+    state.workspace_manager_search_confirmed = true
+    state.workspace_manager_focus_match = true
+    render_workspace_manager()
+    if is_valid_win(state.workspace_manager_win) then
+      pcall(vim.api.nvim_set_current_win, state.workspace_manager_win)
+    end
+    return true
+  end, { buffer = bufnr, silent = true, desc = "Select Codux Workspace" })
+  pcall(vim.keymap.set, "n", "<BS>", M._v5.delete_workspace_manager_query_char, {
+    buffer = bufnr,
+    nowait = true,
+    silent = true,
+    desc = "Delete Codux Workspace Search Character",
+  })
+  pcall(vim.keymap.set, "n", "<C-h>", M._v5.delete_workspace_manager_query_char, {
+    buffer = bufnr,
+    nowait = true,
+    silent = true,
+    desc = "Delete Codux Workspace Search Character",
+  })
+  pcall(vim.keymap.set, "n", "<C-u>", M._v5.clear_workspace_manager_query, {
+    buffer = bufnr,
+    nowait = true,
+    silent = true,
+    desc = "Clear Codux Workspace Search",
+  })
+  for _, key in ipairs(printable_prompt_keys()) do
+    local lhs = key[1]
+    local input = key[2]
+    pcall(vim.keymap.set, "n", lhs, function()
+      return M._v5.append_workspace_manager_query(input)
+    end, {
+      buffer = bufnr,
+      nowait = true,
+      silent = true,
+      desc = "Search Codux Workspaces",
+    })
+  end
+
+  M._v5.render_workspace_manager_search()
+  return true
 end
 
 local function rename_tmux_window(window_id, new_window_name)
@@ -3943,18 +4244,7 @@ function M.open_workspaces()
     return item
   end
 
-  pcall(vim.keymap.set, "n", "q", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
-  pcall(vim.keymap.set, "n", "<Esc>", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
-  pcall(vim.keymap.set, "n", "<C-q>", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
-  pcall(vim.keymap.set, "n", "<leader>z", function()
-    close_workspace_manager()
-    vim.schedule(function()
-      local leader = tostring(vim.g.mapleader or "\\")
-      local keys = vim.api.nvim_replace_termcodes(leader .. "z", true, false, true)
-      vim.api.nvim_feedkeys(keys, "m", false)
-    end)
-  end, { buffer = bufnr, silent = true, nowait = true, desc = "Open Codux Menu" })
-  pcall(vim.keymap.set, "n", "<CR>", function()
+  local function open_selected_workspace()
     local item = selected_or_notify()
     if not item then
       return false
@@ -3962,8 +4252,9 @@ function M.open_workspaces()
     local root = state.workspace_manager_project_root
     close_workspace_manager()
     return M.open_saved_workspace(item.name, root)
-  end, { buffer = bufnr, silent = true, desc = "Open Codux Workspace" })
-  pcall(vim.keymap.set, "n", "r", function()
+  end
+
+  local function rename_selected_workspace()
     local item = selected_or_notify()
     if not item then
       return false
@@ -3975,8 +4266,9 @@ function M.open_workspaces()
       end
       rename_saved_workspace(item, new_name)
     end)
-  end, { buffer = bufnr, silent = true, desc = "Rename Codux Workspace" })
-  pcall(vim.keymap.set, "n", "e", function()
+  end
+
+  local function edit_selected_workspace_template()
     local item = selected_or_notify()
     if not item then
       return false
@@ -4017,8 +4309,9 @@ function M.open_workspaces()
         return M.open_workspaces()
       end,
     })
-  end, { buffer = bufnr, silent = true, desc = "Edit Codux Workspace Template" })
-  pcall(vim.keymap.set, "n", "d", function()
+  end
+
+  local function delete_selected_workspace()
     local item = selected_or_notify()
     if not item then
       return false
@@ -4027,7 +4320,28 @@ function M.open_workspaces()
     if choice == 1 then
       delete_saved_workspace(item)
     end
-  end, { buffer = bufnr, silent = true, desc = "Delete Codux Workspace" })
+  end
+
+  pcall(vim.keymap.set, "n", "q", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
+  pcall(vim.keymap.set, "n", "<Esc>", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
+  pcall(vim.keymap.set, "n", "<C-q>", close_workspace_manager, { buffer = bufnr, silent = true, desc = "Close Codux Workspaces" })
+  pcall(vim.keymap.set, "n", "<leader>z", function()
+    close_workspace_manager()
+    vim.schedule(function()
+      local leader = tostring(vim.g.mapleader or "\\")
+      local keys = vim.api.nvim_replace_termcodes(leader .. "z", true, false, true)
+      vim.api.nvim_feedkeys(keys, "m", false)
+    end)
+  end, { buffer = bufnr, silent = true, nowait = true, desc = "Open Codux Menu" })
+  pcall(vim.keymap.set, "n", "s", M._v5.open_workspace_manager_search_input, {
+    buffer = bufnr,
+    silent = true,
+    desc = "Search Codux Workspaces",
+  })
+  pcall(vim.keymap.set, "n", "<CR>", open_selected_workspace, { buffer = bufnr, silent = true, desc = "Open Codux Workspace" })
+  pcall(vim.keymap.set, "n", "r", rename_selected_workspace, { buffer = bufnr, silent = true, desc = "Rename Codux Workspace" })
+  pcall(vim.keymap.set, "n", "e", edit_selected_workspace_template, { buffer = bufnr, silent = true, desc = "Edit Codux Workspace Template" })
+  pcall(vim.keymap.set, "n", "d", delete_selected_workspace, { buffer = bufnr, silent = true, desc = "Delete Codux Workspace" })
   pcall(vim.keymap.set, "n", "h", function()
     return M.doctor()
   end, { buffer = bufnr, silent = true, desc = "Run Codux Doctor" })
@@ -4037,6 +4351,11 @@ function M.open_workspaces()
   if #state.workspace_manager_items > 0 then
     pcall(vim.api.nvim_win_set_cursor, win, { 2, 0 })
   end
+  vim.schedule(function()
+    if is_valid_win(state.workspace_manager_win) and is_loaded_buf(state.workspace_manager_buf) then
+      M._v5.open_workspace_manager_search_input()
+    end
+  end)
   return true
 end
 

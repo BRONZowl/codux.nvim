@@ -130,7 +130,8 @@
 
 <p>
   Use <code>:CoduxWorkspaces</code> or <code>&lt;leader&gt;zW</code> to open <code>current codux workspaces</code>.
-  From that window, press <code>&lt;CR&gt;</code> to open a saved workspace, <code>r</code> to rename it, <code>e</code> to edit its saved template, <code>d</code> to delete it, or <code>h</code> to run doctor.
+  Codux opens a <code>Codux workspace:</code> search field above the dashboard; type a fuzzy workspace name to filter the dashboard and highlight the closest match.
+  Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>&lt;CR&gt;</code> to open, <code>r</code> to rename, <code>e</code> to edit a saved template, <code>d</code> to delete, and <code>h</code> to run doctor.
   Statuses show <code>active</code>, <code>inactive</code>, or <code>missing</code>.
   The target column updates as each workspace moves between files or supported file explorer targets.
 </p>
