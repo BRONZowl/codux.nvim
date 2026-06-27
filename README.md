@@ -119,8 +119,8 @@
 <p>
   Inside tmux, Codux creates or reuses a <code>backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts new workspaces with your current Codex permission profile.
   Reopened saved workspaces keep their stored profile.
-  Template workspaces use the requested workspace name for the tmux window.
-  New template and custom-instruction workspaces open the Codux popup so you can confirm the startup prompt is running.
+  Workspace windows use the requested workspace name for the tmux window.
+  New guided workspaces open the Codux popup so you can confirm the startup prompt is running.
 </p>
 
 <p>
@@ -131,7 +131,7 @@
 <p>
   Use <code>:CoduxWorkspaces</code> or <code>&lt;leader&gt;zW</code> to open <code>current codux workspaces</code>.
   Codux opens a <code>Codux workspace:</code> search field above the dashboard; type a fuzzy workspace name to filter the dashboard and preview the closest match.
-  Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>&lt;CR&gt;</code> to open, <code>r</code> to rename, <code>e</code> to edit a saved template, <code>x</code> to close the workspace window, <code>d</code> to delete, and <code>h</code> to run doctor.
+  Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>&lt;CR&gt;</code> to open, <code>r</code> to rename, <code>x</code> to close the workspace window, <code>d</code> to delete, and <code>h</code> to run doctor.
   Press <code>s</code> from the dashboard to search again, or <code>&lt;C-q&gt;</code> to close the dashboard and search field.
   Statuses show <code>active</code> when Codex is working, <code>question</code> when plan mode is waiting on your answer, <code>idle</code> when the workspace is open, or <code>inactive</code> when it is not open.
   The target column updates as each workspace moves between files or supported file explorer targets.
@@ -144,55 +144,6 @@
 <p>
   Workspace names are user-defined and sanitized for tmux window safety.
   Empty names and sanitized-name collisions are rejected with a clear error.
-</p>
-
-<h3>Workspace Templates</h3>
-
-<p>
-  New workspaces default to custom instructions, and explicit templates remain available for repeatable task-specific starts:
-</p>
-
-<div align="left">
-
-```vim
-:CoduxWorkspaceCreate token-review
-:CoduxWorkspaceCreate fix-tests --template debug
-:CoduxWorkspaceCreate add-feature --template implementation
-:CoduxWorkspaceCreate review-pr --template review
-```
-
-</div>
-
-<p>
-  Templates provide task-specific starting instructions for Codex without starting autonomous loops.
-  New workspaces default to custom instructions; pass <code>--template &lt;template&gt;</code> to create a workspace from a built-in, configured, or saved template.
-  The guided create preview lets you press <code>&lt;CR&gt;</code> to create, <code>e</code> to edit the instruction for just this workspace, or <code>&lt;C-q&gt;</code> to cancel.
-  Custom instructions open in a Vim-like multi-line scratch editor with bottom command hints; use <code>:w</code> to save or <code>&lt;C-q&gt;</code> to cancel.
-  Saved custom instructions become reusable templates named after the workspace and appear in future template lists.
-  A newly created template workspace opens Codux visibly for confirmation; regular workspaces keep the hidden startup behavior.
-  Built-in templates include <code>implementation</code>, <code>debug</code>, <code>review</code>, <code>planning</code>, and <code>docs</code>.
-  Codux stores the resolved startup instruction with the workspace so future template edits do not change what that workspace was created with.
-</p>
-
-<div align="left">
-
-```lua
-require("codux").setup({
-  workspaces = {
-    templates = {
-      release = "You are working in a release workspace. Focus on verification, notes, and final checks.",
-    },
-  },
-})
-```
-
-</div>
-
-<p>
-  Use <code>:CoduxTemplateList</code> and <code>:CoduxTemplatePreview &lt;template&gt;</code> to inspect available templates.
-  Use <code>:CoduxTemplateDelete &lt;template&gt;</code> to remove a saved template or hide a built-in/configured template from future template lists.
-  Long-form commands are also available: <code>:CoduxWorkspaceTemplateList</code>, <code>:CoduxWorkspaceTemplatePreview</code>, and <code>:CoduxWorkspaceTemplateDelete</code>.
-  Workspace and template commands support tab completion.
 </p>
 
 <h3>Workspace Restore and Doctor</h3>
@@ -393,6 +344,6 @@ Codux sends requested files, selections, diagnostics, and health output through 
 
 <p align="center">
   codux.nvim is focused on persistent, organized Codex context rather than autonomous background loops.
-  Upcoming work will focus on remaining saved template management, including renaming reusable workspace prompts.
+  Upcoming work will focus on improving saved workspace management and dashboard ergonomics.
   Future task-run features should stay bounded and human-approved, with explicit step limits, visible token awareness, and pauses before continuing.
 </p>
