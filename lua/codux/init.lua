@@ -28,7 +28,6 @@ local defaults = {
       enabled = true,
       directory = ".agents/codux",
     },
-    templates = {},
   },
   mappings = {
     open = "<leader>zc",
@@ -131,15 +130,7 @@ local write_workspace_state
 local codux_icon = "󰚩"
 local which_key_header_hooked = false
 
-M._v5 = {
-  built_in_templates = {
-    implementation = "You are working in an implementation workspace. Focus on making the requested change cleanly, following the existing codebase patterns, keeping scope tight, and verifying the result.",
-    debug = "You are working in a debugging workspace. Focus on reproducing the issue, identifying the smallest relevant code path, proposing minimal fixes, and verifying the result before broad refactoring.",
-    review = "You are working in a code review workspace. Focus on correctness, edge cases, maintainability, regressions, and whether the change matches the intended behavior.",
-    planning = "You are working in a planning workspace. Focus on clarifying goals, constraints, tradeoffs, implementation order, risks, and concrete acceptance criteria before code changes.",
-    docs = "You are working in a documentation workspace. Focus on accuracy, reader workflow, clear examples, concise wording, and keeping documentation aligned with the current behavior.",
-  },
-}
+M._v5 = {}
 
 local function notify(message, level)
   vim.notify(message, level or vim.log.levels.INFO, { title = "codux.nvim" })
@@ -1722,178 +1713,6 @@ local function workspace_config()
   return config.workspaces
 end
 
-function M._v5.templates()
-  local templates = M._v5.all_templates()
-  local state_data = type(read_workspace_state) == "function" and read_workspace_state() or nil
-  local hidden = type(state_data) == "table" and state_data.hidden_templates or nil
-  if type(hidden) == "table" then
-    for name, value in pairs(hidden) do
-      if type(name) == "string" and value == true then
-        templates[name] = nil
-      end
-    end
-  end
-
-  return templates
-end
-
-function M._v5.all_templates()
-  local templates = vim.deepcopy(M._v5.built_in_templates)
-  if type(read_workspace_state) == "function" then
-    local state_data = read_workspace_state()
-    local saved = type(state_data) == "table" and state_data.templates or nil
-    if type(saved) == "table" then
-      for name, instruction in pairs(saved) do
-        if type(name) == "string" and trim(name) ~= "" and type(instruction) == "string" and trim(instruction) ~= "" then
-          templates[name] = instruction
-        end
-      end
-    end
-  end
-
-  local configured = workspace_config().templates
-  if type(configured) == "table" then
-    for name, instruction in pairs(configured) do
-      if type(name) == "string" and trim(name) ~= "" and type(instruction) == "string" and trim(instruction) ~= "" then
-        templates[name] = instruction
-      end
-    end
-  end
-
-  return templates
-end
-
-function M._v5.template_source(name)
-  if type(name) ~= "string" or trim(name) == "" then
-    return nil
-  end
-
-  local configured = workspace_config().templates
-  if
-    type(configured) == "table"
-    and type(configured[name]) == "string"
-    and trim(configured[name]) ~= ""
-  then
-    return "configured"
-  end
-
-  if type(read_workspace_state) == "function" then
-    local state_data = read_workspace_state()
-    local saved = type(state_data) == "table" and state_data.templates or nil
-    if type(saved) == "table" and type(saved[name]) == "string" and trim(saved[name]) ~= "" then
-      return "saved"
-    end
-  end
-
-  if type(M._v5.built_in_templates[name]) == "string" and trim(M._v5.built_in_templates[name]) ~= "" then
-    return "built-in"
-  end
-
-  return nil
-end
-
-function M._v5.template_names()
-  local names = {}
-  for name, _ in pairs(M._v5.templates()) do
-    table.insert(names, name)
-  end
-  table.sort(names)
-  return names
-end
-
-function M._v5.template_instruction(name)
-  if type(name) ~= "string" or trim(name) == "" then
-    return nil
-  end
-
-  return M._v5.templates()[name]
-end
-
-function M._v5.delete_template(name)
-  name = type(name) == "string" and trim(name) or ""
-  if name == "" then
-    return false, "Workspace template name is required"
-  end
-  if name == "none" or name == "custom" then
-    return false, "Cannot delete Codux workspace template: " .. name
-  end
-  if not M._v5.template_instruction(name) then
-    return false, "unknown workspace template: " .. name
-  end
-
-  local state_data, state_error = read_workspace_state()
-  if state_error then
-    return false, state_error
-  end
-
-  state_data.templates = type(state_data.templates) == "table" and state_data.templates
-    or (vim.empty_dict and vim.empty_dict() or {})
-  state_data.hidden_templates = type(state_data.hidden_templates) == "table" and state_data.hidden_templates
-    or (vim.empty_dict and vim.empty_dict() or {})
-
-  local had_saved = type(state_data.templates[name]) == "string" and trim(state_data.templates[name]) ~= ""
-  state_data.templates[name] = nil
-
-  local configured = workspace_config().templates
-  local has_configured = type(configured) == "table"
-    and type(configured[name]) == "string"
-    and trim(configured[name]) ~= ""
-  local has_builtin = type(M._v5.built_in_templates[name]) == "string" and trim(M._v5.built_in_templates[name]) ~= ""
-  if has_configured or has_builtin then
-    state_data.hidden_templates[name] = true
-  else
-    state_data.hidden_templates[name] = nil
-  end
-
-  if next(state_data.templates) == nil and vim.empty_dict then
-    state_data.templates = vim.empty_dict()
-  end
-  if next(state_data.hidden_templates) == nil and vim.empty_dict then
-    state_data.hidden_templates = vim.empty_dict()
-  end
-
-  local ok, write_error = write_workspace_state(state_data)
-  if not ok then
-    return false, write_error
-  end
-
-  local source = M._v5.template_source(name)
-  if had_saved and not source then
-    source = "saved"
-  end
-
-  return true, nil, source
-end
-
-function M._v5.save_existing_template(name, instruction)
-  name = type(name) == "string" and trim(name) or ""
-  instruction = type(instruction) == "string" and trim(instruction) or ""
-  if name == "" then
-    return false, "Workspace template name is required"
-  end
-  if instruction == "" then
-    return false, "Workspace instruction is required"
-  end
-
-  local state_data, state_error = read_workspace_state()
-  if state_error then
-    return false, state_error
-  end
-
-  local saved = type(state_data.templates) == "table" and state_data.templates or nil
-  if type(saved) ~= "table" or type(saved[name]) ~= "string" or trim(saved[name]) == "" then
-    return false, "workspace template is not editable: " .. name
-  end
-
-  saved[name] = instruction
-  local ok, write_error = write_workspace_state(state_data)
-  if not ok then
-    return false, write_error
-  end
-
-  return true, nil
-end
-
 local function workspaces_enabled()
   return workspace_config().enabled ~= false
 end
@@ -2022,60 +1841,7 @@ local function sanitize_workspace_name(name)
   return display_name, safe
 end
 
-function M._v5.save_custom_template_for_workspace(name, instruction, existing_template)
-  instruction = type(instruction) == "string" and trim(instruction) or ""
-  if instruction == "" then
-    return nil, "Workspace instruction is required"
-  end
-
-  local display_name, safe_name_or_error = sanitize_workspace_name(name)
-  if not display_name then
-    return nil, safe_name_or_error
-  end
-
-  local state_data, state_error = read_workspace_state()
-  if state_error then
-    return nil, state_error
-  end
-
-  state_data.templates = type(state_data.templates) == "table" and state_data.templates
-    or (vim.empty_dict and vim.empty_dict() or {})
-
-  if
-    type(existing_template) == "string"
-    and trim(existing_template) ~= ""
-    and type(state_data.templates[existing_template]) == "string"
-  then
-    state_data.templates[existing_template] = instruction
-    local ok, write_error = write_workspace_state(state_data)
-    if not ok then
-      return nil, write_error
-    end
-    return existing_template, nil
-  end
-
-  local existing = M._v5.all_templates()
-  existing.none = existing.none or true
-  existing.custom = existing.custom or true
-
-  local base = safe_name_or_error
-  local candidate = base
-  local suffix = 2
-  while existing[candidate] or state_data.templates[candidate] do
-    candidate = base .. "-" .. tostring(suffix)
-    suffix = suffix + 1
-  end
-
-  state_data.templates[candidate] = instruction
-  local ok, write_error = write_workspace_state(state_data)
-  if not ok then
-    return nil, write_error
-  end
-
-  return candidate, nil
-end
-
-function M._v5.workspace_window_name(safe_name, _template)
+function M._v5.workspace_window_name(safe_name)
   safe_name = tostring(safe_name or "")
   if safe_name == "" then
     return safe_name
@@ -2452,8 +2218,6 @@ end
 local function empty_workspace_state()
   return {
     version = 2,
-    templates = vim.empty_dict and vim.empty_dict() or {},
-    hidden_templates = vim.empty_dict and vim.empty_dict() or {},
     projects = vim.empty_dict and vim.empty_dict() or {},
   }
 end
@@ -2466,7 +2230,7 @@ function M._v5.normalize_record(record, safe_name, root)
   safe_name = type(record.safe_name) == "string" and record.safe_name ~= "" and record.safe_name or safe_name
   local name = type(record.name) == "string" and record.name ~= "" and record.name or safe_name
   local project_root = type(record.project_root) == "string" and record.project_root ~= "" and record.project_root or root
-  local window_name = M._v5.workspace_window_name(safe_name, record.template)
+  local window_name = M._v5.workspace_window_name(safe_name)
   local status = record.status
   if status == "missing" then
     status = "inactive"
@@ -2486,7 +2250,6 @@ function M._v5.normalize_record(record, safe_name, root)
     git_branch = record.git_branch or "",
     tmux_window = window_name,
     tmux_target = record.tmux_target,
-    template = record.template,
     custom_instruction = record.custom_instruction,
     resolved_instruction = record.resolved_instruction,
     permission_profile = record.permission_profile or "default",
@@ -2510,20 +2273,6 @@ local function normalize_workspace_state(state_data)
 
   if type(state_data.projects) ~= "table" and type(state_data.workspaces) == "table" then
     local migrated = empty_workspace_state()
-    if type(state_data.templates) == "table" then
-      for name, instruction in pairs(state_data.templates) do
-        if type(name) == "string" and trim(name) ~= "" and type(instruction) == "string" and trim(instruction) ~= "" then
-          migrated.templates[name] = instruction
-        end
-      end
-    end
-    if type(state_data.hidden_templates) == "table" then
-      for name, hidden in pairs(state_data.hidden_templates) do
-        if type(name) == "string" and trim(name) ~= "" and hidden == true then
-          migrated.hidden_templates[name] = true
-        end
-      end
-    end
     for safe_name, record in pairs(state_data.workspaces) do
       if type(record) == "table" and type(record.project_root) == "string" and record.project_root ~= "" then
         local project = migrated.projects[record.project_root]
@@ -2541,24 +2290,8 @@ local function normalize_workspace_state(state_data)
   end
 
   state_data.version = 2
-  if type(state_data.templates) ~= "table" then
-    state_data.templates = vim.empty_dict and vim.empty_dict() or {}
-  else
-    for name, instruction in pairs(state_data.templates) do
-      if type(name) ~= "string" or trim(name) == "" or type(instruction) ~= "string" or trim(instruction) == "" then
-        state_data.templates[name] = nil
-      end
-    end
-  end
-  if type(state_data.hidden_templates) ~= "table" then
-    state_data.hidden_templates = vim.empty_dict and vim.empty_dict() or {}
-  else
-    for name, hidden in pairs(state_data.hidden_templates) do
-      if type(name) ~= "string" or trim(name) == "" or hidden ~= true then
-        state_data.hidden_templates[name] = nil
-      end
-    end
-  end
+  state_data.templates = nil
+  state_data.hidden_templates = nil
 
   if type(state_data.projects) ~= "table" then
     state_data.projects = vim.empty_dict and vim.empty_dict() or {}
@@ -2650,7 +2383,6 @@ local function workspace_from_state(record, fallback)
     git_branch = record.git_branch or fallback.git_branch or "",
     window_name = record.tmux_window or record.window_name or fallback.window_name,
     tmux_target = record.tmux_target or fallback.tmux_target,
-    template = record.template or fallback.template,
     custom_instruction = record.custom_instruction or fallback.custom_instruction,
     resolved_instruction = record.resolved_instruction or fallback.resolved_instruction,
     permission_profile = record.permission_profile or fallback.permission_profile or "default",
@@ -2677,7 +2409,6 @@ local function workspace_state_record(workspace, existing)
     git_branch = workspace.git_branch or "",
     tmux_window = workspace.window_name,
     tmux_target = workspace.tmux_target,
-    template = workspace.template,
     custom_instruction = workspace.custom_instruction,
     resolved_instruction = workspace.resolved_instruction,
     permission_profile = workspace.permission_profile or "default",
@@ -2901,7 +2632,6 @@ local function workspace_entries_for_project(root)
           git_branch = record.git_branch or "",
           window_name = window_name,
           tmux_target = M._v5.tmux_target(session, window_name) or record.tmux_target,
-          template = record.template,
           codex_status = record.codex_status or "idle",
           window_id = window_id,
           status = status,
@@ -2914,7 +2644,7 @@ local function workspace_entries_for_project(root)
     if type(record) == "table" then
       local entry_safe_name = record.safe_name or safe_name
       if not seen[entry_safe_name] then
-        local window_name = M._v5.workspace_window_name(entry_safe_name, record.template)
+        local window_name = M._v5.workspace_window_name(entry_safe_name)
         local window_id = session and tmux_window_id(session, window_name) or nil
         table.insert(entries, {
           name = record.name or entry_safe_name,
@@ -2923,7 +2653,6 @@ local function workspace_entries_for_project(root)
           git_branch = "",
           window_name = window_name,
           tmux_target = M._v5.tmux_target(session, window_name),
-          template = record.template,
           codex_status = "idle",
           window_id = window_id,
           status = window_id and "idle" or "inactive",
@@ -3329,7 +3058,6 @@ local function workspace_manager_footer_segments()
     { key = "s", desc = "search" },
     { key = "enter", desc = "open" },
     { key = "r", desc = "rename" },
-    { key = "e", desc = "edit" },
     { key = "x", desc = "close" },
     { key = "d", desc = "delete" },
     { key = "h", desc = "doctor" },
@@ -3760,7 +3488,7 @@ local function rename_saved_workspace(entry, new_name)
     return false
   end
 
-  local new_window_name = M._v5.workspace_window_name(safe_name_or_error, existing.template)
+  local new_window_name = M._v5.workspace_window_name(safe_name_or_error)
   if not rename_tmux_window(entry.window_id, new_window_name) then
     notify("Failed to rename tmux window " .. tostring(entry.window_name), vim.log.levels.ERROR)
     return false
@@ -3895,7 +3623,6 @@ local function workspace_bootstrap_lua(workspace)
   local safe_name = workspace.safe_name or ""
   local branch = workspace.git_branch or ""
   local window_name = workspace.window_name or ""
-  local template = workspace.template or ""
   local custom_instruction = workspace.custom_instruction or ""
   local resolved_instruction = workspace.resolved_instruction or ""
   local initial_prompt = workspace.initial_prompt or ""
@@ -3914,7 +3641,7 @@ local function workspace_bootstrap_lua(workspace)
     "local profile=" .. lua_string(profile),
     "local prompt=" .. lua_string(initial_prompt),
     "local show_codux=" .. tostring(show_codux),
-    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",template=" .. lua_string(template) .. ",custom_instruction=" .. lua_string(custom_instruction) .. ",resolved_instruction=" .. lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. lua_string(codex_status) .. ",status=" .. lua_string(status) .. ",codex_session_id=" .. lua_string(codex_session_id) .. ",codex_session_path=" .. lua_string(codex_session_path) .. ",codex_session_captured_at=" .. lua_string(codex_session_captured_at) .. ",open_visible=" .. tostring(open_visible) .. "}",
+    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",custom_instruction=" .. lua_string(custom_instruction) .. ",resolved_instruction=" .. lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. lua_string(codex_status) .. ",status=" .. lua_string(status) .. ",codex_session_id=" .. lua_string(codex_session_id) .. ",codex_session_path=" .. lua_string(codex_session_path) .. ",codex_session_captured_at=" .. lua_string(codex_session_captured_at) .. ",open_visible=" .. tostring(open_visible) .. "}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
@@ -4011,10 +3738,6 @@ local function prepare_workspace(name, opts)
 
   local context = workspace_target_context()
   local root = opts.project_root or context.root
-  local template = opts.template
-  if type(template) == "string" and template ~= "" and not M._v5.template_instruction(template) then
-    return nil, "unknown workspace template: " .. template
-  end
   local custom_instruction = type(opts.custom_instruction) == "string" and trim(opts.custom_instruction) or nil
   if custom_instruction == "" then
     custom_instruction = nil
@@ -4049,8 +3772,7 @@ local function prepare_workspace(name, opts)
     target_path = context.path,
     target_type = context.target and context.target.type or nil,
     git_branch = context.branch,
-    window_name = M._v5.workspace_window_name(safe_name_or_error, template),
-    template = template,
+    window_name = M._v5.workspace_window_name(safe_name_or_error),
     custom_instruction = custom_instruction,
     resolved_instruction = resolved_instruction,
     permission_profile = workspace_permission_profile(),
@@ -4058,15 +3780,12 @@ local function prepare_workspace(name, opts)
     status = "idle",
   }
   local workspace = workspace_from_state(existing, fallback)
-  if type(template) == "string" and template ~= "" then
-    workspace.template = template
-  end
   if custom_instruction then
     workspace.custom_instruction = custom_instruction
   end
   workspace.session = session
   workspace.safe_name = workspace.safe_name or safe_name_or_error
-  workspace.window_name = M._v5.workspace_window_name(workspace.safe_name, workspace.template)
+  workspace.window_name = M._v5.workspace_window_name(workspace.safe_name)
   workspace.project_root = workspace.project_root or root
   workspace.tmux_target = M._v5.tmux_target(session, workspace.window_name)
   local saved_workspace = type(existing) == "table" or (opts.require_existing and file_instruction ~= nil)
@@ -4077,10 +3796,6 @@ local function prepare_workspace(name, opts)
   end
   if not resolved_instruction and type(workspace.resolved_instruction) == "string" and trim(workspace.resolved_instruction) ~= "" then
     resolved_instruction = workspace.resolved_instruction
-  end
-  local template_prompt = M._v5.template_instruction(workspace.template)
-  if not resolved_instruction and type(template_prompt) == "string" and template_prompt ~= "" then
-    resolved_instruction = template_prompt
   end
   if resolved_instruction then
     workspace.resolved_instruction = resolved_instruction
@@ -4130,42 +3845,25 @@ function M._v5.parse_create_args(args)
   args = type(args) == "table" and args or {}
   local name = args[1]
   if type(name) ~= "string" or trim(name) == "" then
-    return nil, nil, false, "Workspace name is required"
+    return nil, false, "Workspace name is required"
   end
   if name:match("^%-%-") then
-    return nil, nil, false, "Workspace name is required"
+    return nil, false, "Workspace name is required"
   end
 
-  local template = nil
   local custom_requested = false
   local index = 2
   while index <= #args do
     local arg = args[index]
-    if arg == "--template" then
-      template = args[index + 1]
-      if type(template) ~= "string" or trim(template) == "" then
-        return nil, nil, false, "--template requires a template name"
-      end
-      index = index + 2
-    elseif arg == "--custom" then
+    if arg == "--custom" then
       custom_requested = true
       index = index + 1
     else
-      local inline_template = type(arg) == "string" and arg:match("^%-%-template=(.+)$") or nil
-      if inline_template then
-        template = inline_template
-        index = index + 1
-      else
-        return nil, nil, false, "unknown workspace option: " .. tostring(arg)
-      end
+      return nil, false, "unknown workspace option: " .. tostring(arg)
     end
   end
 
-  if custom_requested and type(template) == "string" and trim(template) ~= "" then
-    return nil, nil, false, "--custom cannot be combined with --template"
-  end
-
-  return name, template, custom_requested, nil
+  return name, custom_requested, nil
 end
 
 local function start_terminal(focus, initial_prompt, command, workspace, permission_profile, opts)
@@ -4407,7 +4105,6 @@ end
 function M.create_workspace(name, opts)
   opts = opts or {}
   local workspace, error_message = prepare_workspace(name, {
-    template = opts.template,
     custom_instruction = opts.custom_instruction,
     resolved_instruction = opts.resolved_instruction,
   })
@@ -4509,50 +4206,11 @@ function M.restore_workspaces(opts)
   return true
 end
 
-function M.workspace_template_list()
-  local names = M._v5.template_names()
-  notify("Codux workspace templates:\n" .. table.concat(names, "\n"))
-  return names
-end
-
-function M.workspace_template_preview(name)
-  local instruction = M._v5.template_instruction(name)
-  if not instruction then
-    notify("unknown workspace template: " .. tostring(name), vim.log.levels.ERROR)
-    return false
-  end
-
-  notify(tostring(name) .. ":\n" .. instruction)
-  return true
-end
-
-function M.workspace_template_delete(name)
-  local ok, error_message = M._v5.delete_template(name)
-  if not ok then
-    notify(error_message or "Failed to delete Codux workspace template", vim.log.levels.ERROR)
-    return false
-  end
-
-  notify("Deleted Codux workspace template " .. tostring(name))
-  return true
-end
-
-function M._v5.workspace_create_template_label(request)
-  if type(request.template) == "string" and request.template ~= "" then
-    return request.template
-  end
-  if type(request.resolved_instruction) == "string" and trim(request.resolved_instruction) ~= "" then
-    return "custom"
-  end
-  return "none"
-end
-
 function M._v5.workspace_create_preview_lines(request)
   local lines = {
     "Create Codux workspace?",
     "",
     "Name: " .. tostring(request.name or ""),
-    "Template: " .. M._v5.workspace_create_template_label(request),
     "",
     "Instruction:",
   }
@@ -4865,28 +4523,7 @@ function M._v5.open_workspace_instruction_editor(request, opts)
     end
 
     request.resolved_instruction = saved_instruction
-    if
-      not request.template_edit
-      and (
-        type(request.template) ~= "string"
-        or request.template == ""
-        or type(request.custom_template_name) == "string"
-      )
-    then
-      local template_name, template_error =
-        M._v5.save_custom_template_for_workspace(request.name, saved_instruction, request.custom_template_name)
-      if not template_name then
-        notify(template_error or "Failed to save Codux workspace template", vim.log.levels.ERROR)
-        if is_valid_win(win) then
-          pcall(vim.api.nvim_set_current_win, win)
-        end
-        return
-      end
-
-      request.template = template_name
-      request.custom_template_name = template_name
-      request.custom_instruction = saved_instruction
-    end
+    request.custom_instruction = saved_instruction
 
     saved = true
     close_editor()
@@ -4979,7 +4616,6 @@ function M._v5.open_workspace_create_preview(request)
   local function create_workspace_from_preview()
     close_preview()
     M.create_workspace(request.name, {
-      template = request.template,
       custom_instruction = request.custom_instruction,
       resolved_instruction = request.resolved_instruction,
     })
@@ -5100,49 +4736,6 @@ function M.open_workspaces()
     end)
   end
 
-  local function edit_selected_workspace_template()
-    local item = selected_or_notify()
-    if not item then
-      return false
-    end
-
-    local template_name = type(item.template) == "string" and trim(item.template) or ""
-    if template_name == "" then
-      notify("Codux workspace has no template to edit", vim.log.levels.WARN)
-      return false
-    end
-    if M._v5.template_source(template_name) ~= "saved" then
-      notify("Codux workspace template is not editable: " .. template_name, vim.log.levels.WARN)
-      return false
-    end
-
-    local instruction = M._v5.template_instruction(template_name)
-    if type(instruction) ~= "string" or trim(instruction) == "" then
-      notify("unknown workspace template: " .. template_name, vim.log.levels.ERROR)
-      return false
-    end
-
-    close_workspace_manager()
-    return M._v5.open_workspace_instruction_editor({
-      name = item.name,
-      template = template_name,
-      template_edit = true,
-      resolved_instruction = instruction,
-    }, {
-      on_cancel = M.open_workspaces,
-      on_save = function(request)
-        local ok, error_message = M._v5.save_existing_template(template_name, request.resolved_instruction)
-        if not ok then
-          notify(error_message or "Failed to save Codux workspace template", vim.log.levels.ERROR)
-          return M.open_workspaces()
-        end
-
-        notify("Saved Codux workspace template " .. template_name)
-        return M.open_workspaces()
-      end,
-    })
-  end
-
   local function delete_selected_workspace()
     local item = selected_or_notify()
     if not item then
@@ -5193,11 +4786,6 @@ function M.open_workspaces()
       buffer = target_bufnr,
       silent = true,
       desc = "Rename Codux Workspace",
-    })
-    pcall(vim.keymap.set, "n", "e", edit_selected_workspace_template, {
-      buffer = target_bufnr,
-      silent = true,
-      desc = "Edit Codux Workspace Template",
     })
     pcall(vim.keymap.set, "n", "x", close_selected_workspace_window, {
       buffer = target_bufnr,
@@ -6304,26 +5892,8 @@ function M._v5.complete_workspace_names(arglead)
   return M._v5.filter_completion(M._v5.names_for_project(workspace_manager_project_root()), arglead)
 end
 
-function M._v5.complete_template_names(arglead)
-  return M._v5.filter_completion(M._v5.template_names(), arglead)
-end
-
-function M._v5.complete_create(arglead, cmdline, cursorpos)
-  local before_cursor = cmdline:sub(1, math.max(0, cursorpos or #cmdline))
-  if before_cursor:match("%-%-template%s+[^%s]*$") then
-    return M._v5.complete_template_names(arglead)
-  end
-
-  local inline = arglead:match("^%-%-template=(.*)$")
-  if inline ~= nil then
-    local matches = {}
-    for _, name in ipairs(M._v5.complete_template_names(inline)) do
-      table.insert(matches, "--template=" .. name)
-    end
-    return matches
-  end
-
-  return M._v5.filter_completion({ "--custom", "--template" }, arglead)
+function M._v5.complete_create(arglead, _cmdline, _cursorpos)
+  return M._v5.filter_completion({ "--custom" }, arglead)
 end
 
 local function create_commands()
@@ -6349,16 +5919,12 @@ local function create_commands()
       return
     end
 
-    local name, template, custom_requested, error_message = M._v5.parse_create_args(opts.fargs)
+    local name, _custom_requested, error_message = M._v5.parse_create_args(opts.fargs)
     if error_message then
       notify(error_message, vim.log.levels.ERROR)
       return
     end
-    if custom_requested or type(template) ~= "string" or trim(template) == "" then
-      M._v5.open_custom_workspace_instruction_prompt(name)
-      return
-    end
-    M.create_workspace(name, { template = template })
+    M._v5.open_custom_workspace_instruction_prompt(name)
   end, { force = true, nargs = "*", complete = M._v5.complete_create, desc = "Create a named Codux tmux workspace" })
 
   vim.api.nvim_create_user_command("CoduxWorkspaceCreate", function(opts)
@@ -6367,16 +5933,12 @@ local function create_commands()
       return
     end
 
-    local name, template, custom_requested, error_message = M._v5.parse_create_args(opts.fargs)
+    local name, _custom_requested, error_message = M._v5.parse_create_args(opts.fargs)
     if error_message then
       notify(error_message, vim.log.levels.ERROR)
       return
     end
-    if custom_requested or type(template) ~= "string" or trim(template) == "" then
-      M._v5.open_custom_workspace_instruction_prompt(name)
-      return
-    end
-    M.create_workspace(name, { template = template })
+    M._v5.open_custom_workspace_instruction_prompt(name)
   end, { force = true, nargs = "*", complete = M._v5.complete_create, desc = "Create a named Codux tmux workspace" })
 
   vim.api.nvim_create_user_command("CoduxWorkspaceOpen", function(opts)
@@ -6404,30 +5966,6 @@ local function create_commands()
   vim.api.nvim_create_user_command("CoduxWorkspaceRestore", function()
     M.restore_workspaces()
   end, { force = true, desc = "Restore Codux workspace status from tmux" })
-
-  vim.api.nvim_create_user_command("CoduxWorkspaceTemplateList", function()
-    M.workspace_template_list()
-  end, { force = true, desc = "List Codux workspace templates" })
-
-  vim.api.nvim_create_user_command("CoduxWorkspaceTemplatePreview", function(opts)
-    M.workspace_template_preview(opts.args)
-  end, { force = true, nargs = 1, complete = M._v5.complete_template_names, desc = "Preview a Codux workspace template" })
-
-  vim.api.nvim_create_user_command("CoduxWorkspaceTemplateDelete", function(opts)
-    M.workspace_template_delete(opts.args)
-  end, { force = true, nargs = 1, complete = M._v5.complete_template_names, desc = "Delete a Codux workspace template" })
-
-  vim.api.nvim_create_user_command("CoduxTemplateList", function()
-    M.workspace_template_list()
-  end, { force = true, desc = "List Codux workspace templates" })
-
-  vim.api.nvim_create_user_command("CoduxTemplatePreview", function(opts)
-    M.workspace_template_preview(opts.args)
-  end, { force = true, nargs = 1, complete = M._v5.complete_template_names, desc = "Preview a Codux workspace template" })
-
-  vim.api.nvim_create_user_command("CoduxTemplateDelete", function(opts)
-    M.workspace_template_delete(opts.args)
-  end, { force = true, nargs = 1, complete = M._v5.complete_template_names, desc = "Delete a Codux workspace template" })
 
   vim.api.nvim_create_user_command("CoduxWorkspaces", function()
     M.open_workspaces()

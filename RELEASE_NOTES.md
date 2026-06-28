@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-Workspace conversation resume.
+## v0.6.3
+
+Workspace conversation resume and file-backed instructions.
 
 - Saved Codux workspaces now persist the Codex session id after launch.
 - Reopening a saved workspace resumes that exact Codex conversation when the local transcript is available.
@@ -10,6 +12,7 @@ Workspace conversation resume.
 - Workspace instructions are now passed to Codex as session guidance instead of an auto-submitted first prompt.
 - Workspace instructions are mirrored to `.agents/codux/<workspace>.md`; non-empty files override the saved JSON copy and can recover missing workspace entries.
 - Deleting a workspace removes its saved state and matching `.agents/codux/<workspace>.md` instruction file.
+- Removed workspace template commands and `--template`; workspace creation now always uses workspace-local instructions.
 - Codux keeps workspace instructions out of `AGENTS.md`.
 
 ## v0.6.2
@@ -24,16 +27,11 @@ Workspace dashboard search.
 
 ## v0.6.1
 
-Guided workspace creation with custom template prompts.
+Guided workspace creation with custom instruction prompts.
 
 - Added a no-argument `:CoduxWorkspaceCreate` flow for choosing a workspace name and custom startup instruction.
-- Defaulted `:CoduxWorkspaceCreate <name>` to custom workspace instructions, with `--template <template>` still available for explicit templates.
+- Defaulted `:CoduxWorkspaceCreate <name>` to custom workspace instructions.
 - Added a Vim-like multi-line floating instruction editor with bottom `:w` save and `:q` cancel hints.
-- Saved custom instructions as reusable workspace templates that appear in future template lists.
 - Added a create preview where users can create, edit the resolved instruction, or cancel safely.
 - Stored the resolved startup instruction with each workspace so existing workspaces keep the prompt they were created with.
-- Added shorter template commands: `:CoduxTemplateList` and `:CoduxTemplatePreview <template>`.
-- Added template removal with `:CoduxTemplateDelete <template>`.
-- Stopped appending template names to new workspace tmux window names.
-- Added saved-template editing from the workspace dashboard with `e`.
 - Expanded the current workspaces window so larger saved workspace lists are visible when the editor has room.
