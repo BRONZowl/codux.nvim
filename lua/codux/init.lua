@@ -82,6 +82,7 @@ local state = {
   },
   terminal_attached_buf = nil,
   terminal_command_tail = "",
+  terminal_mode_sync_pending = false,
   permission_profile = "default",
   last_permission_profile = "default",
   workspace = nil,
@@ -162,6 +163,55 @@ local function trim(value)
   return (value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+function M._v5.mode_display_label(mode)
+  if mode == "execute" then
+    return "exec"
+  end
+
+  return mode or "not running"
+end
+
+function M._v5.strip_terminal_control_sequences(value)
+  return tostring(value or "")
+    :gsub("\27%][^\7]*\7", "")
+    :gsub("\27%][^\27]*\27\\", "")
+    :gsub("\27%[[0-?]*[ -/]*[@-~]", "")
+    :gsub("\27[@-_]", "")
+    :gsub("\r", "")
+    :gsub("[%z\1-\8\11-\12\14-\31\127]", "")
+end
+
+function M._v5.detect_terminal_mode_from_lines(lines, first_index)
+  if type(lines) ~= "table" then
+    return nil
+  end
+
+  first_index = math.max(1, tonumber(first_index) or 1)
+  local start_index = math.max(first_index, #lines - 39)
+  local saw_execute = false
+  local saw_plan = false
+
+  for index = #lines, start_index, -1 do
+    local line = trim(M._v5.strip_terminal_control_sequences(lines[index]):lower():gsub("%s+", " "))
+    if line ~= "" then
+      saw_execute = saw_execute or line:find("%f[%w]execute%f[%W]") ~= nil
+      saw_plan = saw_plan or line:find("%f[%w]plan%f[%W]") ~= nil
+      if saw_execute and saw_plan then
+        return nil
+      end
+    end
+  end
+
+  if saw_execute then
+    return "execute"
+  end
+  if saw_plan then
+    return "plan"
+  end
+
+  return nil
+end
+
 function M._v5.output_looks_like_question(lines, first_index)
   if type(lines) ~= "table" then
     return false
@@ -170,7 +220,7 @@ function M._v5.output_looks_like_question(lines, first_index)
   first_index = math.max(1, tonumber(first_index) or 1)
   local start_index = math.max(first_index, #lines - 79)
   for index = #lines, start_index, -1 do
-    local line = trim(tostring(lines[index] or ""):gsub("\27%[[0-?]*[ -/]*[@-~]", ""):gsub("\r", ""))
+    local line = trim(M._v5.strip_terminal_control_sequences(lines[index]))
     if line ~= "" and line:match("%?[%]%)}\"'`%s]*$") then
       return true
     end
@@ -402,6 +452,9 @@ local function send_mode_toggle_sequence(sequence)
   end
 
   toggle_mode_state()
+  if type(M._v5.sync_terminal_mode_from_buffer) == "function" then
+    vim.defer_fn(M._v5.sync_terminal_mode_from_buffer, 150)
+  end
   return true
 end
 
@@ -860,6 +913,35 @@ local function note_terminal_activity()
   update_working_indicator()
 end
 
+function M._v5.sync_terminal_mode_from_buffer()
+  if state.job_id == nil or not valid_buf() then
+    return nil
+  end
+
+  local line_count = vim.api.nvim_buf_line_count(state.buf)
+  local start_line = math.max(0, line_count - 40)
+  local lines = buffer_lines(state.buf, start_line, line_count)
+  local mode = M._v5.detect_terminal_mode_from_lines(lines)
+  if mode ~= nil and mode ~= state.mode then
+    set_mode(mode)
+  end
+
+  return mode
+end
+
+function M._v5.schedule_terminal_buffer_observation()
+  if state.terminal_mode_sync_pending then
+    return
+  end
+
+  state.terminal_mode_sync_pending = true
+  vim.schedule(function()
+    state.terminal_mode_sync_pending = false
+    note_terminal_activity()
+    M._v5.sync_terminal_mode_from_buffer()
+  end)
+end
+
 local function attach_terminal_activity(bufnr)
   if state.terminal_attached_buf == bufnr then
     return
@@ -869,7 +951,7 @@ local function attach_terminal_activity(bufnr)
   local attach_ok = pcall(vim.api.nvim_buf_attach, bufnr, false, {
     on_lines = function(_, attached_buf)
       if attached_buf == state.buf then
-        vim.schedule(note_terminal_activity)
+        M._v5.schedule_terminal_buffer_observation()
       end
     end,
     on_detach = function(_, attached_buf)
@@ -995,6 +1077,9 @@ local function submit_terminal_prompt()
   if send_ok and sent ~= 0 then
     if state.terminal_command_tail == "/plan" then
       toggle_mode_state()
+      if type(M._v5.sync_terminal_mode_from_buffer) == "function" then
+        vim.defer_fn(M._v5.sync_terminal_mode_from_buffer, 150)
+      end
     else
       M._v5.mark_terminal_prompt_submission()
       set_codex_working(true)
@@ -6005,7 +6090,7 @@ local function mode_status_label()
 end
 
 local function mode_status_header_lines()
-  local lines = { "codux status " .. (state.mode or "not running") }
+  local lines = { "codux status " .. M._v5.mode_display_label(state.mode) }
   local usage = token_usage_label()
   if usage ~= "" then
     table.insert(lines, usage)
@@ -6164,7 +6249,7 @@ end
 
 local function codux_which_key_title()
   local usage = token_usage_label()
-  local title = { { " codux " .. (state.mode or "not running") .. " ", mode_status_hl() } }
+  local title = { { " codux " .. M._v5.mode_display_label(state.mode) .. " ", mode_status_hl() } }
   if usage ~= "" then
     local compact_usage = usage:gsub("^usage | ", "")
     table.insert(title, { "| " .. compact_usage .. " ", "CoduxWhichKeyUsage" })

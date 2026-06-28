@@ -334,7 +334,7 @@ Codux sends requested files, selections, diagnostics, and health output through 
 
 <p align="center">
   The <code>&lt;leader&gt;z</code> menu header shows the current Codux-tracked status and token usage while Codux is running:<br>
-  <code>codux execute | 5hr 3% | wk 5%</code><br>
+  <code>codux exec | 5hr 3% | wk 5%</code><br>
   <code>codux plan | 5hr 3% | wk 5%</code>
 </p>
 
