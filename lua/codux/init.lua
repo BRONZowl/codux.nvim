@@ -1215,6 +1215,31 @@ local function command_with_prompt(command, prompt)
   return command .. " " .. vim.fn.shellescape(prompt)
 end
 
+function M._v5.command_with_args(command, args)
+  args = type(args) == "table" and args or {}
+  if #args == 0 then
+    return command
+  end
+
+  if type(command) == "table" then
+    local with_args = vim.list_extend({}, command)
+    for _, arg in ipairs(args) do
+      table.insert(with_args, arg)
+    end
+    return with_args
+  end
+
+  if type(command) == "string" then
+    local parts = { command }
+    for _, arg in ipairs(args) do
+      table.insert(parts, vim.fn.shellescape(tostring(arg)))
+    end
+    return table.concat(parts, " ")
+  end
+
+  return command
+end
+
 local function command_error(command)
   if type(command) == "string" then
     if command:match("^%s*$") then
@@ -2119,6 +2144,105 @@ function M._v5.tmux_target(session, window_name)
   return session .. ":" .. window_name
 end
 
+function M._v5.normalize_codex_session_id(value)
+  if type(value) ~= "string" then
+    return nil
+  end
+
+  value = trim(value)
+  if value:match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") then
+    return value
+  end
+
+  return nil
+end
+
+function M._v5.codex_home()
+  local value = vim.env.CODEX_HOME
+  if type(value) == "string" and trim(value) ~= "" then
+    return vim.fn.expand(value)
+  end
+
+  return vim.fn.expand("~/.codex")
+end
+
+function M._v5.codex_session_files()
+  local root = M._v5.codex_home() .. "/sessions"
+  if vim.fn.isdirectory(root) ~= 1 then
+    return {}
+  end
+
+  local ok, files = pcall(vim.fn.globpath, root, "**/*.jsonl", false, true)
+  if not ok or type(files) ~= "table" then
+    return {}
+  end
+
+  return files
+end
+
+function M._v5.read_codex_session_meta(path)
+  if type(path) ~= "string" or path == "" or vim.fn.filereadable(path) ~= 1 then
+    return nil
+  end
+
+  local ok, lines = pcall(vim.fn.readfile, path, "", 1)
+  if not ok or type(lines) ~= "table" or type(lines[1]) ~= "string" then
+    return nil
+  end
+
+  local decoded = json_decode(lines[1])
+  if type(decoded) ~= "table" or decoded.type ~= "session_meta" or type(decoded.payload) ~= "table" then
+    return nil
+  end
+
+  local payload = decoded.payload
+  local session_id = M._v5.normalize_codex_session_id(payload.session_id) or M._v5.normalize_codex_session_id(payload.id)
+  if not session_id then
+    return nil
+  end
+
+  return {
+    session_id = session_id,
+    cwd = payload.cwd,
+    timestamp = payload.timestamp,
+    path = path,
+    mtime = tonumber(vim.fn.getftime(path)) or 0,
+  }
+end
+
+function M._v5.codex_session_for_id(session_id)
+  session_id = M._v5.normalize_codex_session_id(session_id)
+  if not session_id then
+    return nil
+  end
+
+  for _, path in ipairs(M._v5.codex_session_files()) do
+    local meta = M._v5.read_codex_session_meta(path)
+    if meta and meta.session_id == session_id then
+      return meta
+    end
+  end
+
+  return nil
+end
+
+function M._v5.latest_codex_session_for_cwd(cwd, min_mtime)
+  if type(cwd) ~= "string" or cwd == "" then
+    return nil
+  end
+
+  min_mtime = tonumber(min_mtime) or 0
+  local latest = nil
+  for _, path in ipairs(M._v5.codex_session_files()) do
+    local meta = M._v5.read_codex_session_meta(path)
+    if meta and meta.cwd == cwd and meta.mtime >= min_mtime and (not latest or meta.mtime > latest.mtime) then
+      latest = meta
+    end
+  end
+
+  return latest
+end
+
 local function shell_env_assignment(name, value)
   return name .. "=" .. vim.fn.shellescape(tostring(value or ""))
 end
@@ -2185,6 +2309,9 @@ function M._v5.normalize_record(record, safe_name, root)
     custom_instruction = record.custom_instruction,
     resolved_instruction = record.resolved_instruction,
     permission_profile = record.permission_profile or "default",
+    codex_session_id = M._v5.normalize_codex_session_id(record.codex_session_id),
+    codex_session_path = record.codex_session_path,
+    codex_session_captured_at = record.codex_session_captured_at,
     status = status,
     codex_status = codex_status,
     created_at = record.created_at,
@@ -2346,6 +2473,10 @@ local function workspace_from_state(record, fallback)
     custom_instruction = record.custom_instruction or fallback.custom_instruction,
     resolved_instruction = record.resolved_instruction or fallback.resolved_instruction,
     permission_profile = record.permission_profile or fallback.permission_profile or "default",
+    codex_session_id = M._v5.normalize_codex_session_id(record.codex_session_id)
+      or M._v5.normalize_codex_session_id(fallback.codex_session_id),
+    codex_session_path = record.codex_session_path or fallback.codex_session_path,
+    codex_session_captured_at = record.codex_session_captured_at or fallback.codex_session_captured_at,
     codex_status = record.codex_status or fallback.codex_status or "idle",
     status = record.status or fallback.status or "inactive",
     created_at = record.created_at or fallback.created_at,
@@ -2369,12 +2500,142 @@ local function workspace_state_record(workspace, existing)
     custom_instruction = workspace.custom_instruction,
     resolved_instruction = workspace.resolved_instruction,
     permission_profile = workspace.permission_profile or "default",
+    codex_session_id = M._v5.normalize_codex_session_id(workspace.codex_session_id),
+    codex_session_path = workspace.codex_session_path,
+    codex_session_captured_at = workspace.codex_session_captured_at,
     status = workspace.status or existing.status or "idle",
     codex_status = workspace.codex_status or existing.codex_status or "idle",
     created_at = existing.created_at or workspace.created_at or now,
     last_opened_at = now,
     last_reconciled_at = existing.last_reconciled_at,
   }
+end
+
+function M._v5.apply_codex_session_meta(workspace, meta)
+  if type(workspace) ~= "table" or type(meta) ~= "table" then
+    return false
+  end
+
+  local session_id = M._v5.normalize_codex_session_id(meta.session_id)
+  if not session_id then
+    return false
+  end
+
+  workspace.codex_session_id = session_id
+  workspace.codex_session_path = meta.path
+  workspace.codex_session_captured_at = workspace_timestamp()
+  return true
+end
+
+function M._v5.resolve_workspace_resume_session(workspace)
+  if type(workspace) ~= "table" then
+    return nil
+  end
+
+  local session_id = M._v5.normalize_codex_session_id(workspace.codex_session_id)
+  if session_id then
+    local meta = M._v5.codex_session_for_id(session_id)
+    if meta and meta.cwd == workspace.project_root then
+      M._v5.apply_codex_session_meta(workspace, meta)
+      return meta
+    end
+    workspace.codex_session_id = nil
+    workspace.codex_session_path = nil
+    workspace.codex_session_captured_at = nil
+  end
+
+  local meta = M._v5.latest_codex_session_for_cwd(workspace.project_root)
+  if meta then
+    M._v5.apply_codex_session_meta(workspace, meta)
+    return meta
+  end
+
+  return nil
+end
+
+function M._v5.persist_workspace_session_meta(workspace, meta)
+  if type(workspace) ~= "table" or type(meta) ~= "table" then
+    return false
+  end
+
+  local root = workspace.project_root
+  local safe_name = workspace.safe_name
+  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
+    return false
+  end
+
+  local state_data, state_error = read_workspace_state()
+  if state_error then
+    return false
+  end
+
+  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
+  local workspaces = type(project) == "table" and project.workspaces or nil
+  local record = type(workspaces) == "table" and workspaces[safe_name] or nil
+  if type(record) ~= "table" then
+    return false
+  end
+
+  local session_id = M._v5.normalize_codex_session_id(meta.session_id)
+  if not session_id then
+    return false
+  end
+  if meta.cwd ~= root then
+    return false
+  end
+
+  record.codex_session_id = session_id
+  record.codex_session_path = meta.path
+  record.codex_session_captured_at = workspace_timestamp()
+  project.updated_at = record.codex_session_captured_at
+
+  local write_ok = write_workspace_state(state_data)
+  if not write_ok then
+    return false
+  end
+
+  workspace.codex_session_id = record.codex_session_id
+  workspace.codex_session_path = record.codex_session_path
+  workspace.codex_session_captured_at = record.codex_session_captured_at
+  if state.workspace == workspace or (state.workspace and state.workspace.safe_name == safe_name and state.workspace.project_root == root) then
+    state.workspace.codex_session_id = record.codex_session_id
+    state.workspace.codex_session_path = record.codex_session_path
+    state.workspace.codex_session_captured_at = record.codex_session_captured_at
+  end
+  if state.workspace_manager_project_root == root and type(render_workspace_manager) == "function" then
+    render_workspace_manager()
+  end
+
+  return true
+end
+
+function M._v5.schedule_workspace_session_capture(workspace, min_mtime)
+  if type(workspace) ~= "table" then
+    return
+  end
+
+  min_mtime = tonumber(min_mtime) or 0
+  local attempts = 0
+
+  local function capture()
+    attempts = attempts + 1
+    local meta = nil
+    local session_id = M._v5.normalize_codex_session_id(workspace.codex_session_id)
+    if session_id then
+      meta = M._v5.codex_session_for_id(session_id)
+    end
+    if not meta then
+      meta = M._v5.latest_codex_session_for_cwd(workspace.project_root, min_mtime)
+    end
+    if meta and M._v5.persist_workspace_session_meta(workspace, meta) then
+      return
+    end
+    if attempts < 12 then
+      vim.defer_fn(capture, 500)
+    end
+  end
+
+  vim.defer_fn(capture, 500)
 end
 
 M._sync_workspace_activity = function(codex_status)
@@ -3401,6 +3662,9 @@ local function workspace_bootstrap_lua(workspace)
   local custom_instruction = workspace.custom_instruction or ""
   local resolved_instruction = workspace.resolved_instruction or ""
   local initial_prompt = workspace.initial_prompt or ""
+  local codex_session_id = workspace.codex_session_id or ""
+  local codex_session_path = workspace.codex_session_path or ""
+  local codex_session_captured_at = workspace.codex_session_captured_at or ""
   local codex_status = initial_prompt ~= "" and "working" or "idle"
   local status = initial_prompt ~= "" and "active" or "idle"
   local show_codux = initial_prompt ~= ""
@@ -3412,7 +3676,7 @@ local function workspace_bootstrap_lua(workspace)
     "local profile=" .. lua_string(profile),
     "local prompt=" .. lua_string(initial_prompt),
     "local show_codux=" .. tostring(show_codux),
-    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",template=" .. lua_string(template) .. ",custom_instruction=" .. lua_string(custom_instruction) .. ",resolved_instruction=" .. lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. lua_string(codex_status) .. ",status=" .. lua_string(status) .. "}",
+    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",template=" .. lua_string(template) .. ",custom_instruction=" .. lua_string(custom_instruction) .. ",resolved_instruction=" .. lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. lua_string(codex_status) .. ",status=" .. lua_string(status) .. ",codex_session_id=" .. lua_string(codex_session_id) .. ",codex_session_path=" .. lua_string(codex_session_path) .. ",codex_session_captured_at=" .. lua_string(codex_session_captured_at) .. "}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
@@ -3566,6 +3830,7 @@ local function prepare_workspace(name, opts)
   workspace.window_name = M._v5.workspace_window_name(workspace.safe_name, workspace.template)
   workspace.project_root = workspace.project_root or root
   workspace.tmux_target = M._v5.tmux_target(session, workspace.window_name)
+  local saved_workspace = type(existing) == "table"
 
   if not resolved_instruction and type(workspace.resolved_instruction) == "string" and trim(workspace.resolved_instruction) ~= "" then
     resolved_instruction = workspace.resolved_instruction
@@ -3576,7 +3841,12 @@ local function prepare_workspace(name, opts)
   end
   if resolved_instruction then
     workspace.resolved_instruction = resolved_instruction
-    workspace.initial_prompt = resolved_instruction
+    if not saved_workspace then
+      workspace.initial_prompt = resolved_instruction
+    end
+  end
+  if saved_workspace then
+    M._v5.resolve_workspace_resume_session(workspace)
   end
 
   local window_id, created = ensure_tmux_window(session, workspace.project_root, workspace.window_name, workspace_nvim_command(workspace))
@@ -3708,6 +3978,7 @@ local function start_terminal(focus, initial_prompt, command, workspace, permiss
   end
 
   local job_id
+  local session_capture_mtime = os.time() - 2
   local term_command = command_with_prompt(command, initial_prompt)
   local term_options = {
     on_exit = function(_, code)
@@ -3771,6 +4042,9 @@ local function start_terminal(focus, initial_prompt, command, workspace, permiss
     start_token_monitor_timer()
   end
   set_codex_working(type(initial_prompt) == "string" and initial_prompt ~= "")
+  if opts.capture_workspace_session == true and workspace ~= nil then
+    M._v5.schedule_workspace_session_capture(workspace, session_capture_mtime)
+  end
 
   if hidden then
     if is_valid_win(previous_win) then
@@ -3848,8 +4122,16 @@ function M.open_workspace_session(workspace, initial_prompt, opts)
     profile = "default"
   end
 
+  local resume_session_id = workspace and M._v5.normalize_codex_session_id(workspace.codex_session_id) or nil
+  if resume_session_id and (type(initial_prompt) ~= "string" or initial_prompt == "") then
+    command = M._v5.command_with_args(command, { "resume", resume_session_id })
+  end
+
   local visible = opts.visible == true
-  return start_terminal(visible, initial_prompt, command, workspace, profile, { hidden = not visible })
+  return start_terminal(visible, initial_prompt, command, workspace, profile, {
+    hidden = not visible,
+    capture_workspace_session = workspace ~= nil,
+  })
 end
 
 function M.open_hidden(initial_prompt)

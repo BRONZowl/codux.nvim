@@ -1,5 +1,13 @@
 # Release Notes
 
+## Unreleased
+
+Workspace conversation resume.
+
+- Saved Codux workspaces now persist the Codex session id after launch.
+- Reopening a saved workspace resumes that exact Codex conversation when the local transcript is available.
+- Older saved workspaces seed their session id from the most recent local Codex session for the same project root.
+
 ## v0.6.2
 
 Workspace dashboard search.

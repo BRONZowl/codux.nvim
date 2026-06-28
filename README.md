@@ -119,6 +119,7 @@
 <p>
   Inside tmux, Codux creates or reuses a <code>backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts new workspaces with your current Codex permission profile.
   Reopened saved workspaces keep their stored profile.
+  Reopened saved workspaces resume the stored Codex session id when available, so the workspace returns to the same Codex conversation instead of starting a new one.
   Workspace windows use the requested workspace name for the tmux window.
   New guided workspaces open the Codux popup so you can confirm the startup prompt is running.
 </p>
@@ -150,6 +151,7 @@
 
 <p>
   Use <code>:CoduxWorkspaceRestore</code> to reconcile saved workspace state with tmux after restarts.
+  Saved workspace state also records the Codex session id after launch; older workspace records are seeded from the most recent local Codex session for the same project root the next time they are opened.
   Use <code>:CoduxDoctor</code>, or press <code>h</code> in the workspace dashboard, when troubleshooting external dependencies and saved workspace targets.
 </p>
 
