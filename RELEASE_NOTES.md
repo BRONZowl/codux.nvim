@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.6.4
+
+Workspace instruction editor polish.
+
+- Workspace instruction input now opens as a Vim-like editor window with line numbers, normal-mode startup, autocomplete disabled, and a mode indicator in the floating border.
+
 ## v0.6.3
 
 Workspace conversation resume and file-backed instructions.

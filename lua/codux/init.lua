@@ -4340,14 +4340,16 @@ function M._v5.workspace_instruction_editor_config(line_count)
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local width = math.min(96, math.max(58, math.floor(total_width * 0.72)))
-  local height = math.min(math.max(11, (line_count or 1) + 1), math.max(8, total_height - 4))
+  local height = math.min(math.max(11, line_count or 1), math.max(8, total_height - 4))
 
   return {
     relative = "editor",
     style = "minimal",
     border = "rounded",
-    title = " workspace instruction · vim-mode ",
+    title = " Workspace Instruction ",
     title_pos = "center",
+    footer = " NORMAL ",
+    footer_pos = "center",
     width = width,
     height = height,
     col = math.max(0, math.floor((total_width - width) / 2)),
@@ -4355,94 +4357,75 @@ function M._v5.workspace_instruction_editor_config(line_count)
   }
 end
 
-function M._v5.workspace_instruction_footer_segments()
-  return {
-    { key = ":w", desc = "save" },
-    { key = "<c-q>", desc = "cancel" },
-  }
-end
-
-function M._v5.workspace_instruction_footer_line()
-  local parts = {}
-  local segments = M._v5.workspace_instruction_footer_segments()
-  for index, segment in ipairs(segments) do
-    table.insert(parts, segment.key .. " " .. segment.desc)
-    if index < #segments then
-      table.insert(parts, "  ")
-    end
+function M._v5.workspace_instruction_mode_label(mode)
+  if type(mode) ~= "string" or mode == "" then
+    local ok, current_mode = pcall(vim.api.nvim_get_mode)
+    mode = ok and type(current_mode) == "table" and current_mode.mode or "n"
   end
 
-  return table.concat(parts, "")
+  if mode:sub(1, 1) == "i" then
+    return " INSERT "
+  end
+  if mode:sub(1, 1) == "R" then
+    return " REPLACE "
+  end
+  if mode == "v" or mode == "V" or mode == "\22" then
+    return " VISUAL "
+  end
+  if mode == "s" or mode == "S" or mode == "\19" then
+    return " SELECT "
+  end
+  if mode:sub(1, 1) == "c" then
+    return " COMMAND "
+  end
+  if mode:sub(1, 1) == "t" then
+    return " TERMINAL "
+  end
+
+  return " NORMAL "
 end
 
-function M._v5.render_workspace_instruction_footer(bufnr, width)
+function M._v5.update_workspace_instruction_mode_footer(win)
+  if not is_valid_win(win) then
+    return false
+  end
+
+  local config_ok, win_config = pcall(vim.api.nvim_win_get_config, win)
+  if not config_ok or type(win_config) ~= "table" then
+    return false
+  end
+
+  win_config.footer = M._v5.workspace_instruction_mode_label()
+  win_config.footer_pos = "center"
+  local set_ok = pcall(vim.api.nvim_win_set_config, win, win_config)
+  return set_ok
+end
+
+function M._v5.disable_workspace_instruction_completion(bufnr)
   if not is_loaded_buf(bufnr) then
     return false
   end
 
-  width = type(width) == "number" and width > 0 and width or 1
-  local line = M._v5.workspace_instruction_footer_line()
-  local padding = math.max(0, math.floor((width - #line) / 2))
-  local text = string.rep(" ", padding) .. line
-
-  pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = bufnr })
-  pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, { text })
-  pcall(vim.api.nvim_buf_clear_namespace, bufnr, state.workspace_manager_ns, 0, -1)
-
-  local col = padding
-  local segments = M._v5.workspace_instruction_footer_segments()
-  for index, segment in ipairs(segments) do
-    local key_end = col + #segment.key
-    pcall(vim.api.nvim_buf_add_highlight, bufnr, state.workspace_manager_ns, "WhichKey", 0, col, key_end)
-    local desc_end = key_end + 1 + #segment.desc
-    pcall(vim.api.nvim_buf_add_highlight, bufnr, state.workspace_manager_ns, "WhichKeySeparator", 0, key_end, desc_end)
-    col = desc_end
-    if index < #segments then
-      col = col + 2
-    end
+  for _, option in ipairs({ "complete", "completefunc", "omnifunc", "thesaurusfunc", "tagfunc", "dictionary" }) do
+    pcall(vim.api.nvim_set_option_value, option, "", { buf = bufnr })
   end
 
-  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+  local buffer_vars = {
+    blink_cmp_enabled = false,
+    cmp_enabled = false,
+    codux_disable_completion = true,
+    completion = false,
+    copilot_enabled = false,
+    minicompletion_disable = true,
+  }
+
+  for key, value in pairs(buffer_vars) do
+    pcall(function()
+      vim.b[bufnr][key] = value
+    end)
+  end
+
   return true
-end
-
-function M._v5.open_workspace_instruction_footer(win)
-  if not is_valid_win(win) then
-    return nil, nil
-  end
-
-  local buf_ok, bufnr = pcall(vim.api.nvim_create_buf, false, true)
-  if not buf_ok or not is_loaded_buf(bufnr) then
-    return nil, nil
-  end
-
-  pcall(vim.api.nvim_set_option_value, "bufhidden", "wipe", { buf = bufnr })
-  pcall(vim.api.nvim_set_option_value, "filetype", "codux-workspace-instruction-footer", { buf = bufnr })
-  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
-
-  local height_ok, height = pcall(vim.api.nvim_win_get_height, win)
-  local width_ok, width = pcall(vim.api.nvim_win_get_width, win)
-  height = height_ok and type(height) == "number" and height > 0 and height or 1
-  width = width_ok and type(width) == "number" and width > 0 and width or 1
-
-  local win_ok, footer_win = pcall(vim.api.nvim_open_win, bufnr, false, {
-    relative = "win",
-    win = win,
-    col = 0,
-    row = height - 1,
-    width = width,
-    height = 1,
-    border = "none",
-    style = "minimal",
-    zindex = 51,
-  })
-  if not win_ok then
-    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
-    return nil, nil
-  end
-
-  M._v5.render_workspace_instruction_footer(bufnr, width)
-  return bufnr, footer_win
 end
 
 function M._v5.open_workspace_instruction_editor(request, opts)
@@ -4467,29 +4450,30 @@ function M._v5.open_workspace_instruction_editor(request, opts)
   pcall(vim.api.nvim_buf_set_name, bufnr, "codux://workspace-instruction/" .. tostring(bufnr))
   pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, lines)
   pcall(vim.api.nvim_set_option_value, "modified", false, { buf = bufnr })
+  M._v5.disable_workspace_instruction_completion(bufnr)
 
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, M._v5.workspace_instruction_editor_config(#lines + 2))
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, M._v5.workspace_instruction_editor_config(#lines))
   if not win_ok then
     pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
     notify("Failed to open Codux workspace instruction editor", vim.log.levels.ERROR)
     return false
   end
 
+  pcall(vim.api.nvim_set_option_value, "number", true, { win = win })
+  pcall(vim.api.nvim_set_option_value, "relativenumber", false, { win = win })
+  pcall(vim.api.nvim_set_option_value, "cursorline", true, { win = win })
+  pcall(vim.api.nvim_set_option_value, "signcolumn", "yes", { win = win })
+  pcall(vim.api.nvim_set_option_value, "winfixbuf", true, { win = win })
   pcall(vim.api.nvim_set_option_value, "wrap", true, { win = win })
   pcall(vim.api.nvim_set_option_value, "linebreak", true, { win = win })
-  local footer_buf, footer_win = M._v5.open_workspace_instruction_footer(win)
+  pcall(vim.cmd, "stopinsert")
+  M._v5.update_workspace_instruction_mode_footer(win)
   local closed = false
   local saved = false
   local autocmd_group = vim.api.nvim_create_augroup("codux-workspace-instruction-" .. tostring(bufnr), { clear = true })
 
   local function close_editor()
     closed = true
-    if is_valid_win(footer_win) then
-      pcall(vim.api.nvim_win_close, footer_win, true)
-    end
-    if is_loaded_buf(footer_buf) then
-      pcall(vim.api.nvim_buf_delete, footer_buf, { force = true })
-    end
     if is_valid_win(win) then
       pcall(vim.api.nvim_win_close, win, true)
     end
@@ -4548,16 +4532,16 @@ function M._v5.open_workspace_instruction_editor(request, opts)
       end
     end,
   })
+  vim.api.nvim_create_autocmd({ "ModeChanged", "InsertEnter", "InsertLeave" }, {
+    group = autocmd_group,
+    callback = function()
+      M._v5.update_workspace_instruction_mode_footer(win)
+    end,
+  })
   vim.api.nvim_create_autocmd("WinClosed", {
     group = autocmd_group,
     pattern = tostring(win),
     callback = function()
-      if is_valid_win(footer_win) then
-        pcall(vim.api.nvim_win_close, footer_win, true)
-      end
-      if is_loaded_buf(footer_buf) then
-        pcall(vim.api.nvim_buf_delete, footer_buf, { force = true })
-      end
       if not closed and not saved and type(opts.on_cancel) == "function" then
         vim.schedule(function()
           opts.on_cancel(request)
@@ -4570,7 +4554,6 @@ function M._v5.open_workspace_instruction_editor(request, opts)
   pcall(vim.keymap.set, "n", "<C-s>", save_editor, { buffer = bufnr, silent = true, desc = "Save Codux Workspace Instruction" })
   pcall(vim.keymap.set, "i", "<C-s>", save_editor, { buffer = bufnr, silent = true, desc = "Save Codux Workspace Instruction" })
   M._v5.bind_close_keys(bufnr, cancel_editor, "Cancel Codux Workspace Instruction", { "n", "i" })
-  pcall(vim.cmd, "startinsert")
   return true
 end
 
@@ -5171,7 +5154,6 @@ M._workspace_target_sync_allowed = function(event)
     or filetype == "codux-workspace-create"
     or filetype == "codux-workspace-create-footer"
     or filetype == "codux-workspace-instruction"
-    or filetype == "codux-workspace-instruction-footer"
   then
     return false
   end
