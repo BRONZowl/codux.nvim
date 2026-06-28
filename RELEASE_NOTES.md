@@ -8,7 +8,9 @@ Workspace conversation resume.
 - Reopening a saved workspace resumes that exact Codex conversation when the local transcript is available.
 - Older saved workspaces seed their session id from the most recent local Codex session for the same project root.
 - Workspace instructions are now passed to Codex as session guidance instead of an auto-submitted first prompt.
-- Codux keeps workspace instructions private in its workspace state and does not write `AGENTS.md`.
+- Workspace instructions are mirrored to `.agents/codux/<workspace>.md`; non-empty files override the saved JSON copy and can recover missing workspace entries.
+- Deleting a workspace removes its saved state and matching `.agents/codux/<workspace>.md` instruction file.
+- Codux keeps workspace instructions out of `AGENTS.md`.
 
 ## v0.6.2
 

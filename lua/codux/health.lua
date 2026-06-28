@@ -147,6 +147,25 @@ function M.check()
         health_ok("workspace state file will be created on first workspace use")
       end
     end
+
+    local instruction_dir = info.workspace_instruction_directory
+    if type(instruction_dir) == "string" and instruction_dir ~= "" then
+      health_ok("workspace instruction directory: " .. instruction_dir)
+      if vim.fn.isdirectory(instruction_dir) == 1 then
+        if vim.fn.filewritable(instruction_dir) == 2 then
+          health_ok("workspace instruction directory is writable")
+        else
+          health_warn("workspace instruction directory is not writable: " .. instruction_dir)
+        end
+      else
+        local parent = vim.fn.fnamemodify(instruction_dir, ":h")
+        if vim.fn.isdirectory(parent) == 1 and vim.fn.filewritable(parent) == 2 then
+          health_ok("workspace instruction directory will be created on first workspace use")
+        else
+          health_warn("workspace instruction directory parent is not writable: " .. parent)
+        end
+      end
+    end
   end
 
   local commands = {

@@ -24,6 +24,10 @@ local defaults = {
     enabled = true,
     tmux_cmd = vim.env.TMUX_CMD or "tmux",
     state_file = nil,
+    instruction_files = {
+      enabled = true,
+      directory = ".agents/codux",
+    },
     templates = {},
   },
   mappings = {
@@ -2295,6 +2299,156 @@ local function workspace_state_file()
   return vim.fn.stdpath("data") .. "/codux/workspaces.json"
 end
 
+function M._v5.workspace_instruction_files_config()
+  local workspaces = workspace_config()
+  if workspaces.enabled == false then
+    return { enabled = false }
+  end
+
+  local value = workspaces.instruction_files
+  if value == false then
+    return { enabled = false }
+  end
+  if type(value) ~= "table" then
+    value = defaults.workspaces.instruction_files
+  end
+
+  local directory = type(value.directory) == "string" and trim(value.directory) or ""
+  if directory == "" then
+    directory = defaults.workspaces.instruction_files.directory
+  end
+
+  return {
+    enabled = value.enabled ~= false,
+    directory = directory,
+  }
+end
+
+function M._v5.workspace_instruction_directory(root)
+  local file_config = M._v5.workspace_instruction_files_config()
+  if file_config.enabled == false then
+    return nil
+  end
+  if type(root) ~= "string" or root == "" then
+    return nil
+  end
+
+  local directory = vim.fn.expand(file_config.directory)
+  if directory == "" then
+    return nil
+  end
+  if directory:match("^/") then
+    return directory
+  end
+
+  return root .. "/" .. directory
+end
+
+function M._v5.workspace_instruction_file_path(root, safe_name)
+  local directory = M._v5.workspace_instruction_directory(root)
+  if not directory or type(safe_name) ~= "string" or trim(safe_name) == "" then
+    return nil
+  end
+
+  return directory .. "/" .. safe_name .. ".md"
+end
+
+function M._v5.read_workspace_instruction_file(root, safe_name)
+  local path = M._v5.workspace_instruction_file_path(root, safe_name)
+  if not path or vim.fn.filereadable(path) ~= 1 then
+    return nil
+  end
+
+  local ok, lines = pcall(vim.fn.readfile, path)
+  if not ok then
+    return nil
+  end
+
+  local instruction = trim(table.concat(lines, "\n"))
+  if instruction == "" then
+    return nil
+  end
+
+  return instruction
+end
+
+function M._v5.write_workspace_instruction_file(root, safe_name, instruction)
+  instruction = type(instruction) == "string" and trim(instruction) or ""
+  if instruction == "" then
+    return true, nil
+  end
+
+  local path = M._v5.workspace_instruction_file_path(root, safe_name)
+  if not path then
+    return true, nil
+  end
+
+  local directory = vim.fn.fnamemodify(path, ":h")
+  if directory ~= "" then
+    local mkdir_ok = pcall(vim.fn.mkdir, directory, "p")
+    if not mkdir_ok then
+      return false, "Failed to create Codux workspace instruction directory"
+    end
+  end
+
+  local lines = vim.split(instruction, "\n", { plain = true })
+  local ok = pcall(vim.fn.writefile, lines, path)
+  if not ok then
+    return false, "Failed to write Codux workspace instruction file"
+  end
+
+  return true, nil
+end
+
+function M._v5.delete_workspace_instruction_file(root, safe_name)
+  local path = M._v5.workspace_instruction_file_path(root, safe_name)
+  if not path or vim.fn.filereadable(path) ~= 1 then
+    return true, nil
+  end
+
+  local ok, result = pcall(vim.fn.delete, path)
+  if not ok or result ~= 0 then
+    return false, "Failed to delete Codux workspace instruction file"
+  end
+
+  return true, nil
+end
+
+function M._v5.workspace_instruction_file_records(root)
+  local directory = M._v5.workspace_instruction_directory(root)
+  if not directory or vim.fn.isdirectory(directory) ~= 1 then
+    return {}
+  end
+
+  local ok, files = pcall(vim.fn.globpath, directory, "*.md", false, true)
+  if not ok or type(files) ~= "table" then
+    return {}
+  end
+
+  local records = {}
+  for _, path in ipairs(files) do
+    local safe_name = vim.fn.fnamemodify(path, ":t:r")
+    local display_name, sanitized_name = sanitize_workspace_name(safe_name)
+    if type(safe_name) == "string" and display_name and sanitized_name == safe_name then
+      local instruction = M._v5.read_workspace_instruction_file(root, safe_name)
+      if instruction then
+        records[safe_name] = {
+          name = display_name,
+          safe_name = safe_name,
+          project_root = root,
+          resolved_instruction = instruction,
+          status = "inactive",
+          codex_status = "idle",
+          instruction_file = path,
+          instruction_file_only = true,
+        }
+      end
+    end
+  end
+
+  return records
+end
+
 local function empty_workspace_state()
   return {
     version = 2,
@@ -2727,31 +2881,56 @@ local function workspace_entries_for_project(root)
 
   local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
   local workspaces = type(project) == "table" and project.workspaces or nil
-  if type(workspaces) ~= "table" then
-    return {}, nil
-  end
 
   local session = current_tmux_session()
   local entries = {}
-  for safe_name, record in pairs(workspaces) do
+  local seen = {}
+  if type(workspaces) == "table" then
+    for safe_name, record in pairs(workspaces) do
+      if type(record) == "table" then
+        local window_name = record.tmux_window or record.window_name or safe_name
+        local window_id = session and tmux_window_id(session, window_name) or nil
+        local status = M._v5.dashboard_workspace_status(record, window_id)
+        seen[record.safe_name or safe_name] = true
+        table.insert(entries, {
+          name = record.name or safe_name,
+          safe_name = record.safe_name or safe_name,
+          project_root = record.project_root or root,
+          target_path = record.target_path,
+          target_type = record.target_type,
+          git_branch = record.git_branch or "",
+          window_name = window_name,
+          tmux_target = M._v5.tmux_target(session, window_name) or record.tmux_target,
+          template = record.template,
+          codex_status = record.codex_status or "idle",
+          window_id = window_id,
+          status = status,
+        })
+      end
+    end
+  end
+
+  for safe_name, record in pairs(M._v5.workspace_instruction_file_records(root)) do
     if type(record) == "table" then
-      local window_name = record.tmux_window or record.window_name or safe_name
-      local window_id = session and tmux_window_id(session, window_name) or nil
-      local status = M._v5.dashboard_workspace_status(record, window_id)
-      table.insert(entries, {
-        name = record.name or safe_name,
-        safe_name = record.safe_name or safe_name,
-        project_root = record.project_root or root,
-        target_path = record.target_path,
-        target_type = record.target_type,
-        git_branch = record.git_branch or "",
-        window_name = window_name,
-        tmux_target = M._v5.tmux_target(session, window_name) or record.tmux_target,
-        template = record.template,
-        codex_status = record.codex_status or "idle",
-        window_id = window_id,
-        status = status,
-      })
+      local entry_safe_name = record.safe_name or safe_name
+      if not seen[entry_safe_name] then
+        local window_name = M._v5.workspace_window_name(entry_safe_name, record.template)
+        local window_id = session and tmux_window_id(session, window_name) or nil
+        table.insert(entries, {
+          name = record.name or entry_safe_name,
+          safe_name = entry_safe_name,
+          project_root = record.project_root or root,
+          git_branch = "",
+          window_name = window_name,
+          tmux_target = M._v5.tmux_target(session, window_name),
+          template = record.template,
+          codex_status = "idle",
+          window_id = window_id,
+          status = window_id and "idle" or "inactive",
+          instruction_file = record.instruction_file,
+          instruction_file_only = true,
+        })
+      end
     end
   end
 
@@ -2790,13 +2969,19 @@ function M._v5.names_for_project(root)
 
   local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
   local workspaces = type(project) == "table" and project.workspaces or nil
-  if type(workspaces) ~= "table" then
-    return {}
-  end
 
   local names = {}
-  for safe_name, record in pairs(workspaces) do
-    if type(record) == "table" then
+  local seen = {}
+  if type(workspaces) == "table" then
+    for safe_name, record in pairs(workspaces) do
+      if type(record) == "table" then
+        seen[record.safe_name or safe_name] = true
+        table.insert(names, record.name or safe_name)
+      end
+    end
+  end
+  for safe_name, record in pairs(M._v5.workspace_instruction_file_records(root)) do
+    if type(record) == "table" and not seen[record.safe_name or safe_name] then
       table.insert(names, record.name or safe_name)
     end
   end
@@ -3597,6 +3782,21 @@ local function rename_saved_workspace(entry, new_name)
     return false
   end
 
+  local old_instruction_path = M._v5.workspace_instruction_file_path(root, entry.safe_name)
+  local new_instruction_path = M._v5.workspace_instruction_file_path(root, safe_name_or_error)
+  if
+    old_instruction_path
+    and new_instruction_path
+    and old_instruction_path ~= new_instruction_path
+    and vim.fn.filereadable(old_instruction_path) == 1
+    and vim.fn.filereadable(new_instruction_path) ~= 1
+  then
+    local rename_ok, rename_result = pcall(vim.fn.rename, old_instruction_path, new_instruction_path)
+    if not rename_ok or rename_result ~= 0 then
+      notify("Renamed workspace, but failed to move Codux instruction file", vim.log.levels.WARN)
+    end
+  end
+
   notify("Renamed Codux workspace to " .. display_name)
   close_workspace_manager()
   return true
@@ -3611,9 +3811,19 @@ local function delete_saved_workspace(entry)
   end
 
   local project = workspace_project_state(state_data, root)
-  if type(project.workspaces[entry.safe_name]) ~= "table" then
+  local existing = project.workspaces[entry.safe_name]
+  local instruction_path = M._v5.workspace_instruction_file_path(root, entry.safe_name)
+  local has_instruction_file = instruction_path and vim.fn.filereadable(instruction_path) == 1
+  if type(existing) ~= "table" and not has_instruction_file then
     notify("workspace not found", vim.log.levels.ERROR)
     render_workspace_manager()
+    return false
+  end
+
+  local delete_instruction_ok, delete_instruction_error =
+    M._v5.delete_workspace_instruction_file(root, entry.safe_name)
+  if not delete_instruction_ok then
+    notify(delete_instruction_error, vim.log.levels.ERROR)
     return false
   end
 
@@ -3821,13 +4031,14 @@ local function prepare_workspace(name, opts)
 
   local project = workspace_project_state(state_data, root)
   local existing = project.workspaces[safe_name_or_error]
+  local file_instruction = M._v5.read_workspace_instruction_file(root, safe_name_or_error)
   if type(existing) == "table" and not opts.allow_existing then
     return nil, "workspace already exists"
   end
   if type(existing) == "table" and existing.name ~= display_name and not opts.allow_existing then
     return nil, "workspace already exists"
   end
-  if opts.require_existing and type(existing) ~= "table" then
+  if opts.require_existing and type(existing) ~= "table" and not file_instruction then
     return nil, "workspace not found"
   end
 
@@ -3858,9 +4069,12 @@ local function prepare_workspace(name, opts)
   workspace.window_name = M._v5.workspace_window_name(workspace.safe_name, workspace.template)
   workspace.project_root = workspace.project_root or root
   workspace.tmux_target = M._v5.tmux_target(session, workspace.window_name)
-  local saved_workspace = type(existing) == "table"
+  local saved_workspace = type(existing) == "table" or (opts.require_existing and file_instruction ~= nil)
   workspace.open_visible = not saved_workspace
 
+  if not resolved_instruction and file_instruction then
+    resolved_instruction = file_instruction
+  end
   if not resolved_instruction and type(workspace.resolved_instruction) == "string" and trim(workspace.resolved_instruction) ~= "" then
     resolved_instruction = workspace.resolved_instruction
   end
@@ -3870,6 +4084,11 @@ local function prepare_workspace(name, opts)
   end
   if resolved_instruction then
     workspace.resolved_instruction = resolved_instruction
+  end
+  local instruction_ok, instruction_error =
+    M._v5.write_workspace_instruction_file(workspace.project_root, workspace.safe_name, workspace.resolved_instruction)
+  if not instruction_ok then
+    return nil, instruction_error
   end
   if saved_workspace then
     M._v5.resolve_workspace_resume_session(workspace)
@@ -5978,6 +6197,15 @@ function M.doctor()
     add("[warn]", "workspace state not writable: " .. state_file)
   end
 
+  local instruction_dir = M._v5.workspace_instruction_directory(vim.fn.getcwd())
+  if type(instruction_dir) == "string" and instruction_dir ~= "" then
+    if vim.fn.isdirectory(instruction_dir) == 1 then
+      add("[ok]", "workspace instruction directory readable: " .. instruction_dir)
+    else
+      add("[ok]", "workspace instruction directory will be created on first use: " .. instruction_dir)
+    end
+  end
+
   local root = workspace_manager_project_root()
   if type(root) == "string" and root ~= "" then
     add("[ok]", "project root detected: " .. root)
@@ -6057,6 +6285,7 @@ function M.health_info()
     },
     workspace = state.workspace,
     workspace_state_file = workspace_state_file(),
+    workspace_instruction_directory = M._v5.workspace_instruction_directory(workspace_manager_project_root()),
   }
 end
 

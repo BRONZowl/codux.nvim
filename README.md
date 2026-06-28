@@ -113,7 +113,7 @@
 <p>
   Use <code>:CoduxWorkspaceCreate</code> or <code>&lt;leader&gt;zw</code> inside tmux to create a guided Codex workspace.
   The create flow prompts for a name, opens the Vim-like instruction editor, then previews the instruction before launch.
-  Workspace instructions are stored in Codux workspace state and passed to Codex as session guidance; Codux does not create or edit <code>AGENTS.md</code>.
+  Workspace instructions are mirrored to <code>.agents/codux/&lt;workspace&gt;.md</code>, stored in Codux workspace state, and passed to Codex as session guidance; Codux does not create or edit <code>AGENTS.md</code>.
   New workspace windows launch in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
 </p>
 
@@ -127,6 +127,8 @@
 
 <p>
   Workspace names are persisted per project in <code>stdpath("data")/codux/workspaces.json</code>.
+  Instruction files in <code>.agents/codux/</code> are project-local and editable; when a non-empty instruction file exists, Codux uses it over the saved JSON copy.
+  If workspace state is missing but an instruction file remains, the workspace dashboard can recover that workspace entry from the file.
   Creating a workspace with an existing name shows <code>workspace already exists</code>.
 </p>
 
@@ -134,6 +136,7 @@
   Use <code>:CoduxWorkspaces</code> or <code>&lt;leader&gt;zW</code> to open <code>current codux workspaces</code>.
   Codux opens a <code>Codux workspace:</code> search field above the dashboard; type a fuzzy workspace name to filter the dashboard and preview the closest match.
   Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>&lt;CR&gt;</code> to open, <code>r</code> to rename, <code>x</code> to close the workspace window, <code>d</code> to delete, and <code>h</code> to run doctor.
+  Deleting a workspace removes its saved state and matching <code>.agents/codux/&lt;workspace&gt;.md</code> instruction file.
   Press <code>s</code> from the dashboard to search again, or <code>&lt;C-q&gt;</code> to close the dashboard and search field.
   Statuses show <code>active</code> when Codex is working, <code>question</code> when plan mode is waiting on your answer, <code>idle</code> when the workspace is open, or <code>inactive</code> when it is not open.
   The target column updates as each workspace moves between files or supported file explorer targets.
