@@ -1240,6 +1240,33 @@ function M._v5.command_with_args(command, args)
   return command
 end
 
+function M._v5.toml_basic_string(value)
+  value = tostring(value or "")
+  value = value:gsub("\\", "\\\\")
+  value = value:gsub('"', '\\"')
+  value = value:gsub("\b", "\\b")
+  value = value:gsub("\t", "\\t")
+  value = value:gsub("\n", "\\n")
+  value = value:gsub("\f", "\\f")
+  value = value:gsub("\r", "\\r")
+  value = value:gsub("[%z\1-\8\11\12\14-\31]", function(char)
+    return string.format("\\u%04X", string.byte(char))
+  end)
+  return '"' .. value .. '"'
+end
+
+function M._v5.command_with_developer_instructions(command, instructions)
+  instructions = type(instructions) == "string" and trim(instructions) or ""
+  if instructions == "" then
+    return command
+  end
+
+  return M._v5.command_with_args(command, {
+    "-c",
+    "developer_instructions=" .. M._v5.toml_basic_string(instructions),
+  })
+end
+
 local function command_error(command)
   if type(command) == "string" then
     if command:match("^%s*$") then
@@ -3662,12 +3689,13 @@ local function workspace_bootstrap_lua(workspace)
   local custom_instruction = workspace.custom_instruction or ""
   local resolved_instruction = workspace.resolved_instruction or ""
   local initial_prompt = workspace.initial_prompt or ""
+  local open_visible = workspace.open_visible == true
   local codex_session_id = workspace.codex_session_id or ""
   local codex_session_path = workspace.codex_session_path or ""
   local codex_session_captured_at = workspace.codex_session_captured_at or ""
   local codex_status = initial_prompt ~= "" and "working" or "idle"
   local status = initial_prompt ~= "" and "active" or "idle"
-  local show_codux = initial_prompt ~= ""
+  local show_codux = open_visible or initial_prompt ~= ""
 
   return table.concat({
     "local root=" .. lua_string(root),
@@ -3676,7 +3704,7 @@ local function workspace_bootstrap_lua(workspace)
     "local profile=" .. lua_string(profile),
     "local prompt=" .. lua_string(initial_prompt),
     "local show_codux=" .. tostring(show_codux),
-    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",template=" .. lua_string(template) .. ",custom_instruction=" .. lua_string(custom_instruction) .. ",resolved_instruction=" .. lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. lua_string(codex_status) .. ",status=" .. lua_string(status) .. ",codex_session_id=" .. lua_string(codex_session_id) .. ",codex_session_path=" .. lua_string(codex_session_path) .. ",codex_session_captured_at=" .. lua_string(codex_session_captured_at) .. "}",
+    "local workspace={name=" .. lua_string(name) .. ",safe_name=" .. lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. lua_string(branch) .. ",window_name=" .. lua_string(window_name) .. ",template=" .. lua_string(template) .. ",custom_instruction=" .. lua_string(custom_instruction) .. ",resolved_instruction=" .. lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. lua_string(codex_status) .. ",status=" .. lua_string(status) .. ",codex_session_id=" .. lua_string(codex_session_id) .. ",codex_session_path=" .. lua_string(codex_session_path) .. ",codex_session_captured_at=" .. lua_string(codex_session_captured_at) .. ",open_visible=" .. tostring(open_visible) .. "}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
@@ -3831,6 +3859,7 @@ local function prepare_workspace(name, opts)
   workspace.project_root = workspace.project_root or root
   workspace.tmux_target = M._v5.tmux_target(session, workspace.window_name)
   local saved_workspace = type(existing) == "table"
+  workspace.open_visible = not saved_workspace
 
   if not resolved_instruction and type(workspace.resolved_instruction) == "string" and trim(workspace.resolved_instruction) ~= "" then
     resolved_instruction = workspace.resolved_instruction
@@ -3841,9 +3870,6 @@ local function prepare_workspace(name, opts)
   end
   if resolved_instruction then
     workspace.resolved_instruction = resolved_instruction
-    if not saved_workspace then
-      workspace.initial_prompt = resolved_instruction
-    end
   end
   if saved_workspace then
     M._v5.resolve_workspace_resume_session(workspace)
@@ -4121,6 +4147,9 @@ function M.open_workspace_session(workspace, initial_prompt, opts)
   else
     profile = "default"
   end
+
+  local developer_instructions = workspace and workspace.resolved_instruction or nil
+  command = M._v5.command_with_developer_instructions(command, developer_instructions)
 
   local resume_session_id = workspace and M._v5.normalize_codex_session_id(workspace.codex_session_id) or nil
   if resume_session_id and (type(initial_prompt) ~= "string" or initial_prompt == "") then

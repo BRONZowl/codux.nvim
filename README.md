@@ -113,6 +113,7 @@
 <p>
   Use <code>:CoduxWorkspaceCreate</code> or <code>&lt;leader&gt;zw</code> inside tmux to create a guided Codex workspace.
   The create flow prompts for a name, opens the Vim-like instruction editor, then previews the instruction before launch.
+  Workspace instructions are stored in Codux workspace state and passed to Codex as session guidance; Codux does not create or edit <code>AGENTS.md</code>.
   New workspace windows launch in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
 </p>
 
@@ -121,7 +122,7 @@
   Reopened saved workspaces keep their stored profile.
   Reopened saved workspaces resume the stored Codex session id when available, so the workspace returns to the same Codex conversation instead of starting a new one.
   Workspace windows use the requested workspace name for the tmux window.
-  New guided workspaces open the Codux popup so you can confirm the startup prompt is running.
+  New guided workspaces open the Codux popup with the workspace guidance loaded and wait for your first task.
 </p>
 
 <p>
