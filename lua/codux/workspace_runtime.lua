@@ -9,6 +9,14 @@ local function trim(value)
   return (value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function normalize_codex_mode(mode)
+  if mode == "execute" or mode == "plan" then
+    return mode
+  end
+
+  return nil
+end
+
 local function default_current_buffer()
   return vim.api.nvim_get_current_buf()
 end
@@ -333,6 +341,10 @@ function M:dashboard_workspace_status(record, window_id)
   return "idle"
 end
 
+function M:normalize_codex_mode(mode)
+  return normalize_codex_mode(mode)
+end
+
 function M:permission_profile()
   if self.terminal_running() then
     return self.state.permission_profile or "default"
@@ -570,6 +582,51 @@ function M:sync_activity(codex_status)
   return true
 end
 
+function M:sync_mode(mode)
+  mode = self:normalize_codex_mode(mode)
+  if type(self.state.workspace) ~= "table" then
+    return false
+  end
+
+  local root = self.state.workspace.project_root
+  local safe_name = self.state.workspace.safe_name
+  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
+    return false
+  end
+
+  local state_data, state_error = self:read_state()
+  if state_error then
+    return false
+  end
+
+  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
+  local workspaces = type(project) == "table" and project.workspaces or nil
+  local record = type(workspaces) == "table" and workspaces[safe_name] or nil
+  if type(record) ~= "table" then
+    return false
+  end
+
+  if record.codex_mode == mode then
+    self.state.workspace.codex_mode = mode
+    return true
+  end
+
+  record.codex_mode = mode
+  project.updated_at = self:timestamp()
+
+  local write_ok = self:write_state(state_data)
+  if not write_ok then
+    return false
+  end
+
+  self.state.workspace.codex_mode = mode
+  if self.state.workspace_manager_project_root == root then
+    self.render_workspace_manager()
+  end
+
+  return true
+end
+
 function M:entries_for_project(root)
   local state_data, state_error = self:read_state()
   if state_error then
@@ -588,6 +645,7 @@ function M:entries_for_project(root)
         local window_name = record.tmux_window or record.window_name or safe_name
         local window_id = session and self:tmux_window_id(session, window_name) or nil
         local status = self:dashboard_workspace_status(record, window_id)
+        local codex_mode = status ~= "inactive" and self:normalize_codex_mode(record.codex_mode) or nil
         seen[record.safe_name or safe_name] = true
         table.insert(entries, {
           name = record.name or safe_name,
@@ -599,6 +657,7 @@ function M:entries_for_project(root)
           window_name = window_name,
           tmux_target = M.tmux_target(session, window_name) or record.tmux_target,
           codex_status = record.codex_status or "idle",
+          codex_mode = codex_mode,
           window_id = window_id,
           status = status,
         })
@@ -736,6 +795,7 @@ function M:reconcile_project(root)
       record.status = status
       if status == "inactive" then
         record.codex_status = "idle"
+        record.codex_mode = nil
       end
       record.tmux_window = window_name
       record.tmux_target = M.tmux_target(session, window_name) or record.tmux_target
@@ -918,6 +978,7 @@ function M:close_saved_workspace_window(entry)
 
   existing.status = "inactive"
   existing.codex_status = "idle"
+  existing.codex_mode = nil
   existing.tmux_window = window_name
   existing.tmux_target = nil
   existing.last_reconciled_at = self:timestamp()
@@ -1154,6 +1215,9 @@ function M:prepare_workspace(name, opts)
     else
       workspace.codex_status = "idle"
     end
+  end
+  if workspace.status == "inactive" then
+    workspace.codex_mode = nil
   end
   workspace.initial_prompt = nil
   project.workspaces[workspace.safe_name] = self:state_record(workspace, existing)

@@ -28,6 +28,14 @@ local function now_ms()
   return os.time() * 1000
 end
 
+local function workspace_mode_for(mode)
+  if mode == "execute" or mode == "plan" then
+    return mode
+  end
+
+  return nil
+end
+
 function M.mode_display_label(mode)
   if mode == "execute" then
     return "exec"
@@ -142,6 +150,7 @@ function M.new(opts)
     command_util = type(opts.command_util) == "table" and opts.command_util or command_util,
     ui = type(opts.ui) == "table" and opts.ui or ui,
     sync_workspace_activity = type(opts.sync_workspace_activity) == "function" and opts.sync_workspace_activity or noop,
+    sync_workspace_mode = type(opts.sync_workspace_mode) == "function" and opts.sync_workspace_mode or noop,
     reset_workspace_runtime = type(opts.reset_workspace_runtime) == "function" and opts.reset_workspace_runtime or noop,
     capture_workspace_session = type(opts.capture_workspace_session) == "function" and opts.capture_workspace_session or noop,
     refresh_which_key = type(opts.refresh_which_key) == "function" and opts.refresh_which_key or noop,
@@ -192,11 +201,14 @@ function M:delete_buffer_deferred(bufnr)
 end
 
 function M:set_mode(mode)
+  local workspace_mode = workspace_mode_for(mode)
   if self.state.mode == mode then
+    self.sync_workspace_mode(workspace_mode)
     return
   end
 
   self.state.mode = mode
+  self.sync_workspace_mode(workspace_mode)
   if
     mode ~= "plan"
     and type(self.state.workspace) == "table"
@@ -1020,10 +1032,10 @@ function M:start_terminal(focus, initial_prompt, command, workspace, permission_
         self.sync_workspace_activity("idle")
         self.state.last_prompt_line = nil
         self:reset_terminal_prompt_input()
-        self.reset_workspace_runtime()
         self.stop_token_monitor_timer()
         self:set_codex_working(false, { force_idle = true })
         self:set_mode("not running")
+        self.reset_workspace_runtime()
       end
       if not expected_exit and code ~= 0 then
         self.notify("Codex exited with code " .. tostring(code), vim.log.levels.WARN)
@@ -1162,10 +1174,10 @@ function M:exit()
   self.sync_workspace_activity("idle")
   self.state.last_prompt_line = nil
   self:reset_terminal_prompt_input()
-  self.reset_workspace_runtime()
   self.stop_token_monitor_timer()
   self:set_codex_working(false, { force_idle = true })
   self:set_mode("not running")
+  self.reset_workspace_runtime()
 
   if self:valid_win() then
     self.ui.close_window(self.state.win)

@@ -139,6 +139,7 @@
   Deleting a workspace removes its saved state and matching <code>.agents/codux/&lt;workspace&gt;.md</code> instruction file.
   Press <code>s</code> from the dashboard to search again, or <code>&lt;C-q&gt;</code> to close the dashboard and search field.
   Statuses show <code>active</code> when Codex is working, <code>question</code> when plan mode is waiting on your answer, <code>idle</code> when the workspace is open, or <code>inactive</code> when it is not open.
+  The mode column shows <code>exec</code>, <code>plan</code>, or <code>--</code> when the workspace mode is unknown or inactive.
   The target column updates as each workspace moves between files or supported file explorer targets.
 </p>
 

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## v0.6.5
+
+Workspace dashboard mode tracking and Codex mode switching fixes.
+
+- Added a workspace dashboard mode column showing `exec`, `plan`, or `--` when mode is unknown or inactive.
+- Persisted workspace Codex mode while sessions are running and clear it when workspaces become inactive or Codex exits.
+- Fixed Codex mode switching so the z-menu, `:CoduxTogglePlan`, and terminal `<S-Tab>` all use the bidirectional Shift-Tab mode switch.
+- Removed terminal-output based mode mutation to avoid false positives from prose or code snippets mentioning plan/execute.
+- Hardened repeated setup keymap cleanup, workspace name validation, and timed system command handling.
+- Refactored Codux internals into focused modules for terminal, workspace, context, health, prompt, token, and UI behavior.
+
 ## v0.6.4
 
 Workspace instruction editor polish.

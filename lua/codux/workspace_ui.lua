@@ -2,6 +2,7 @@ local M = {}
 
 M.MANAGER_NAME_WIDTH = 28
 M.MANAGER_STATUS_WIDTH = 8
+M.MANAGER_MODE_WIDTH = 4
 M.MANAGER_GAP = "  "
 
 function M.display_width(text)
@@ -51,16 +52,32 @@ end
 function M.manager_column_widths(width)
   width = tonumber(width) or 58
   local gap_width = M.display_width(M.MANAGER_GAP)
-  local available = math.max(1, width - M.MANAGER_STATUS_WIDTH - (gap_width * 2))
+  local fixed_width = M.MANAGER_STATUS_WIDTH + M.MANAGER_MODE_WIDTH + (gap_width * 3)
+  local available = math.max(1, width - fixed_width)
   local name_width = math.min(M.MANAGER_NAME_WIDTH, math.max(12, available - 8))
   local target_width = math.max(0, available - name_width)
 
   return name_width, target_width
 end
 
+function M.manager_mode_label(entry)
+  entry = type(entry) == "table" and entry or {}
+  if entry.status == "inactive" then
+    return "--"
+  end
+  if entry.codex_mode == "execute" then
+    return "exec"
+  end
+  if entry.codex_mode == "plan" then
+    return "plan"
+  end
+  return "--"
+end
+
 function M.manager_line(entry, width)
   entry = type(entry) == "table" and entry or {}
   local status = entry.status or "inactive"
+  local mode = M.manager_mode_label(entry)
   local target = type(entry.target_path) == "string" and entry.target_path ~= "" and vim.fn.fnamemodify(entry.target_path, ":t") or ""
   local name_width, target_width = M.manager_column_widths(width)
 
@@ -68,6 +85,8 @@ function M.manager_line(entry, width)
     M.pad_display_right(entry.name or "", name_width),
     M.MANAGER_GAP,
     M.pad_display_right(status, M.MANAGER_STATUS_WIDTH),
+    M.MANAGER_GAP,
+    M.pad_display_right(mode, M.MANAGER_MODE_WIDTH),
     M.MANAGER_GAP,
     M.truncate_display_tail(target, target_width),
   })
@@ -80,6 +99,8 @@ function M.manager_header_line(width)
     M.pad_display_right("workspace", name_width),
     M.MANAGER_GAP,
     M.pad_display_right("status", M.MANAGER_STATUS_WIDTH),
+    M.MANAGER_GAP,
+    M.pad_display_right("mode", M.MANAGER_MODE_WIDTH),
     M.MANAGER_GAP,
     "target",
   })

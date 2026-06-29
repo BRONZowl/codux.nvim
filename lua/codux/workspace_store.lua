@@ -226,6 +226,14 @@ function Store.normalize_session_id(value)
   return nil
 end
 
+function Store.normalize_codex_mode(value)
+  if value == "execute" or value == "plan" then
+    return value
+  end
+
+  return nil
+end
+
 function Store:normalize_record(record, safe_name, root)
   if type(record) ~= "table" then
     return nil
@@ -244,6 +252,7 @@ function Store:normalize_record(record, safe_name, root)
   local codex_status = record.codex_status == "working" and "working"
     or record.codex_status == "question" and "question"
     or "idle"
+  local codex_mode = status ~= "inactive" and Store.normalize_codex_mode(record.codex_mode) or nil
 
   return {
     name = name,
@@ -262,6 +271,7 @@ function Store:normalize_record(record, safe_name, root)
     codex_session_captured_at = record.codex_session_captured_at,
     status = status,
     codex_status = codex_status,
+    codex_mode = codex_mode,
     created_at = record.created_at,
     last_opened_at = record.last_opened_at,
     last_activity_at = record.last_activity_at,
@@ -375,6 +385,10 @@ end
 function Store.workspace_from_state(record, fallback)
   record = type(record) == "table" and record or {}
   fallback = type(fallback) == "table" and fallback or {}
+  local status = record.status or fallback.status or "inactive"
+  local codex_mode = status ~= "inactive"
+      and (Store.normalize_codex_mode(record.codex_mode) or Store.normalize_codex_mode(fallback.codex_mode))
+    or nil
 
   return {
     name = record.name or fallback.name,
@@ -392,7 +406,8 @@ function Store.workspace_from_state(record, fallback)
     codex_session_path = record.codex_session_path or fallback.codex_session_path,
     codex_session_captured_at = record.codex_session_captured_at or fallback.codex_session_captured_at,
     codex_status = record.codex_status or fallback.codex_status or "idle",
-    status = record.status or fallback.status or "inactive",
+    status = status,
+    codex_mode = codex_mode,
     created_at = record.created_at or fallback.created_at,
   }
 end
@@ -400,6 +415,11 @@ end
 function Store:state_record(workspace, existing)
   existing = type(existing) == "table" and existing or {}
   local now = Store.timestamp()
+  local status = workspace.status or existing.status or "idle"
+  local codex_mode = nil
+  if status ~= "inactive" then
+    codex_mode = Store.normalize_codex_mode(workspace.codex_mode) or Store.normalize_codex_mode(existing.codex_mode)
+  end
 
   return {
     name = workspace.name,
@@ -416,8 +436,9 @@ function Store:state_record(workspace, existing)
     codex_session_id = Store.normalize_session_id(workspace.codex_session_id),
     codex_session_path = workspace.codex_session_path,
     codex_session_captured_at = workspace.codex_session_captured_at,
-    status = workspace.status or existing.status or "idle",
+    status = status,
     codex_status = workspace.codex_status or existing.codex_status or "idle",
+    codex_mode = codex_mode,
     created_at = existing.created_at or workspace.created_at or now,
     last_opened_at = now,
     last_reconciled_at = existing.last_reconciled_at,

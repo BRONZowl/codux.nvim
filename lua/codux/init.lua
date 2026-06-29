@@ -277,6 +277,12 @@ terminal = terminal_mod.new({
     end
     return false
   end,
+  sync_workspace_mode = function(mode)
+    if type(M._sync_workspace_mode) == "function" then
+      return M._sync_workspace_mode(mode)
+    end
+    return false
+  end,
   reset_workspace_runtime = function()
     state.workspace = nil
     state.workspace_target_signature = nil
@@ -617,6 +623,10 @@ end
 
 M._sync_workspace_activity = function(codex_status)
   return workspace_runtime:sync_activity(codex_status)
+end
+
+M._sync_workspace_mode = function(mode)
+  return workspace_runtime:sync_mode(mode)
 end
 
 local function workspace_entries_for_project(root)
