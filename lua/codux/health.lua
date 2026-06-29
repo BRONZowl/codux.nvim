@@ -1,4 +1,5 @@
 local M = {}
+local command_util = require("codux.command")
 
 local function health_start(name)
   if vim.health.start then
@@ -36,56 +37,126 @@ local function executable(name)
   return vim.fn.executable(name) == 1
 end
 
-local function command_display(command)
-  if type(command) == "string" then
-    return command
+function M.doctor_lines(deps)
+  deps = type(deps) == "table" and deps or {}
+  local lines = { "codux.nvim doctor", "" }
+  local function add(status, message)
+    table.insert(lines, status .. " " .. message)
   end
 
-  if type(command) ~= "table" then
-    return tostring(command)
+  local tmux = type(deps.tmux_cmd) == "function" and deps.tmux_cmd() or "tmux"
+  if vim.fn.executable(tmux) == 1 then
+    add("[ok]", "tmux found: " .. tmux)
+  else
+    add("[warn]", "tmux not found: " .. tmux)
   end
 
-  local parts = {}
-  for _, part in ipairs(command) do
-    local value = tostring(part)
-    if value:find("%s") then
-      value = vim.fn.shellescape(value)
+  local session = type(deps.current_tmux_session) == "function" and deps.current_tmux_session() or nil
+  if session then
+    add("[ok]", "tmux server reachable: " .. session)
+  else
+    add("[warn]", "tmux server not reachable or Neovim is outside tmux")
+  end
+
+  local config = type(deps.config) == "table" and deps.config or {}
+  local codex_executable = command_util.executable(config.codex_cmd) or "codex"
+  if vim.fn.executable(codex_executable) == 1 then
+    add("[ok]", "codex found: " .. codex_executable)
+  else
+    add("[warn]", "codex command not found: " .. tostring(codex_executable))
+  end
+
+  local state_file = type(deps.workspace_state_file) == "function" and deps.workspace_state_file() or nil
+  if type(state_file) == "string" and state_file ~= "" then
+    local state_dir = vim.fn.fnamemodify(state_file, ":h")
+    if vim.fn.filereadable(state_file) == 1 then
+      add("[ok]", "workspace state readable")
+    elseif vim.fn.isdirectory(state_dir) == 1 then
+      add("[ok]", "workspace state will be created on first use")
+    else
+      add("[warn]", "workspace state directory missing: " .. state_dir)
     end
-    table.insert(parts, value)
-  end
 
-  return table.concat(parts, " ")
-end
-
-local function command_executable(command)
-  if type(command) == "table" then
-    return command[1]
-  end
-
-  if type(command) == "string" then
-    return command:match("^%s*(%S+)")
-  end
-
-  return nil
-end
-
-local function command_error(command)
-  if type(command) == "string" then
-    if command:match("^%s*$") then
-      return "configured Codex command must not be empty"
+    if vim.fn.filewritable(state_file) == 1 or vim.fn.filewritable(state_dir) == 2 then
+      add("[ok]", "workspace state writable")
+    else
+      add("[warn]", "workspace state not writable: " .. state_file)
     end
-    return nil
+  else
+    add("[warn]", "workspace state file not configured")
   end
 
-  if type(command) ~= "table" then
-    return "configured Codex command must be a string or list"
+  local instruction_dir = type(deps.workspace_instruction_directory) == "function"
+      and deps.workspace_instruction_directory(vim.fn.getcwd())
+    or nil
+  if type(instruction_dir) == "string" and instruction_dir ~= "" then
+    if vim.fn.isdirectory(instruction_dir) == 1 then
+      add("[ok]", "workspace instruction directory readable: " .. instruction_dir)
+    else
+      add("[ok]", "workspace instruction directory will be created on first use: " .. instruction_dir)
+    end
   end
 
-  if type(command[1]) ~= "string" or command[1]:match("^%s*$") then
-    return "configured Codex command list must start with an executable"
+  local root = type(deps.project_root) == "function" and deps.project_root() or nil
+  if type(root) == "string" and root ~= "" then
+    add("[ok]", "project root detected: " .. root)
+  else
+    add("[warn]", "project root not detected")
   end
 
-  return nil
+  local state_data = {}
+  local state_error
+  if type(deps.read_workspace_state) == "function" then
+    state_data, state_error = deps.read_workspace_state()
+    state_data = type(state_data) == "table" and state_data or {}
+  end
+  if state_error then
+    add("[warn]", state_error)
+  end
+
+  local projects = type(state_data.projects) == "table" and state_data.projects or {}
+  local project = projects[root]
+  local workspaces = type(project) == "table" and project.workspaces or nil
+  local workspace_count = 0
+  local invalid_count = 0
+  if type(workspaces) == "table" then
+    for safe_name, record in pairs(workspaces) do
+      if type(record) == "table" and type(record.name) == "string" and type(record.project_root) == "string" then
+        workspace_count = workspace_count + 1
+      else
+        invalid_count = invalid_count + 1
+        if type(safe_name) == "string" then
+          workspace_count = workspace_count + 1
+        end
+      end
+    end
+  end
+  add("[ok]", tostring(workspace_count) .. " workspaces loaded")
+  if invalid_count > 0 then
+    add("[warn]", tostring(invalid_count) .. " workspace records invalid")
+  end
+
+  if type(deps.workspace_entries_for_project) == "function" then
+    local entries, entries_error = deps.workspace_entries_for_project(root)
+    if entries_error then
+      add("[warn]", "dashboard target resolution failed: " .. entries_error)
+    else
+      add("[ok]", "dashboard can resolve targets")
+      local inactive = 0
+      for _, entry in ipairs(entries) do
+        if entry.status == "inactive" then
+          inactive = inactive + 1
+        end
+      end
+      if inactive > 0 then
+        add("[warn]", tostring(inactive) .. " workspace windows inactive")
+      else
+        add("[ok]", "no workspace windows inactive")
+      end
+    end
+  end
+
+  return lines
 end
 
 function M.check()
@@ -176,15 +247,15 @@ function M.check()
 
   local checked_executables = {}
   for _, entry in ipairs(commands) do
-    local config_error = command_error(entry.value)
+    local config_error = command_util.error(entry.value, "configured Codex command")
     if config_error then
       health_error(entry.label .. " command: " .. config_error)
       return
     end
 
-    health_ok("configured " .. entry.label .. " command: " .. command_display(entry.value))
+    health_ok("configured " .. entry.label .. " command: " .. command_util.display(entry.value))
 
-    local executable_name = command_executable(entry.value)
+    local executable_name = command_util.executable(entry.value)
     if type(executable_name) == "string" and executable_name ~= "" and not checked_executables[executable_name] then
       checked_executables[executable_name] = true
       if executable(executable_name) then
