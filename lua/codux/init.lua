@@ -94,7 +94,8 @@ local state = {
     timeout_timer = nil,
   },
   terminal_attached_buf = nil,
-  terminal_command_tail = "",
+  terminal_prompt_input = "",
+  terminal_prompt_tracking_valid = true,
   terminal_mode_sync_pending = false,
   permission_profile = "default",
   last_permission_profile = "default",
@@ -123,6 +124,7 @@ local state = {
   focus_lock_autocmd = nil,
   exiting_jobs = {},
   pending_delete_buffers = {},
+  installed_mappings = {},
 }
 
 local augroup = vim.api.nvim_create_augroup("codux.nvim", { clear = true })
@@ -184,6 +186,9 @@ local function system_with_timeout(args, timeout_ms)
     end)
     if not ok then
       return tostring(result), 124
+    end
+    if type(result) ~= "table" then
+      return "Command timed out or returned no result", 124
     end
 
     return (result.stdout or "") .. (result.stderr or ""), result.code or 0
@@ -1173,9 +1178,34 @@ local function create_commands()
   end, { force = true, desc = "Run codux.nvim troubleshooting checks" })
 end
 
+local function mapping_id(mode, lhs)
+  return tostring(mode) .. "\0" .. tostring(lhs)
+end
+
+local function remove_installed_mappings()
+  for id, mapping in pairs(state.installed_mappings or {}) do
+    local mode = mapping.mode
+    local lhs = mapping.lhs
+    if type(mode) == "string" and type(lhs) == "string" and lhs ~= "" then
+      local current = vim.fn.maparg(lhs, mode, false, true)
+      if type(current) == "table" and current.desc == mapping.desc then
+        pcall(vim.keymap.del, mode, lhs)
+      end
+    end
+    state.installed_mappings[id] = nil
+  end
+end
+
 local function set_mapping(mode, lhs, rhs, desc)
   if type(lhs) == "string" and lhs ~= "" then
     vim.keymap.set(mode, lhs, rhs, { desc = desc })
+    if type(mode) == "string" then
+      state.installed_mappings[mapping_id(mode, lhs)] = {
+        mode = mode,
+        lhs = lhs,
+        desc = desc,
+      }
+    end
   end
 end
 
@@ -1234,6 +1264,7 @@ end
 
 function M.setup(opts)
   stop_token_monitor_timer()
+  remove_installed_mappings()
   config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
 
   create_commands()

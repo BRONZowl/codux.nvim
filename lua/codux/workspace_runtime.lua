@@ -637,8 +637,8 @@ function M:entries_for_project(root)
 end
 
 function M:entry_for_name(root, name)
-  local _, safe_name_or_error = M.sanitize_workspace_name(name)
-  if type(safe_name_or_error) ~= "string" then
+  local display_name, safe_name_or_error = M.sanitize_workspace_name(name)
+  if not display_name then
     return nil, safe_name_or_error
   end
 

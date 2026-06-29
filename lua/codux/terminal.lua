@@ -46,6 +46,29 @@ function M.strip_terminal_control_sequences(value)
     :gsub("[%z\1-\8\11-\12\14-\31\127]", "")
 end
 
+function M.detect_terminal_mode_from_line(line)
+  line = trim(M.strip_terminal_control_sequences(line):lower():gsub("%s+", " "))
+  if line == "" then
+    return nil
+  end
+
+  if line == "/plan" then
+    return "plan"
+  end
+
+  local mode = line:match("^mode:%s*(plan)$") or line:match("^codex mode:%s*(plan)$")
+  if mode then
+    return mode
+  end
+
+  mode = line:match("^mode:%s*(execute)$") or line:match("^codex mode:%s*(execute)$")
+  if mode then
+    return mode
+  end
+
+  return nil
+end
+
 function M.detect_terminal_mode_from_lines(lines, first_index)
   if type(lines) ~= "table" then
     return nil
@@ -57,10 +80,10 @@ function M.detect_terminal_mode_from_lines(lines, first_index)
   local saw_plan = false
 
   for index = #lines, start_index, -1 do
-    local line = trim(M.strip_terminal_control_sequences(lines[index]):lower():gsub("%s+", " "))
-    if line ~= "" then
-      saw_execute = saw_execute or line:find("%f[%w]execute%f[%W]") ~= nil
-      saw_plan = saw_plan or line:find("%f[%w]plan%f[%W]") ~= nil
+    local mode = M.detect_terminal_mode_from_line(lines[index])
+    if mode ~= nil then
+      saw_execute = saw_execute or mode == "execute"
+      saw_plan = saw_plan or mode == "plan"
       if saw_execute and saw_plan then
         return nil
       end
@@ -92,6 +115,18 @@ function M.output_looks_like_question(lines, first_index)
   end
 
   return false
+end
+
+function M.terminal_prompt_is_plan_toggle(input, tracking_valid)
+  if tracking_valid == nil then
+    tracking_valid = true
+  end
+  return tracking_valid == true and trim(input) == "/plan"
+end
+
+function M.terminal_line_is_plan_toggle(line)
+  line = trim(M.strip_terminal_control_sequences(line):gsub("%s+", " "))
+  return line == "/plan" or line == "> /plan"
 end
 
 function M.new(opts)
@@ -177,6 +212,7 @@ function M:terminal_running()
   if self.state.job_id == nil then
     self.stop_token_monitor_timer()
     self.state.last_prompt_line = nil
+    self:reset_terminal_prompt_input()
     self:set_codex_working(false, { force_idle = true })
     self:set_mode("not running")
     return false
@@ -188,6 +224,7 @@ function M:terminal_running()
     self.state.job_id = nil
     self.stop_token_monitor_timer()
     self.state.last_prompt_line = nil
+    self:reset_terminal_prompt_input()
     self:set_codex_working(false, { force_idle = true })
     self:set_mode("not running")
     return false
@@ -199,6 +236,7 @@ function M:terminal_running()
     self.state.job_id = nil
     self.stop_token_monitor_timer()
     self.state.last_prompt_line = nil
+    self:reset_terminal_prompt_input()
     self:set_codex_working(false, { force_idle = true })
     self:set_mode("not running")
     return false
@@ -211,6 +249,7 @@ function M:terminal_running()
   self.state.job_id = nil
   self.stop_token_monitor_timer()
   self.state.last_prompt_line = nil
+  self:reset_terminal_prompt_input()
   self:set_codex_working(false, { force_idle = true })
   self:set_mode("not running")
   return false
@@ -226,6 +265,7 @@ function M:focus_terminal_prompt(input)
   pcall(vim.cmd, "startinsert")
 
   if type(input) == "string" and input ~= "" and self:terminal_running() then
+    self:invalidate_terminal_prompt_tracking()
     pcall(vim.fn.chansend, self.state.job_id, input)
   end
 
@@ -245,43 +285,90 @@ function M:send_mode_toggle_sequence(sequence)
 
   local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, sequence)
   if not send_ok or sent == 0 then
-    self.notify("Failed to toggle Codex plan mode", vim.log.levels.ERROR)
+    self.notify("Failed to switch Codex mode", vim.log.levels.ERROR)
     return false
   end
 
   self:toggle_mode_state()
-  vim.defer_fn(function()
-    self:sync_terminal_mode_from_buffer()
-  end, 150)
   return true
 end
 
 function M:toggle_plan_mode()
-  return self:send_mode_toggle_sequence("\27[200~/plan\27[201~\r")
-end
-
-function M:send_shift_tab_mode_toggle()
+  self:reset_terminal_prompt_input()
   return self:send_mode_toggle_sequence("\27[Z")
 end
 
-function M:reset_terminal_command_tail()
-  self.state.terminal_command_tail = ""
+function M:send_shift_tab_mode_toggle()
+  return self:toggle_plan_mode()
 end
 
-function M:append_terminal_command_tail(input)
-  self.state.terminal_command_tail = ((self.state.terminal_command_tail or "") .. input):sub(-5)
+function M:reset_terminal_prompt_input()
+  self.state.terminal_prompt_input = ""
+  self.state.terminal_prompt_tracking_valid = true
 end
 
-function M:terminal_tail_key(input)
+function M:invalidate_terminal_prompt_tracking()
+  self.state.terminal_prompt_input = ""
+  self.state.terminal_prompt_tracking_valid = false
+end
+
+function M:append_terminal_prompt_input(input)
+  if self.state.terminal_prompt_tracking_valid ~= true then
+    return
+  end
+  self.state.terminal_prompt_input = (self.state.terminal_prompt_input or "") .. tostring(input or "")
+end
+
+function M:delete_terminal_prompt_input_char()
+  if self.state.terminal_prompt_tracking_valid ~= true then
+    return
+  end
+  local input = tostring(self.state.terminal_prompt_input or "")
+  local length = vim.fn.strchars(input)
+  if length <= 0 then
+    return
+  end
+
+  self.state.terminal_prompt_input = vim.fn.strcharpart(input, 0, length - 1)
+end
+
+function M:terminal_input_key(input, opts)
+  opts = type(opts) == "table" and opts or {}
   return function()
     if not self:terminal_running() then
       return false
     end
 
-    self:append_terminal_command_tail(input)
+    if opts.delete_previous then
+      self:delete_terminal_prompt_input_char()
+    else
+      self:append_terminal_prompt_input(input)
+    end
     local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, input)
     return send_ok and sent ~= 0
   end
+end
+
+function M:terminal_buffer_prompt_is_plan_toggle()
+  if not self:valid_buf() then
+    return false
+  end
+
+  local line_count = vim.api.nvim_buf_line_count(self.state.buf)
+  local start_line = math.max(0, line_count - 4)
+  local lines = buffer_lines(self.state.buf, start_line, line_count)
+  if type(lines) ~= "table" then
+    return false
+  end
+
+  for index = #lines, 1, -1 do
+    local line = trim(M.strip_terminal_control_sequences(lines[index]))
+    if line ~= "" then
+      return M.terminal_line_is_plan_toggle(line)
+    end
+  end
+
+  return false
 end
 
 function M:terminal_prompt_key(input)
@@ -506,12 +593,7 @@ function M:sync_terminal_mode_from_buffer()
   local line_count = vim.api.nvim_buf_line_count(self.state.buf)
   local start_line = math.max(0, line_count - 40)
   local lines = buffer_lines(self.state.buf, start_line, line_count)
-  local mode = M.detect_terminal_mode_from_lines(lines)
-  if mode ~= nil and mode ~= self.state.mode then
-    self:set_mode(mode)
-  end
-
-  return mode
+  return M.detect_terminal_mode_from_lines(lines)
 end
 
 function M:schedule_terminal_buffer_observation()
@@ -523,7 +605,6 @@ function M:schedule_terminal_buffer_observation()
   vim.schedule(function()
     self.state.terminal_mode_sync_pending = false
     self:note_terminal_activity()
-    self:sync_terminal_mode_from_buffer()
   end)
 end
 
@@ -663,16 +744,17 @@ function M:submit_terminal_prompt()
 
   local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, "\r")
   if send_ok and sent ~= 0 then
-    if self.state.terminal_command_tail == "/plan" then
-      self:toggle_mode_state()
-      vim.defer_fn(function()
-        self:sync_terminal_mode_from_buffer()
-      end, 150)
+    if
+      M.terminal_prompt_is_plan_toggle(self.state.terminal_prompt_input, self.state.terminal_prompt_tracking_valid)
+      and self:terminal_buffer_prompt_is_plan_toggle()
+    then
+      self:set_mode("plan")
+      self.notify("Codex mode: " .. self.state.mode)
     else
       self:mark_terminal_prompt_submission()
       self:set_codex_working(true)
     end
-    self:reset_terminal_command_tail()
+    self:reset_terminal_prompt_input()
     return true
   end
 
@@ -685,7 +767,7 @@ function M:interrupt_terminal_prompt()
   end
 
   self:set_codex_working(false, { force_idle = true })
-  self:reset_terminal_command_tail()
+  self:reset_terminal_prompt_input()
   local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, "\3")
   return send_ok and sent ~= 0
 end
@@ -723,17 +805,24 @@ function M:ensure_buffer()
     nowait = true,
   })
   self.update_terminal_mode_mapping()
-  for _, key in ipairs({
-    { "/", "/" },
-    { "p", "p" },
-    { "l", "l" },
-    { "a", "a" },
-    { "n", "n" },
-  }) do
-    self.ui.set_keymap(bufnr, "t", key[1], self:terminal_tail_key(key[2]), "Type in Codux Prompt", {
+  for _, key in ipairs(self.ui.printable_prompt_keys()) do
+    self.ui.set_keymap(bufnr, "t", key[1], self:terminal_input_key(key[2]), "Type in Codux Prompt", {
       nowait = true,
     })
   end
+  self.ui.set_keymap(bufnr, "t", "<BS>", self:terminal_input_key("\b", { delete_previous = true }), "Delete Codux Prompt Character", {
+    nowait = true,
+  })
+  self.ui.set_keymap(
+    bufnr,
+    "t",
+    "<C-h>",
+    self:terminal_input_key("\b", { delete_previous = true }),
+    "Delete Codux Prompt Character",
+    {
+      nowait = true,
+    }
+  )
   self.ui.set_keymap(bufnr, { "n", "t" }, "<S-Tab>", function()
     return self:send_shift_tab_mode_toggle()
   end, "Switch Codex Mode", {
@@ -759,6 +848,7 @@ function M:ensure_buffer()
         self.state.buf = nil
         self.state.job_id = nil
         self.state.last_prompt_line = nil
+        self:reset_terminal_prompt_input()
         self:set_codex_working(false, { force_idle = true })
         self:set_mode("not running")
       end
@@ -885,6 +975,7 @@ function M:start_terminal(focus, initial_prompt, command, workspace, permission_
   end
 
   local previous_win = vim.api.nvim_get_current_win()
+  self:invalidate_terminal_prompt_tracking()
   if hidden then
     if not self:ensure_buffer() then
       return false
@@ -928,6 +1019,7 @@ function M:start_terminal(focus, initial_prompt, command, workspace, permission_
         self.state.permission_profile = "default"
         self.sync_workspace_activity("idle")
         self.state.last_prompt_line = nil
+        self:reset_terminal_prompt_input()
         self.reset_workspace_runtime()
         self.stop_token_monitor_timer()
         self:set_codex_working(false, { force_idle = true })
@@ -962,6 +1054,7 @@ function M:start_terminal(focus, initial_prompt, command, workspace, permission_
 
   self.state.job_id = job_id
   self.state.last_prompt_line = nil
+  self:invalidate_terminal_prompt_tracking()
   self.state.permission_profile = permission_profile or "default"
   self.state.last_permission_profile = self.state.permission_profile
   if workspace ~= nil then
@@ -1068,6 +1161,7 @@ function M:exit()
   self.state.permission_profile = "default"
   self.sync_workspace_activity("idle")
   self.state.last_prompt_line = nil
+  self:reset_terminal_prompt_input()
   self.reset_workspace_runtime()
   self.stop_token_monitor_timer()
   self:set_codex_working(false, { force_idle = true })
@@ -1110,6 +1204,7 @@ function M:send_to_codex(message)
   end
 
   self:mark_terminal_prompt_submission()
+  self:invalidate_terminal_prompt_tracking()
   self:set_codex_working(true)
   return true
 end
