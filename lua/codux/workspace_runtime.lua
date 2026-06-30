@@ -21,6 +21,14 @@ local function inactive_like_status(status)
   return status == "inactive" or status == "missing"
 end
 
+local function prepend_command(command, args)
+  local result = { command }
+  for _, arg in ipairs(args or {}) do
+    table.insert(result, arg)
+  end
+  return result
+end
+
 local function default_current_buffer()
   return vim.api.nvim_get_current_buf()
 end
@@ -181,7 +189,7 @@ function M:nvim_cmd()
 end
 
 function M:tmux_system(args)
-  return self.system(vim.list_extend({ self:tmux_cmd() }, args))
+  return self.system(prepend_command(self:tmux_cmd(), args))
 end
 
 function M:path_directory(path)
@@ -262,6 +270,9 @@ function M:target_context()
 end
 
 function M:current_tmux_session()
+  if type(vim) ~= "table" or type(vim.env) ~= "table" then
+    return nil
+  end
   if type(vim.env.TMUX) ~= "string" or vim.env.TMUX == "" then
     return nil
   end

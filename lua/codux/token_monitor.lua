@@ -233,12 +233,23 @@ function M:app_server_command()
   end
 
   local monitor = self:config()
-  local executable = type(monitor.codex_cmd) == "string" and monitor.codex_cmd or self.command_util.executable(config.codex_cmd)
+  if monitor.codex_cmd ~= nil then
+    local error_message = self.command_util.error(monitor.codex_cmd, "Codex token monitor command")
+    if error_message then
+      return nil, nil, error_message
+    end
+
+    return self.command_util.with_args(monitor.codex_cmd, { "app-server", "--stdio" }),
+      self.command_util.executable(monitor.codex_cmd),
+      nil
+  end
+
+  local executable = self.command_util.executable(config.codex_cmd)
   if executable == nil or executable == "" then
     executable = "codex"
   end
 
-  return { executable, "app-server", "--stdio" }, executable
+  return { executable, "app-server", "--stdio" }, executable, nil
 end
 
 function M:refresh(force)
@@ -253,7 +264,13 @@ function M:refresh(force)
     self:complete_request(self.state.job_id, nil, "Codex token usage request was replaced", true)
   end
 
-  local command, executable = self:app_server_command()
+  local command, executable, command_error = self:app_server_command()
+  if command_error then
+    self.state.last_error = command_error
+    self.on_update()
+    return false
+  end
+
   if vim.fn.executable(executable) ~= 1 then
     self.state.last_error = "Codex CLI not found on PATH"
     self.on_update()
