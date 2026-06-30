@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed workspace dashboard status reconciliation so stale saved tmux windows show `missing` instead of stale `idle`/mode values.
+- Checked all tmux panes when deciding whether a workspace window is open in Neovim.
+
 ## v0.6.5
 
 Workspace dashboard mode tracking and Codex mode switching fixes.

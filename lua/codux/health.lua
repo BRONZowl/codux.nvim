@@ -143,15 +143,23 @@ function M.doctor_lines(deps)
     else
       add("[ok]", "dashboard can resolve targets")
       local inactive = 0
+      local missing = 0
       for _, entry in ipairs(entries) do
         if entry.status == "inactive" then
           inactive = inactive + 1
+        elseif entry.status == "missing" then
+          missing = missing + 1
         end
       end
       if inactive > 0 then
         add("[warn]", tostring(inactive) .. " workspace windows inactive")
       else
         add("[ok]", "no workspace windows inactive")
+      end
+      if missing > 0 then
+        add("[warn]", tostring(missing) .. " workspace windows missing")
+      else
+        add("[ok]", "no workspace windows missing")
       end
     end
   end

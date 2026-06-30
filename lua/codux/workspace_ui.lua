@@ -62,7 +62,7 @@ end
 
 function M.manager_mode_label(entry)
   entry = type(entry) == "table" and entry or {}
-  if entry.status == "inactive" then
+  if entry.status == "inactive" or entry.status == "missing" then
     return "--"
   end
   if entry.codex_mode == "execute" then

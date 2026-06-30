@@ -17,6 +17,10 @@ local function normalize_codex_mode(mode)
   return nil
 end
 
+local function inactive_like_status(status)
+  return status == "inactive" or status == "missing"
+end
+
 local function default_current_buffer()
   return vim.api.nvim_get_current_buf()
 end
@@ -292,23 +296,29 @@ function M:tmux_window_id(session, window_name)
 end
 
 function M:tmux_window_command(window_id)
+  local commands = self:tmux_window_commands(window_id)
+  return commands[1]
+end
+
+function M:tmux_window_commands(window_id)
   if type(window_id) ~= "string" or window_id == "" then
-    return nil
+    return {}
   end
 
   local output, code = self:tmux_system({ "list-panes", "-t", window_id, "-F", "#{pane_current_command}" })
   if code ~= 0 then
-    return nil
+    return {}
   end
 
+  local commands = {}
   for line in output:gmatch("[^\r\n]+") do
     local command = trim(line)
     if command ~= "" then
-      return command
+      table.insert(commands, command)
     end
   end
 
-  return nil
+  return commands
 end
 
 function M:status_for_window(window_id)
@@ -316,10 +326,11 @@ function M:status_for_window(window_id)
     return "missing"
   end
 
-  local command = self:tmux_window_command(window_id)
-  local lower = type(command) == "string" and command:lower() or ""
-  if lower == "nvim" or lower == "vim" or lower:find("nvim", 1, true) or lower:find("vim", 1, true) then
-    return "active"
+  for _, command in ipairs(self:tmux_window_commands(window_id)) do
+    local lower = type(command) == "string" and command:lower() or ""
+    if lower == "nvim" or lower == "vim" or lower:find("nvim", 1, true) or lower:find("vim", 1, true) then
+      return "active"
+    end
   end
 
   return "inactive"
@@ -327,11 +338,14 @@ end
 
 function M:dashboard_workspace_status(record, window_id)
   local window_status = self:status_for_window(window_id)
+  record = type(record) == "table" and record or {}
+  if window_status == "missing" then
+    return record.status == "inactive" and "inactive" or "missing"
+  end
   if window_status ~= "active" then
     return "inactive"
   end
 
-  record = type(record) == "table" and record or {}
   if record.codex_status == "working" then
     return "active"
   end
@@ -554,6 +568,46 @@ function M:sync_activity(codex_status)
     return false
   end
 
+  local session = self:current_tmux_session()
+  local window_name = record.tmux_window or record.window_name or self.state.workspace.window_name or safe_name
+  local window_id = session and self:tmux_window_id(session, window_name) or nil
+  local dashboard_status = self:dashboard_workspace_status(record, window_id)
+  if inactive_like_status(dashboard_status) then
+    if
+      record.codex_status == "idle"
+      and record.status == dashboard_status
+      and record.codex_mode == nil
+      and record.tmux_window == window_name
+    then
+      self.state.workspace.codex_status = "idle"
+      self.state.workspace.status = dashboard_status
+      self.state.workspace.codex_mode = nil
+      return true
+    end
+
+    record.codex_status = "idle"
+    record.status = dashboard_status
+    record.codex_mode = nil
+    record.tmux_window = window_name
+    record.tmux_target = M.tmux_target(session, window_name) or record.tmux_target
+    record.last_activity_at = self:timestamp()
+    project.updated_at = record.last_activity_at
+
+    local write_ok = self:write_state(state_data)
+    if not write_ok then
+      return false
+    end
+
+    self.state.workspace.codex_status = "idle"
+    self.state.workspace.status = dashboard_status
+    self.state.workspace.codex_mode = nil
+    if self.state.workspace_manager_project_root == root then
+      self.render_workspace_manager()
+    end
+
+    return true
+  end
+
   local workspace_status = codex_status == "working" and "active"
     or codex_status == "question" and "question"
     or "idle"
@@ -645,7 +699,7 @@ function M:entries_for_project(root)
         local window_name = record.tmux_window or record.window_name or safe_name
         local window_id = session and self:tmux_window_id(session, window_name) or nil
         local status = self:dashboard_workspace_status(record, window_id)
-        local codex_mode = status ~= "inactive" and self:normalize_codex_mode(record.codex_mode) or nil
+        local codex_mode = not inactive_like_status(status) and self:normalize_codex_mode(record.codex_mode) or nil
         seen[record.safe_name or safe_name] = true
         table.insert(entries, {
           name = record.name or safe_name,
@@ -671,6 +725,7 @@ function M:entries_for_project(root)
       if not seen[entry_safe_name] then
         local window_name = M.workspace_window_name(entry_safe_name)
         local window_id = session and self:tmux_window_id(session, window_name) or nil
+        local status = self:dashboard_workspace_status({ status = "inactive", codex_status = "idle" }, window_id)
         table.insert(entries, {
           name = record.name or entry_safe_name,
           safe_name = entry_safe_name,
@@ -680,7 +735,7 @@ function M:entries_for_project(root)
           tmux_target = M.tmux_target(session, window_name),
           codex_status = "idle",
           window_id = window_id,
-          status = window_id and "idle" or "inactive",
+          status = status,
           instruction_file = record.instruction_file,
           instruction_file_only = true,
         })
@@ -752,6 +807,7 @@ function M:reconcile_project(root)
     question = 0,
     idle = 0,
     inactive = 0,
+    missing = 0,
     changed = 0,
   }
 
@@ -784,16 +840,19 @@ function M:reconcile_project(root)
         summary.question = summary.question + 1
       elseif status == "idle" then
         summary.idle = summary.idle + 1
+      elseif status == "missing" then
+        summary.missing = summary.missing + 1
       else
         summary.inactive = summary.inactive + 1
       end
 
-      local stale_activity = status == "inactive" and (record.codex_status == "working" or record.codex_status == "question")
+      local stale_activity = inactive_like_status(status)
+        and (record.codex_status == "working" or record.codex_status == "question" or record.codex_mode ~= nil)
       if record.status ~= status or stale_activity then
         summary.changed = summary.changed + 1
       end
       record.status = status
-      if status == "inactive" then
+      if inactive_like_status(status) then
         record.codex_status = "idle"
         record.codex_mode = nil
       end
@@ -1216,7 +1275,7 @@ function M:prepare_workspace(name, opts)
       workspace.codex_status = "idle"
     end
   end
-  if workspace.status == "inactive" then
+  if inactive_like_status(workspace.status) then
     workspace.codex_mode = nil
   end
   workspace.initial_prompt = nil
@@ -1318,7 +1377,9 @@ function M:restore_workspaces(opts)
         .. tostring(summary.idle)
         .. " idle, "
         .. tostring(summary.inactive)
-        .. " inactive"
+        .. " inactive, "
+        .. tostring(summary.missing)
+        .. " missing"
     )
   end
 

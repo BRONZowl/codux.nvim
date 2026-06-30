@@ -234,6 +234,10 @@ function Store.normalize_codex_mode(value)
   return nil
 end
 
+local function inactive_like_status(status)
+  return status == "inactive" or status == "missing"
+end
+
 function Store:normalize_record(record, safe_name, root)
   if type(record) ~= "table" then
     return nil
@@ -244,15 +248,13 @@ function Store:normalize_record(record, safe_name, root)
   local project_root = type(record.project_root) == "string" and record.project_root ~= "" and record.project_root or root
   local window_name = self.workspace_window_name(safe_name)
   local status = record.status
-  if status == "missing" then
-    status = "inactive"
-  elseif status ~= "active" and status ~= "question" and status ~= "idle" and status ~= "inactive" then
+  if status ~= "active" and status ~= "question" and status ~= "idle" and status ~= "inactive" and status ~= "missing" then
     status = "inactive"
   end
   local codex_status = record.codex_status == "working" and "working"
     or record.codex_status == "question" and "question"
     or "idle"
-  local codex_mode = status ~= "inactive" and Store.normalize_codex_mode(record.codex_mode) or nil
+  local codex_mode = not inactive_like_status(status) and Store.normalize_codex_mode(record.codex_mode) or nil
 
   return {
     name = name,
@@ -386,7 +388,7 @@ function Store.workspace_from_state(record, fallback)
   record = type(record) == "table" and record or {}
   fallback = type(fallback) == "table" and fallback or {}
   local status = record.status or fallback.status or "inactive"
-  local codex_mode = status ~= "inactive"
+  local codex_mode = not inactive_like_status(status)
       and (Store.normalize_codex_mode(record.codex_mode) or Store.normalize_codex_mode(fallback.codex_mode))
     or nil
 
@@ -417,7 +419,7 @@ function Store:state_record(workspace, existing)
   local now = Store.timestamp()
   local status = workspace.status or existing.status or "idle"
   local codex_mode = nil
-  if status ~= "inactive" then
+  if not inactive_like_status(status) then
     codex_mode = Store.normalize_codex_mode(workspace.codex_mode) or Store.normalize_codex_mode(existing.codex_mode)
   end
 
