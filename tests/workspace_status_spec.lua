@@ -661,6 +661,220 @@ do
     projects = {
       ["/repo"] = {
         workspaces = {
+          review = {
+            name = "review",
+            safe_name = "review",
+            project_root = "/repo",
+            tmux_window = "review",
+            tmux_target = "session:review",
+            status = "idle",
+            codex_status = "idle",
+          },
+        },
+      },
+    },
+  }
+  local messages = {}
+  local old_tmux = vim.env.TMUX
+  vim.env.TMUX = nil
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = function(message)
+      table.insert(messages, message)
+    end,
+    get_config = function()
+      return { tmux_cmd = "tmux" }
+    end,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "tmux rename-window -t @1 debug" then
+        return "", 0
+      end
+      if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+        return "nvim\n", 0
+      end
+      return "", 1
+    end,
+    close_workspace_manager = function() end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+      project_state = function(_, next_state, root)
+        return next_state.projects[root]
+      end,
+      instruction_file_path = function()
+        return nil
+      end,
+    },
+  })
+
+  assert_true(runtime:rename_saved_workspace({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    window_id = "@1",
+    window_name = "review",
+  }, "debug"))
+  assert_nil(state_data.projects["/repo"].workspaces.debug.tmux_target)
+  assert_equal(state_data.projects["/repo"].workspaces.debug.tmux_window, "debug")
+  assert_contains(messages[#messages], "Renamed Codux workspace to debug")
+  vim.env.TMUX = old_tmux
+end
+
+do
+  local state_data = {
+    projects = {
+      ["/repo"] = {
+        workspaces = {
+          review = {
+            name = "review",
+            safe_name = "review",
+            project_root = "/repo",
+            tmux_window = "review",
+            tmux_target = "session:review",
+            status = "inactive",
+            codex_status = "idle",
+          },
+        },
+      },
+    },
+  }
+  local old_tmux = vim.env.TMUX
+  vim.env.TMUX = "/tmp/tmux,1,0"
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = function() end,
+    get_config = function()
+      return { tmux_cmd = "tmux" }
+    end,
+    system = function()
+      return "", 1
+    end,
+    close_workspace_manager = function() end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+      project_state = function(_, next_state, root)
+        return next_state.projects[root]
+      end,
+      instruction_file_path = function()
+        return nil
+      end,
+    },
+  })
+
+  assert_true(runtime:rename_saved_workspace({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    window_name = "review",
+  }, "debug"))
+  assert_nil(state_data.projects["/repo"].workspaces.debug.tmux_target)
+  assert_equal(state_data.projects["/repo"].workspaces.debug.tmux_window, "debug")
+  assert_equal(state_data.projects["/repo"].workspaces.debug.status, "inactive")
+  vim.env.TMUX = old_tmux
+end
+
+do
+  local state_data = {
+    projects = {
+      ["/repo"] = {
+        workspaces = {
+          review = {
+            name = "review",
+            safe_name = "review",
+            project_root = "/repo",
+            tmux_window = "review",
+            tmux_target = "session:review",
+            status = "idle",
+            codex_status = "idle",
+          },
+        },
+      },
+    },
+  }
+  local old_tmux = vim.env.TMUX
+  vim.env.TMUX = "/tmp/tmux,1,0"
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = function() end,
+    get_config = function()
+      return { tmux_cmd = "tmux" }
+    end,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "tmux rename-window -t @1 debug" then
+        return "", 0
+      end
+      if command == "tmux display-message -p #S" then
+        return "session\n", 0
+      end
+      if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+        return "nvim\n", 0
+      end
+      return "", 1
+    end,
+    close_workspace_manager = function() end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+      project_state = function(_, next_state, root)
+        return next_state.projects[root]
+      end,
+      instruction_file_path = function()
+        return nil
+      end,
+    },
+  })
+
+  assert_true(runtime:rename_saved_workspace({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    window_id = "@1",
+    window_name = "review",
+  }, "debug"))
+  assert_equal(state_data.projects["/repo"].workspaces.debug.tmux_target, "session:debug")
+  assert_equal(state_data.projects["/repo"].workspaces.debug.tmux_window, "debug")
+  assert_equal(state_data.projects["/repo"].workspaces.debug.status, "idle")
+  vim.env.TMUX = old_tmux
+end
+
+do
+  local state_data = {
+    projects = {
+      ["/repo"] = {
+        workspaces = {
           old = {
             name = "old",
             safe_name = "old",

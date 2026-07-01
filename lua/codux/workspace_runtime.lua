@@ -1033,7 +1033,7 @@ function M:rename_saved_workspace(entry, new_name)
   existing.name = display_name
   existing.safe_name = safe_name_or_error
   existing.tmux_window = new_window_name
-  existing.tmux_target = M.tmux_target(self:current_tmux_session(), new_window_name) or existing.tmux_target
+  existing.tmux_target = entry.window_id and M.tmux_target(self:current_tmux_session(), new_window_name) or nil
   existing.status = self:dashboard_workspace_status(existing, entry.window_id)
   existing.last_opened_at = self:timestamp()
   project.workspaces[safe_name_or_error] = existing
