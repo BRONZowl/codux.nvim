@@ -1,8 +1,10 @@
 # Release Notes
 
-## Unreleased
+## v0.7.0
 
 Workspace dashboard ergonomics.
+
+codux.nvim v0.7.0 turns the workspace dashboard into the central control surface for persistent Codex workspaces inside Neovim.
 
 - Simplified the workspace dashboard around fuzzy search with one fixed question/active/idle/inactive, recent-activity order.
 - Added workspace profile, branch, session age, and target columns to the dashboard.
