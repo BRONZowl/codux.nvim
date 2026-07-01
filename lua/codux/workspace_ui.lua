@@ -3,7 +3,17 @@ local M = {}
 M.MANAGER_NAME_WIDTH = 28
 M.MANAGER_STATUS_WIDTH = 8
 M.MANAGER_MODE_WIDTH = 4
+M.MANAGER_PROFILE_WIDTH = 7
+M.MANAGER_BRANCH_WIDTH = 12
+M.MANAGER_AGE_WIDTH = 4
 M.MANAGER_GAP = "  "
+
+M.STATUS_ORDER = {
+  question = 1,
+  active = 2,
+  idle = 3,
+  inactive = 4,
+}
 
 function M.display_width(text)
   local ok, width = pcall(vim.fn.strdisplaywidth, text or "")
@@ -52,17 +62,123 @@ end
 function M.manager_column_widths(width)
   width = tonumber(width) or 58
   local gap_width = M.display_width(M.MANAGER_GAP)
-  local fixed_width = M.MANAGER_STATUS_WIDTH + M.MANAGER_MODE_WIDTH + (gap_width * 3)
+  local fixed_width = M.MANAGER_STATUS_WIDTH
+    + M.MANAGER_MODE_WIDTH
+    + M.MANAGER_PROFILE_WIDTH
+    + M.MANAGER_BRANCH_WIDTH
+    + M.MANAGER_AGE_WIDTH
+    + (gap_width * 6)
   local available = math.max(1, width - fixed_width)
-  local name_width = math.min(M.MANAGER_NAME_WIDTH, math.max(12, available - 8))
+  local name_width = math.min(M.MANAGER_NAME_WIDTH, math.max(12, available - 10))
   local target_width = math.max(0, available - name_width)
 
   return name_width, target_width
 end
 
+function M.parse_timestamp(value)
+  if type(value) ~= "string" or value == "" then
+    return nil
+  end
+
+  local year, month, day, hour, min, sec = value:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)Z$")
+  if not year then
+    return nil
+  end
+
+  local local_epoch = os.time({
+    year = tonumber(year),
+    month = tonumber(month),
+    day = tonumber(day),
+    hour = tonumber(hour),
+    min = tonumber(min),
+    sec = tonumber(sec),
+    isdst = false,
+  })
+  local utc_as_local = os.time(os.date("!*t", local_epoch))
+  local local_as_local = os.time(os.date("*t", local_epoch))
+  return local_epoch + os.difftime(local_as_local, utc_as_local)
+end
+
+function M.relative_age_label(timestamp, now)
+  local then_seconds = M.parse_timestamp(timestamp)
+  if not then_seconds then
+    return "--"
+  end
+
+  now = tonumber(now) or os.time()
+  local elapsed = math.max(0, now - then_seconds)
+  if elapsed < 60 then
+    return "<1m"
+  end
+  if elapsed < 3600 then
+    return tostring(math.floor(elapsed / 60)) .. "m"
+  end
+  if elapsed < 86400 then
+    return tostring(math.floor(elapsed / 3600)) .. "h"
+  end
+  if elapsed < 604800 then
+    return tostring(math.floor(elapsed / 86400)) .. "d"
+  end
+  if elapsed < 31536000 then
+    return tostring(math.floor(elapsed / 604800)) .. "w"
+  end
+  return tostring(math.floor(elapsed / 31536000)) .. "y"
+end
+
+function M.activity_timestamp(entry)
+  entry = type(entry) == "table" and entry or {}
+  return entry.last_activity_at
+    or entry.last_target_at
+    or entry.last_opened_at
+    or entry.codex_session_captured_at
+    or entry.created_at
+end
+
+function M.session_timestamp(entry)
+  entry = type(entry) == "table" and entry or {}
+  return entry.created_at or entry.codex_session_captured_at
+end
+
+function M.timestamp_sort_value(value)
+  return M.parse_timestamp(value) or 0
+end
+
+function M.status_rank(status)
+  return M.STATUS_ORDER[status] or 99
+end
+
+function M.sort_entries(entries, sort_mode)
+  entries = vim.deepcopy(type(entries) == "table" and entries or {})
+  sort_mode = sort_mode or "status_recent"
+
+  table.sort(entries, function(left, right)
+    if sort_mode == "name" then
+      return tostring(left.name):lower() < tostring(right.name):lower()
+    end
+
+    if sort_mode == "status_recent" then
+      local left_status = M.status_rank(left.status)
+      local right_status = M.status_rank(right.status)
+      if left_status ~= right_status then
+        return left_status < right_status
+      end
+    end
+
+    local left_activity = M.timestamp_sort_value(M.activity_timestamp(left))
+    local right_activity = M.timestamp_sort_value(M.activity_timestamp(right))
+    if left_activity ~= right_activity then
+      return left_activity > right_activity
+    end
+
+    return tostring(left.name):lower() < tostring(right.name):lower()
+  end)
+
+  return entries
+end
+
 function M.manager_mode_label(entry)
   entry = type(entry) == "table" and entry or {}
-  if entry.status == "inactive" or entry.status == "missing" then
+  if entry.status == "inactive" then
     return "--"
   end
   if entry.codex_mode == "execute" then
@@ -78,6 +194,9 @@ function M.manager_line(entry, width)
   entry = type(entry) == "table" and entry or {}
   local status = entry.status or "inactive"
   local mode = M.manager_mode_label(entry)
+  local profile = entry.permission_profile or "default"
+  local branch = entry.git_branch or ""
+  local age = M.relative_age_label(M.session_timestamp(entry))
   local target = type(entry.target_path) == "string" and entry.target_path ~= "" and vim.fn.fnamemodify(entry.target_path, ":t") or ""
   local name_width, target_width = M.manager_column_widths(width)
 
@@ -87,6 +206,12 @@ function M.manager_line(entry, width)
     M.pad_display_right(status, M.MANAGER_STATUS_WIDTH),
     M.MANAGER_GAP,
     M.pad_display_right(mode, M.MANAGER_MODE_WIDTH),
+    M.MANAGER_GAP,
+    M.pad_display_right(profile, M.MANAGER_PROFILE_WIDTH),
+    M.MANAGER_GAP,
+    M.pad_display_right(branch, M.MANAGER_BRANCH_WIDTH),
+    M.MANAGER_GAP,
+    M.pad_display_right(age, M.MANAGER_AGE_WIDTH),
     M.MANAGER_GAP,
     M.truncate_display_tail(target, target_width),
   })
@@ -102,8 +227,31 @@ function M.manager_header_line(width)
     M.MANAGER_GAP,
     M.pad_display_right("mode", M.MANAGER_MODE_WIDTH),
     M.MANAGER_GAP,
+    M.pad_display_right("profile", M.MANAGER_PROFILE_WIDTH),
+    M.MANAGER_GAP,
+    M.pad_display_right("branch", M.MANAGER_BRANCH_WIDTH),
+    M.MANAGER_GAP,
+    M.pad_display_right("age", M.MANAGER_AGE_WIDTH),
+    M.MANAGER_GAP,
     "target",
   })
+end
+
+function M.manager_action_items()
+  return {
+    { key = "r", action = "rename", label = "Rename Workspace" },
+    { key = "e", action = "edit_instructions", label = "Edit Instructions" },
+    { key = "x", action = "close_window", label = "Close Workspace" },
+    { key = "X", action = "close_all_windows", label = "Close All Workspaces" },
+    { key = "d", action = "delete", label = "Delete Workspace" },
+  }
+end
+
+function M.manager_action_line(item, width)
+  item = type(item) == "table" and item or {}
+  width = tonumber(width) or 40
+  local line = tostring(item.key or "") .. "  " .. tostring(item.label or "")
+  return M.truncate_display_tail(line, width)
 end
 
 function M.fuzzy_workspace_score(value, query)
@@ -181,7 +329,9 @@ function M.footer_line(segments)
   segments = type(segments) == "table" and segments or {}
   local parts = {}
   for index, segment in ipairs(segments) do
-    table.insert(parts, tostring(segment.key or "") .. " " .. tostring(segment.desc or ""))
+    local key = tostring(segment.key or "")
+    local desc = tostring(segment.desc or "")
+    table.insert(parts, desc ~= "" and (key .. " " .. desc) or key)
     if index < #segments then
       table.insert(parts, "  ")
     end
@@ -190,15 +340,26 @@ function M.footer_line(segments)
   return table.concat(parts, "")
 end
 
-function M.manager_footer_segments()
-  return {
+function M.manager_footer_segments(_state, width)
+  local full = {
     { key = "s", desc = "search" },
-    { key = "enter", desc = "open" },
-    { key = "r", desc = "rename" },
-    { key = "x", desc = "close" },
-    { key = "d", desc = "delete" },
+    { key = "m", desc = "menu" },
     { key = "h", desc = "doctor" },
+    { key = "enter", desc = "open" },
     { key = "<c-q>", desc = "close" },
+  }
+
+  width = tonumber(width)
+  if not width or M.display_width(M.footer_line(full)) <= width then
+    return full
+  end
+
+  return {
+    { key = "s", desc = "" },
+    { key = "m", desc = "menu" },
+    { key = "h", desc = "" },
+    { key = "enter", desc = "" },
+    { key = "<c-q>", desc = "" },
   }
 end
 

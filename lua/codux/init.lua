@@ -108,6 +108,10 @@ local state = {
   workspace_manager_search_win = nil,
   workspace_manager_command_buf = nil,
   workspace_manager_command_win = nil,
+  workspace_manager_action_buf = nil,
+  workspace_manager_action_win = nil,
+  workspace_manager_action_items = {},
+  workspace_manager_action_workspace = nil,
   workspace_manager_items = {},
   workspace_manager_query = "",
   workspace_manager_best_match_index = nil,
@@ -709,6 +713,45 @@ function M._v5.close_saved_workspace_window(entry)
   return workspace_runtime:close_saved_workspace_window(entry)
 end
 
+function M._v5.close_all_saved_workspace_windows(root)
+  return workspace_runtime:close_all_saved_workspace_windows(root)
+end
+
+function M._v5.saved_workspace_instruction_request(entry)
+  return workspace_runtime:saved_workspace_instruction_request(entry)
+end
+
+function M._v5.update_saved_workspace_instruction(entry, instruction)
+  return workspace_runtime:update_saved_workspace_instruction(entry, instruction)
+end
+
+local function edit_saved_workspace_instruction(entry)
+  if type(workspace_create_controller) ~= "table" then
+    notify("Codux workspace instruction editor is not available", vim.log.levels.ERROR)
+    return false
+  end
+
+  local request, request_error = M._v5.saved_workspace_instruction_request(entry)
+  if not request then
+    notify(request_error or "workspace not found", vim.log.levels.ERROR)
+    return false
+  end
+
+  return workspace_create_controller:open_instruction_editor(request, {
+    on_save = function(saved_request)
+      local ok, write_error = M._v5.update_saved_workspace_instruction(entry, saved_request.resolved_instruction)
+      if not ok then
+        notify(write_error or "Failed to save Codux workspace instruction", vim.log.levels.ERROR)
+        return
+      end
+      notify("Saved Codux workspace instruction for " .. tostring(entry.name or entry.safe_name))
+    end,
+    on_cancel = function()
+      render_workspace_manager()
+    end,
+  })
+end
+
 workspace_manager_controller = workspace_manager_mod.new({
   state = state,
   notify = notify,
@@ -729,9 +772,13 @@ workspace_manager_controller = workspace_manager_mod.new({
     return M.open_saved_workspace(name, project_root)
   end,
   rename_saved_workspace = rename_saved_workspace,
+  edit_saved_workspace_instruction = edit_saved_workspace_instruction,
   delete_saved_workspace = delete_saved_workspace,
   close_saved_workspace_window = function(entry)
     return M._v5.close_saved_workspace_window(entry)
+  end,
+  close_all_saved_workspace_windows = function(root)
+    return M._v5.close_all_saved_workspace_windows(root)
   end,
   doctor = function()
     return M.doctor()
@@ -840,6 +887,15 @@ end
 
 function M.delete_workspace(name)
   return workspace_runtime:delete_workspace(name)
+end
+
+function M.close_all_workspace_windows(project_root)
+  local root = project_root or workspace_manager_project_root()
+  local choice = vim.fn.confirm("Close all Codux workspaces for this project?", "&Yes\n&No", 2)
+  if choice ~= 1 then
+    return false
+  end
+  return workspace_runtime:close_all_saved_workspace_windows(root)
 end
 
 function M.restore_workspaces(opts)
@@ -1142,6 +1198,10 @@ local function create_commands()
   vim.api.nvim_create_user_command("CoduxWorkspaceRestore", function()
     M.restore_workspaces()
   end, { force = true, desc = "Restore Codux workspace status from tmux" })
+
+  vim.api.nvim_create_user_command("CoduxWorkspaceCloseAll", function()
+    M.close_all_workspace_windows()
+  end, { force = true, desc = "Close all current-project Codux workspaces" })
 
   vim.api.nvim_create_user_command("CoduxWorkspaces", function()
     M.open_workspaces()

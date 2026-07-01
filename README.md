@@ -135,11 +135,13 @@
 <p>
   Use <code>:CoduxWorkspaces</code> or <code>&lt;leader&gt;zW</code> to open <code>current codux workspaces</code>.
   Codux opens a <code>Codux workspace:</code> search field above the dashboard; type a fuzzy workspace name to filter the dashboard and preview the closest match.
-  Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>&lt;CR&gt;</code> to open, <code>r</code> to rename, <code>x</code> to close the workspace window, <code>d</code> to delete, and <code>h</code> to run doctor.
+  Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>&lt;CR&gt;</code> to open, <code>h</code> to run Doctor, and <code>m</code> to open the selected-workspace menu.
+  The workspace menu exposes rename workspace, edit instructions, close workspace, close all workspaces, and delete workspace.
   Deleting a workspace removes its saved state and matching <code>.agents/codux/&lt;workspace&gt;.md</code> instruction file.
   Press <code>s</code> from the dashboard to search again, or <code>&lt;C-q&gt;</code> to close the dashboard and search field.
-  Statuses show <code>active</code> when Codex is working, <code>question</code> when plan mode is waiting on your answer, <code>idle</code> when the workspace is open, <code>inactive</code> when it is intentionally closed, or <code>missing</code> when saved state points at a tmux window that no longer exists.
-  The mode column shows <code>exec</code>, <code>plan</code>, or <code>--</code> when the workspace mode is unknown, inactive, or missing.
+  Statuses show <code>active</code> when Codex is working, <code>question</code> when plan mode is waiting on your answer, <code>idle</code> when the workspace is open, or <code>inactive</code> when it is not open.
+  The mode column shows <code>exec</code>, <code>plan</code>, or <code>--</code> when the workspace mode is unknown or inactive.
+  The dashboard uses question/active/idle/inactive status order, then recent activity, and shows each workspace profile, branch, session age, and target.
   The target column updates as each workspace moves between files or supported file explorer targets.
 </p>
 

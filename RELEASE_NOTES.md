@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-- Fixed workspace dashboard status reconciliation so stale saved tmux windows show `missing` instead of stale `idle`/mode values.
+Workspace dashboard ergonomics.
+
+- Simplified the workspace dashboard around fuzzy search with one fixed question/active/idle/inactive, recent-activity order.
+- Added workspace profile, branch, session age, and target columns to the dashboard.
+- Added an `m` dashboard workspace menu for rename workspace, edit instructions, close workspace, close all workspaces, and delete workspace, with `h` running Doctor directly from the dashboard.
+- Added `X` and `:CoduxWorkspaceCloseAll` to close all current-project Codux workspaces after confirmation.
+- Treat stale saved tmux windows as `inactive` in the dashboard.
 - Checked all tmux panes when deciding whether a workspace window is open in Neovim.
 
 ## v0.6.5

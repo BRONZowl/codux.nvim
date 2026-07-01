@@ -4,12 +4,91 @@ package.path = table.concat({
   package.path,
 }, ";")
 
+if type(vim) ~= "table" then
+  local function deepcopy(value)
+    if type(value) ~= "table" then
+      return value
+    end
+    local copy = {}
+    for key, item in pairs(value) do
+      copy[key] = deepcopy(item)
+    end
+    return copy
+  end
+
+  vim = {
+    deepcopy = deepcopy,
+    env = {},
+    fn = {
+      confirm = function()
+        return 1
+      end,
+      fnamemodify = function(value, modifier)
+        if modifier == ":t" then
+          return tostring(value or ""):match("[^/]+$") or tostring(value or "")
+        end
+        return tostring(value or "")
+      end,
+      strcharpart = function(value, start, length)
+        value = tostring(value or "")
+        start = tonumber(start) or 0
+        if length == nil then
+          return value:sub(start + 1)
+        end
+        return value:sub(start + 1, start + length)
+      end,
+      strchars = function(value)
+        return #tostring(value or "")
+      end,
+      strdisplaywidth = function(value)
+        return #tostring(value or "")
+      end,
+    },
+    log = {
+      levels = {
+        ERROR = 4,
+        WARN = 3,
+      },
+    },
+    loop = {
+      cwd = function()
+        return "/repo"
+      end,
+    },
+  }
+end
+
 local runtime_mod = require("codux.workspace_runtime")
 local workspace_ui = require("codux.workspace_ui")
+local manager_mod = require("codux.workspace_manager")
 
 local function assert_equal(actual, expected, message)
   if actual ~= expected then
     error((message or "assertion failed") .. ": expected " .. tostring(expected) .. ", got " .. tostring(actual), 2)
+  end
+end
+
+local function assert_nil(actual, message)
+  if actual ~= nil then
+    error((message or "assertion failed") .. ": expected nil, got " .. tostring(actual), 2)
+  end
+end
+
+local function assert_true(actual, message)
+  if actual ~= true then
+    error((message or "assertion failed") .. ": expected true, got " .. tostring(actual), 2)
+  end
+end
+
+local function assert_false(actual, message)
+  if actual ~= false then
+    error((message or "assertion failed") .. ": expected false, got " .. tostring(actual), 2)
+  end
+end
+
+local function assert_contains(value, expected, message)
+  if not tostring(value or ""):find(expected, 1, true) then
+    error((message or "assertion failed") .. ": expected " .. tostring(value) .. " to contain " .. tostring(expected), 2)
   end
 end
 
@@ -49,13 +128,84 @@ end
 do
   local runtime = runtime_with_tmux({})
 
-  assert_equal(runtime:dashboard_workspace_status({ status = "idle", codex_status = "idle" }, nil), "missing")
+  assert_equal(runtime:status_for_window(nil), "inactive")
+  assert_equal(runtime:dashboard_workspace_status({ status = "idle", codex_status = "idle" }, nil), "inactive")
   assert_equal(runtime:dashboard_workspace_status({ status = "inactive", codex_status = "idle" }, nil), "inactive")
 end
 
 do
-  assert_equal(workspace_ui.manager_mode_label({ status = "missing", codex_mode = "plan" }), "--")
+  assert_equal(workspace_ui.manager_mode_label({ status = "inactive", codex_mode = "plan" }), "--")
   assert_equal(workspace_ui.manager_mode_label({ status = "idle", codex_mode = "plan" }), "plan")
+end
+
+do
+  local actions = workspace_ui.manager_action_items()
+  local by_key = {}
+  local labels_by_key = {}
+  for _, action in ipairs(actions) do
+    by_key[action.key] = action.action
+    labels_by_key[action.key] = action.label
+  end
+
+  assert_nil(by_key.o)
+  assert_equal(by_key.r, "rename")
+  assert_equal(by_key.e, "edit_instructions")
+  assert_equal(by_key.x, "close_window")
+  assert_equal(by_key.X, "close_all_windows")
+  assert_equal(by_key.d, "delete")
+  assert_nil(by_key.h)
+  assert_contains(workspace_ui.manager_action_line(actions[1], 40), "Rename Workspace")
+  assert_equal(labels_by_key.X, "Close All Workspaces")
+end
+
+do
+  local footer = workspace_ui.footer_line(workspace_ui.manager_footer_segments({}, 200))
+  assert_contains(footer, "s search")
+  assert_contains(footer, "m menu")
+  assert_contains(footer, "h doctor")
+  assert_contains(footer, "enter open")
+  assert_equal(footer:find("r rename", 1, true), nil)
+  assert_equal(footer:find("x close", 1, true), nil)
+  assert_equal(footer:find("d delete", 1, true), nil)
+end
+
+do
+  local entries = workspace_ui.sort_entries({
+    { name = "Backend Debug", status = "active", last_activity_at = "2026-06-30T12:00:00Z" },
+    { name = "Code Review", status = "question", last_activity_at = "2026-06-29T12:00:00Z" },
+    { name = "Architecture", status = "inactive", last_activity_at = "2026-06-30T13:00:00Z" },
+  }, "status_recent")
+
+  assert_equal(entries[1].name, "Code Review")
+  assert_equal(entries[2].name, "Backend Debug")
+  assert_equal(entries[3].name, "Architecture")
+
+  local matches = workspace_ui.fuzzy_workspace_filter(entries, "cod")
+  assert_equal(#matches, 1)
+  assert_equal(matches[1].name, "Code Review")
+end
+
+do
+  local bound = {}
+  local controller = manager_mod.new({
+    state = {},
+    bind_close_keys = function() end,
+    set_buffer_keymap = function(_, mode, lhs, _rhs, desc)
+      if mode == "n" then
+        bound[lhs] = desc
+      end
+    end,
+  })
+
+  controller:bind_commands(12)
+
+  assert_equal(bound.m, "Open Codux Workspace Menu")
+  assert_equal(bound.h, "Run Codux Doctor")
+  assert_equal(bound["<CR>"], "Open Codux Workspace")
+  assert_equal(bound.s, "Search Codux Workspaces")
+  assert_nil(bound.r)
+  assert_nil(bound.x)
+  assert_nil(bound.d)
 end
 
 do
@@ -115,10 +265,308 @@ do
 
   assert_equal(runtime:sync_activity("working"), true)
   local record = state_data.projects["/repo"].workspaces.stale
-  assert_equal(record.status, "missing", "activity sync should not revive missing window")
+  assert_equal(record.status, "inactive", "activity sync should not revive inactive window")
   assert_equal(record.codex_status, "idle")
   assert_equal(record.codex_mode, nil)
   assert_equal(writes, 1)
+end
+
+do
+  local state_data = {
+    projects = {
+      ["/repo"] = {
+        workspaces = {
+          review = {
+            name = "review",
+            safe_name = "review",
+            project_root = "/repo",
+            tmux_window = "review",
+            status = "idle",
+            codex_status = "idle",
+            codex_mode = "plan",
+          },
+          debug = {
+            name = "debug",
+            safe_name = "debug",
+            project_root = "/repo",
+            tmux_window = "debug",
+            status = "active",
+            codex_status = "working",
+            codex_mode = "execute",
+          },
+        },
+      },
+    },
+  }
+  local messages = {}
+  local old_tmux = vim.env.TMUX
+  vim.env.TMUX = "/tmp/tmux,1,0"
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = function(message)
+      table.insert(messages, message)
+    end,
+    get_config = function()
+      return { tmux_cmd = "tmux" }
+    end,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "tmux display-message -p #S" then
+        return "session\n", 0
+      end
+      if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+        return "@1\treview\n@2\tdebug\n", 0
+      end
+      if command == "tmux kill-window -t @1" or command == "tmux kill-window -t @2" then
+        return "", 0
+      end
+      return "", 1
+    end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+    },
+  })
+
+  assert_true(runtime:close_all_saved_workspace_windows("/repo"))
+  assert_equal(state_data.projects["/repo"].workspaces.review.status, "inactive")
+  assert_equal(state_data.projects["/repo"].workspaces.debug.status, "inactive")
+  assert_nil(state_data.projects["/repo"].workspaces.debug.codex_mode)
+  assert_contains(messages[#messages], "Closed 2 Codux workspaces")
+  vim.env.TMUX = old_tmux
+end
+
+do
+  local state_data = {
+    projects = {
+      ["/repo"] = {
+        workspaces = {
+          review = {
+            name = "review",
+            safe_name = "review",
+            project_root = "/repo",
+            tmux_window = "review",
+            status = "idle",
+            codex_status = "idle",
+            codex_mode = "plan",
+          },
+          debug = {
+            name = "debug",
+            safe_name = "debug",
+            project_root = "/repo",
+            tmux_window = "debug",
+            status = "active",
+            codex_status = "working",
+            codex_mode = "execute",
+          },
+        },
+      },
+    },
+  }
+  local old_tmux = vim.env.TMUX
+  vim.env.TMUX = "/tmp/tmux,1,0"
+  local runtime = runtime_mod.new({
+    state = {
+      workspace = {
+        project_root = "/repo",
+        safe_name = "debug",
+        status = "active",
+        codex_status = "working",
+        codex_mode = "execute",
+        tmux_target = "session:debug",
+      },
+    },
+    notify = function() end,
+    get_config = function()
+      return { tmux_cmd = "tmux" }
+    end,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "tmux display-message -p #S" then
+        return "session\n", 0
+      end
+      if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+        return "@1\treview\n@2\tdebug\n", 0
+      end
+      if command == "tmux kill-window -t @1" then
+        return "", 0
+      end
+      if command == "tmux kill-window -t @2" then
+        return "", 1
+      end
+      return "", 1
+    end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+    },
+  })
+
+  assert_false(runtime:close_all_saved_workspace_windows("/repo"))
+  assert_equal(state_data.projects["/repo"].workspaces.review.status, "inactive")
+  assert_equal(state_data.projects["/repo"].workspaces.debug.status, "active")
+  assert_equal(state_data.projects["/repo"].workspaces.debug.codex_status, "working")
+  assert_equal(state_data.projects["/repo"].workspaces.debug.codex_mode, "execute")
+  assert_equal(runtime.state.workspace.status, "active")
+  assert_equal(runtime.state.workspace.codex_status, "working")
+  assert_equal(runtime.state.workspace.codex_mode, "execute")
+  assert_equal(runtime.state.workspace.tmux_target, "session:debug")
+  vim.env.TMUX = old_tmux
+end
+
+do
+  local state_data = {
+    projects = {
+      ["/repo"] = {
+        workspaces = {
+          review = {
+            name = "review",
+            safe_name = "review",
+            project_root = "/repo",
+            tmux_window = "review",
+            status = "idle",
+            codex_status = "idle",
+            codex_mode = "plan",
+          },
+          debug = {
+            name = "debug",
+            safe_name = "debug",
+            project_root = "/repo",
+            tmux_window = "debug",
+            status = "active",
+            codex_status = "working",
+            codex_mode = "execute",
+          },
+        },
+      },
+    },
+  }
+  local old_tmux = vim.env.TMUX
+  vim.env.TMUX = "/tmp/tmux,1,0"
+  local runtime = runtime_mod.new({
+    state = {
+      workspace = {
+        project_root = "/repo",
+        safe_name = "review",
+        status = "idle",
+        codex_status = "idle",
+        codex_mode = "plan",
+        tmux_target = "session:review",
+      },
+    },
+    notify = function() end,
+    get_config = function()
+      return { tmux_cmd = "tmux" }
+    end,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "tmux display-message -p #S" then
+        return "session\n", 0
+      end
+      if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+        return "@1\treview\n@2\tdebug\n", 0
+      end
+      if command == "tmux kill-window -t @1" then
+        return "", 0
+      end
+      if command == "tmux kill-window -t @2" then
+        return "", 1
+      end
+      return "", 1
+    end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+    },
+  })
+
+  assert_false(runtime:close_all_saved_workspace_windows("/repo"))
+  assert_equal(state_data.projects["/repo"].workspaces.review.status, "inactive")
+  assert_equal(state_data.projects["/repo"].workspaces.debug.status, "active")
+  assert_equal(runtime.state.workspace.status, "inactive")
+  assert_equal(runtime.state.workspace.codex_status, "idle")
+  assert_nil(runtime.state.workspace.codex_mode)
+  assert_nil(runtime.state.workspace.tmux_target)
+  vim.env.TMUX = old_tmux
+end
+
+do
+  local state_data = {
+    projects = {
+      ["/repo"] = {
+        workspaces = {
+          old = {
+            name = "old",
+            safe_name = "old",
+            project_root = "/repo",
+            tmux_window = "old",
+            status = "inactive",
+            codex_status = "idle",
+            codex_session_captured_at = "2026-06-30T12:00:00Z",
+          },
+          other = {
+            name = "other",
+            safe_name = "other",
+            project_root = "/repo",
+            tmux_window = "other",
+            status = "inactive",
+            codex_status = "idle",
+            created_at = "2026-06-01T12:00:00Z",
+          },
+        },
+      },
+    },
+  }
+  local runtime = runtime_mod.new({
+    state = {},
+    get_config = function()
+      return { tmux_cmd = "tmux" }
+    end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      instruction_file_records = function()
+        return {}
+      end,
+    },
+  })
+
+  local entries = runtime:entries_for_project("/repo")
+  local by_name = {}
+  for _, entry in ipairs(entries) do
+    by_name[entry.name] = entry
+  end
+
+  assert_equal(by_name.old.codex_session_captured_at, "2026-06-30T12:00:00Z")
+  assert_equal(workspace_ui.activity_timestamp(by_name.old), "2026-06-30T12:00:00Z")
+  assert_equal(workspace_ui.sort_entries(entries, "status_recent")[1].name, "old")
 end
 
 print("workspace_status_spec.lua: ok")

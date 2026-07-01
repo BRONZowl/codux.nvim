@@ -18,7 +18,7 @@ local function normalize_codex_mode(mode)
 end
 
 local function inactive_like_status(status)
-  return status == "inactive" or status == "missing"
+  return status == "inactive"
 end
 
 local function prepend_command(command, args)
@@ -334,7 +334,7 @@ end
 
 function M:status_for_window(window_id)
   if not window_id then
-    return "missing"
+    return "inactive"
   end
 
   for _, command in ipairs(self:tmux_window_commands(window_id)) do
@@ -349,14 +349,11 @@ end
 
 function M:dashboard_workspace_status(record, window_id)
   local window_status = self:status_for_window(window_id)
-  record = type(record) == "table" and record or {}
-  if window_status == "missing" then
-    return record.status == "inactive" and "inactive" or "missing"
-  end
   if window_status ~= "active" then
     return "inactive"
   end
 
+  record = type(record) == "table" and record or {}
   if record.codex_status == "working" then
     return "active"
   end
@@ -723,6 +720,13 @@ function M:entries_for_project(root)
           tmux_target = M.tmux_target(session, window_name) or record.tmux_target,
           codex_status = record.codex_status or "idle",
           codex_mode = codex_mode,
+          permission_profile = record.permission_profile or "default",
+          codex_session_captured_at = record.codex_session_captured_at,
+          created_at = record.created_at,
+          last_opened_at = record.last_opened_at,
+          last_activity_at = record.last_activity_at,
+          last_target_at = record.last_target_at,
+          last_reconciled_at = record.last_reconciled_at,
           window_id = window_id,
           status = status,
         })
@@ -745,6 +749,12 @@ function M:entries_for_project(root)
           window_name = window_name,
           tmux_target = M.tmux_target(session, window_name),
           codex_status = "idle",
+          permission_profile = record.permission_profile or "default",
+          codex_session_captured_at = record.codex_session_captured_at,
+          created_at = record.created_at,
+          last_opened_at = record.last_opened_at,
+          last_activity_at = record.last_activity_at,
+          last_target_at = record.last_target_at,
           window_id = window_id,
           status = status,
           instruction_file = record.instruction_file,
@@ -759,6 +769,83 @@ function M:entries_for_project(root)
   end)
 
   return entries, nil
+end
+
+function M:saved_workspace_instruction_request(entry)
+  entry = type(entry) == "table" and entry or {}
+  local root = entry.project_root or self.state.workspace_manager_project_root
+  local safe_name = entry.safe_name
+  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
+    return nil, "workspace not found"
+  end
+
+  local instruction = self:read_instruction_file(root, safe_name)
+  if type(instruction) ~= "string" or trim(instruction) == "" then
+    local state_data = self:read_state()
+    local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
+    local workspaces = type(project) == "table" and project.workspaces or nil
+    local record = type(workspaces) == "table" and workspaces[safe_name] or nil
+    if type(record) == "table" and type(record.resolved_instruction) == "string" then
+      instruction = record.resolved_instruction
+    elseif type(entry.resolved_instruction) == "string" then
+      instruction = entry.resolved_instruction
+    end
+  end
+
+  return {
+    name = entry.name or safe_name,
+    safe_name = safe_name,
+    project_root = root,
+    custom_instruction = instruction,
+    resolved_instruction = instruction,
+  }, nil
+end
+
+function M:update_saved_workspace_instruction(entry, instruction)
+  entry = type(entry) == "table" and entry or {}
+  instruction = type(instruction) == "string" and trim(instruction) or ""
+  if instruction == "" then
+    return false, "Workspace instruction is required"
+  end
+
+  local root = entry.project_root or self.state.workspace_manager_project_root
+  local safe_name = entry.safe_name
+  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
+    return false, "workspace not found"
+  end
+
+  local instruction_ok, instruction_error = self:write_instruction_file(root, safe_name, instruction)
+  if not instruction_ok then
+    return false, instruction_error
+  end
+
+  local state_data, state_error = self:read_state()
+  if state_error then
+    return false, state_error
+  end
+
+  local project = self:project_state(state_data, root)
+  local record = project.workspaces[safe_name]
+  if type(record) == "table" then
+    record.custom_instruction = instruction
+    record.resolved_instruction = instruction
+    project.updated_at = self:timestamp()
+
+    local write_ok, write_error = self:write_state(state_data)
+    if not write_ok then
+      return false, write_error
+    end
+  end
+
+  if self.state.workspace and self.state.workspace.project_root == root and self.state.workspace.safe_name == safe_name then
+    self.state.workspace.custom_instruction = instruction
+    self.state.workspace.resolved_instruction = instruction
+  end
+  if self.state.workspace_manager_project_root == root then
+    self.render_workspace_manager()
+  end
+
+  return true, nil
 end
 
 function M:entry_for_name(root, name)
@@ -818,7 +905,6 @@ function M:reconcile_project(root)
     question = 0,
     idle = 0,
     inactive = 0,
-    missing = 0,
     changed = 0,
   }
 
@@ -851,8 +937,6 @@ function M:reconcile_project(root)
         summary.question = summary.question + 1
       elseif status == "idle" then
         summary.idle = summary.idle + 1
-      elseif status == "missing" then
-        summary.missing = summary.missing + 1
       else
         summary.inactive = summary.inactive + 1
       end
@@ -1063,6 +1147,83 @@ function M:close_saved_workspace_window(entry)
   self.notify("Closed Codux workspace " .. tostring(existing.name or entry.name or entry.safe_name))
   self.render_workspace_manager()
   return true
+end
+
+function M:close_all_saved_workspace_windows(root)
+  root = root or self.state.workspace_manager_project_root or self:project_root()
+  local state_data, state_error = self:read_state()
+  if state_error then
+    self.notify(state_error, vim.log.levels.ERROR)
+    return false
+  end
+
+  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
+  local workspaces = type(project) == "table" and project.workspaces or nil
+  if type(workspaces) ~= "table" or next(workspaces) == nil then
+    self.notify("No Codux workspaces to close", vim.log.levels.WARN)
+    return false
+  end
+
+  local session = self:current_tmux_session()
+  local closed = 0
+  local failed = 0
+  local now = self:timestamp()
+  local close_results = {}
+
+  for safe_name, record in pairs(workspaces) do
+    if type(record) == "table" then
+      local entry_safe_name = record.safe_name or safe_name
+      local window_name = record.tmux_window or record.window_name or safe_name
+      local window_id = session and self:tmux_window_id(session, window_name) or nil
+      local close_failed = false
+      if window_id then
+        if self:kill_tmux_window(window_id) then
+          closed = closed + 1
+        else
+          failed = failed + 1
+          close_failed = true
+        end
+      end
+      close_results[entry_safe_name] = not close_failed
+
+      if not close_failed then
+        record.status = "inactive"
+        record.codex_status = "idle"
+        record.codex_mode = nil
+        record.tmux_target = nil
+      end
+      record.tmux_window = window_name
+      record.last_reconciled_at = now
+    end
+  end
+
+  project.updated_at = now
+  local write_ok, write_error = self:write_state(state_data)
+  if not write_ok then
+    self.notify(write_error, vim.log.levels.ERROR)
+    return false
+  end
+
+  if self.state.workspace and self.state.workspace.project_root == root then
+    local current_safe_name = self.state.workspace.safe_name
+    if close_results[current_safe_name] then
+      self.state.workspace.status = "inactive"
+      self.state.workspace.codex_status = "idle"
+      self.state.workspace.codex_mode = nil
+      self.state.workspace.tmux_target = nil
+    end
+  end
+
+  if failed > 0 then
+    self.notify("Closed " .. tostring(closed) .. " Codux workspaces; " .. tostring(failed) .. " failed", vim.log.levels.WARN)
+  else
+    self.notify("Closed " .. tostring(closed) .. " Codux workspaces")
+  end
+  if self.state.workspace_manager_project_root == root then
+    self.render_workspace_manager()
+  end
+
+  return failed == 0
 end
 
 function M:shell_env_assignment(name, value)
@@ -1388,9 +1549,7 @@ function M:restore_workspaces(opts)
         .. tostring(summary.idle)
         .. " idle, "
         .. tostring(summary.inactive)
-        .. " inactive, "
-        .. tostring(summary.missing)
-        .. " missing"
+        .. " inactive"
     )
   end
 

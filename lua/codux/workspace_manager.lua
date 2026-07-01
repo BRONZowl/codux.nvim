@@ -46,9 +46,15 @@ function M.new(opts)
     restore_workspaces = type(opts.restore_workspaces) == "function" and opts.restore_workspaces or noop,
     open_saved_workspace = type(opts.open_saved_workspace) == "function" and opts.open_saved_workspace or noop,
     rename_saved_workspace = type(opts.rename_saved_workspace) == "function" and opts.rename_saved_workspace or noop,
+    edit_saved_workspace_instruction = type(opts.edit_saved_workspace_instruction) == "function"
+        and opts.edit_saved_workspace_instruction
+      or noop,
     delete_saved_workspace = type(opts.delete_saved_workspace) == "function" and opts.delete_saved_workspace or noop,
     close_saved_workspace_window = type(opts.close_saved_workspace_window) == "function"
         and opts.close_saved_workspace_window
+      or noop,
+    close_all_saved_workspace_windows = type(opts.close_all_saved_workspace_windows) == "function"
+        and opts.close_all_saved_workspace_windows
       or noop,
     doctor = type(opts.doctor) == "function" and opts.doctor or noop,
     single_line_prompt = type(opts.single_line_prompt) == "function" and opts.single_line_prompt or noop,
@@ -127,6 +133,7 @@ function M:close()
     ["codux-workspaces-footer"] = true,
     ["codux-workspaces-search"] = true,
     ["codux-workspaces-command"] = true,
+    ["codux-workspaces-actions"] = true,
   }
 
   for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -150,6 +157,10 @@ function M:close()
   self.state.workspace_manager_search_buf = nil
   self.state.workspace_manager_command_win = nil
   self.state.workspace_manager_command_buf = nil
+  self.state.workspace_manager_action_win = nil
+  self.state.workspace_manager_action_buf = nil
+  self.state.workspace_manager_action_items = {}
+  self.state.workspace_manager_action_workspace = nil
   self.state.workspace_manager_items = {}
   self.state.workspace_manager_query = ""
   self.state.workspace_manager_best_match_index = nil
@@ -203,7 +214,7 @@ function M:render_footer()
   end
 
   local width = self:window_width() or 1
-  local segments = self.workspace_ui.manager_footer_segments()
+  local segments = self.workspace_ui.manager_footer_segments({}, width)
   local line = self.workspace_ui.footer_line(segments)
   local padding = math.max(0, math.floor((width - #line) / 2))
   local text = string.rep(" ", padding) .. line
@@ -216,8 +227,12 @@ function M:render_footer()
   for index, segment in ipairs(segments) do
     local key_end = col + #segment.key
     pcall(vim.api.nvim_buf_add_highlight, self.state.workspace_manager_footer_buf, ns, "WhichKey", 0, col, key_end)
-    local desc_end = key_end + 1 + #segment.desc
-    pcall(vim.api.nvim_buf_add_highlight, self.state.workspace_manager_footer_buf, ns, "WhichKeySeparator", 0, key_end, desc_end)
+    local desc_width = #tostring(segment.desc or "")
+    local desc_end = key_end
+    if desc_width > 0 then
+      desc_end = key_end + 1 + desc_width
+      pcall(vim.api.nvim_buf_add_highlight, self.state.workspace_manager_footer_buf, ns, "WhichKeySeparator", 0, key_end, desc_end)
+    end
     col = desc_end
     if index < #segments then
       col = col + 2
@@ -273,7 +288,9 @@ function M:render()
   local root = self.state.workspace_manager_project_root or self.project_root()
   local all_entries, error_message = self.workspace_entries_for_project(root)
   local query = tostring(self.state.workspace_manager_query or "")
-  local entries = error_message and all_entries or self.workspace_ui.fuzzy_workspace_filter(all_entries, query)
+  local entries = error_message and all_entries
+    or (query ~= "" and self.workspace_ui.fuzzy_workspace_filter(all_entries, query))
+    or self.workspace_ui.sort_entries(all_entries, "status_recent")
   local ns = self:ns()
   self.state.workspace_manager_items = entries
   self.state.workspace_manager_best_match_index = query ~= "" and #entries > 0 and 1 or nil
@@ -521,8 +538,201 @@ function M:selected_or_notify()
   return item
 end
 
-function M:open_selected_workspace()
+function M:close_action_palette()
+  self.ui.close_window(self.state.workspace_manager_action_win)
+  self.ui.delete_buffer(self.state.workspace_manager_action_buf)
+  self.state.workspace_manager_action_win = nil
+  self.state.workspace_manager_action_buf = nil
+  self.state.workspace_manager_action_items = {}
+  self.state.workspace_manager_action_workspace = nil
+  return true
+end
+
+function M:action_palette_width()
+  local dashboard_width = self:window_width() or 58
+  return math.min(math.max(32, dashboard_width - 8), 48)
+end
+
+function M:action_palette_config(item, item_count)
+  local dashboard_config = self.is_valid_win(self.state.workspace_manager_win)
+      and vim.api.nvim_win_get_config(self.state.workspace_manager_win)
+    or {}
+  local dashboard_width = self:window_width() or 58
+  local dashboard_height = self:window_height() or math.max(1, item_count or 1)
+  local width = self:action_palette_width()
+  local height = math.max(1, item_count or 1)
+  local col = type(dashboard_config.col) == "number" and dashboard_config.col or math.floor((vim.o.columns - dashboard_width) / 2)
+  local row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
+
+  return {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = " Codux actions: " .. self.workspace_ui.truncate_display_tail(item and item.name or "workspace", width - 16) .. " ",
+    title_pos = "center",
+    width = width,
+    height = height,
+    col = math.max(0, col + math.floor((dashboard_width - width) / 2)),
+    row = math.max(0, row + math.floor((dashboard_height - height) / 2)),
+    zindex = 70,
+  }
+end
+
+function M:render_action_palette()
+  if not self.is_loaded_buf(self.state.workspace_manager_action_buf) then
+    return false
+  end
+
+  local width = self:action_palette_width()
+  local lines = {}
+  for _, item in ipairs(self.state.workspace_manager_action_items or {}) do
+    table.insert(lines, self.workspace_ui.manager_action_line(item, width))
+  end
+
+  self.ui.set_lines(self.state.workspace_manager_action_buf, lines, { modifiable = true })
+  return true
+end
+
+function M:run_action(action, item)
+  item = item or self.state.workspace_manager_action_workspace or self:selected_or_notify()
+  if not item then
+    return false
+  end
+
+  if action == "rename" then
+    self:close_action_palette()
+    return self:rename_selected_workspace(item)
+  end
+  if action == "edit_instructions" then
+    self:close_action_palette()
+    return self.edit_saved_workspace_instruction(item)
+  end
+  if action == "close_window" then
+    self:close_action_palette()
+    return self.close_saved_workspace_window(item)
+  end
+  if action == "close_all_windows" then
+    self:close_action_palette()
+    return self:close_all_workspace_windows()
+  end
+  if action == "delete" then
+    self:close_action_palette()
+    return self:delete_selected_workspace(item)
+  end
+  return false
+end
+
+function M:run_highlighted_action()
+  if not self.is_valid_win(self.state.workspace_manager_action_win) then
+    return false
+  end
+
+  local ok, cursor = pcall(vim.api.nvim_win_get_cursor, self.state.workspace_manager_action_win)
+  if not ok then
+    return false
+  end
+
+  local action_item = self.state.workspace_manager_action_items[cursor[1]]
+  if not action_item then
+    return false
+  end
+  return self:run_action(action_item.action, self.state.workspace_manager_action_workspace)
+end
+
+function M:move_action_cursor(delta)
+  if not self.is_valid_win(self.state.workspace_manager_action_win) then
+    return false
+  end
+
+  local count = #self.state.workspace_manager_action_items
+  if count == 0 then
+    return false
+  end
+
+  local ok, cursor = pcall(vim.api.nvim_win_get_cursor, self.state.workspace_manager_action_win)
+  if not ok then
+    return false
+  end
+  local row = ((cursor[1] - 1 + delta) % count) + 1
+  pcall(vim.api.nvim_win_set_cursor, self.state.workspace_manager_action_win, { row, 0 })
+  return true
+end
+
+function M:open_action_palette()
   local item = self:selected_or_notify()
+  if not item then
+    return false
+  end
+
+  self:close_action_palette()
+  local action_items = self.workspace_ui.manager_action_items(item)
+  local bufnr = self.ui.create_scratch_buffer({
+    bufhidden = "wipe",
+    filetype = "codux-workspaces-actions",
+    buftype = "nofile",
+    swapfile = false,
+    modifiable = false,
+  })
+  if not bufnr then
+    self.notify("Failed to create Codux workspace actions", vim.log.levels.ERROR)
+    return false
+  end
+
+  self.state.workspace_manager_action_buf = bufnr
+  self.state.workspace_manager_action_items = action_items
+  self.state.workspace_manager_action_workspace = item
+  self:render_action_palette()
+
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:action_palette_config(item, #action_items))
+  if not win_ok then
+    self:close_action_palette()
+    self.notify("Failed to open Codux workspace actions", vim.log.levels.ERROR)
+    return false
+  end
+
+  self.state.workspace_manager_action_win = win
+  self.ui.set_window_options(win, {
+    number = false,
+    relativenumber = false,
+    signcolumn = "no",
+    winfixbuf = true,
+    cursorline = true,
+    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
+  })
+
+  self.bind_close_keys(bufnr, function()
+    return self:close_action_palette()
+  end, "Close Codux Workspace Actions", "n", { escape = true, q = true })
+  self.set_buffer_keymap(bufnr, "n", "<CR>", function()
+    return self:run_highlighted_action()
+  end, "Run Codux Workspace Action")
+  self.set_buffer_keymap(bufnr, "n", "j", function()
+    return self:move_action_cursor(1)
+  end, "Next Codux Workspace Action", { nowait = true })
+  self.set_buffer_keymap(bufnr, "n", "<Down>", function()
+    return self:move_action_cursor(1)
+  end, "Next Codux Workspace Action", { nowait = true })
+  self.set_buffer_keymap(bufnr, "n", "k", function()
+    return self:move_action_cursor(-1)
+  end, "Previous Codux Workspace Action", { nowait = true })
+  self.set_buffer_keymap(bufnr, "n", "<Up>", function()
+    return self:move_action_cursor(-1)
+  end, "Previous Codux Workspace Action", { nowait = true })
+
+  for _, action_item in ipairs(action_items) do
+    local bound_action = action_item.action
+    local bound_label = action_item.label
+    self.set_buffer_keymap(bufnr, "n", action_item.key, function()
+      return self:run_action(bound_action, item)
+    end, bound_label .. " Codux Workspace", { nowait = true })
+  end
+
+  pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
+  return true
+end
+
+function M:open_selected_workspace(item)
+  item = item or self:selected_or_notify()
   if not item then
     return false
   end
@@ -531,8 +741,8 @@ function M:open_selected_workspace()
   return self.open_saved_workspace(item.name, root)
 end
 
-function M:rename_selected_workspace()
-  local item = self:selected_or_notify()
+function M:rename_selected_workspace(item)
+  item = item or self:selected_or_notify()
   if not item then
     return false
   end
@@ -545,8 +755,8 @@ function M:rename_selected_workspace()
   end)
 end
 
-function M:delete_selected_workspace()
-  local item = self:selected_or_notify()
+function M:delete_selected_workspace(item)
+  item = item or self:selected_or_notify()
   if not item then
     return false
   end
@@ -556,12 +766,21 @@ function M:delete_selected_workspace()
   end
 end
 
-function M:close_selected_workspace_window()
-  local item = self:selected_or_notify()
+function M:close_selected_workspace_window(item)
+  item = item or self:selected_or_notify()
   if not item then
     return false
   end
   return self.close_saved_workspace_window(item)
+end
+
+function M:close_all_workspace_windows()
+  local root = self.state.workspace_manager_project_root or self.project_root()
+  local choice = vim.fn.confirm("Close all Codux workspaces for this project?", "&Yes\n&No", 2)
+  if choice ~= 1 then
+    return false
+  end
+  return self.close_all_saved_workspace_windows(root)
 end
 
 function M:open_codux_menu()
@@ -585,21 +804,15 @@ function M:bind_commands(target_bufnr)
   self.set_buffer_keymap(target_bufnr, "n", "s", function()
     return self:open_search_input()
   end, "Search Codux Workspaces")
-  self.set_buffer_keymap(target_bufnr, "n", "<CR>", function()
-    return self:open_selected_workspace()
-  end, "Open Codux Workspace")
-  self.set_buffer_keymap(target_bufnr, "n", "r", function()
-    return self:rename_selected_workspace()
-  end, "Rename Codux Workspace")
-  self.set_buffer_keymap(target_bufnr, "n", "x", function()
-    return self:close_selected_workspace_window()
-  end, "Close Codux Workspace Window")
-  self.set_buffer_keymap(target_bufnr, "n", "d", function()
-    return self:delete_selected_workspace()
-  end, "Delete Codux Workspace")
+  self.set_buffer_keymap(target_bufnr, "n", "m", function()
+    return self:open_action_palette()
+  end, "Open Codux Workspace Menu")
   self.set_buffer_keymap(target_bufnr, "n", "h", function()
     return self.doctor()
   end, "Run Codux Doctor")
+  self.set_buffer_keymap(target_bufnr, "n", "<CR>", function()
+    return self:open_selected_workspace()
+  end, "Open Codux Workspace")
 end
 
 function M:open_command_sink()
