@@ -19,6 +19,11 @@ if type(vim) ~= "table" then
   vim = {
     deepcopy = deepcopy,
     env = {},
+    o = {
+      columns = 120,
+      lines = 40,
+      cmdheight = 1,
+    },
     fn = {
       confirm = function()
         return 1
@@ -61,6 +66,7 @@ end
 local runtime_mod = require("codux.workspace_runtime")
 local workspace_ui = require("codux.workspace_ui")
 local manager_mod = require("codux.workspace_manager")
+local terminal_mod = require("codux.terminal")
 
 local function assert_equal(actual, expected, message)
   if actual ~= expected then
@@ -160,10 +166,11 @@ end
 
 do
   local footer = workspace_ui.footer_line(workspace_ui.manager_footer_segments({}, 200))
-  assert_contains(footer, "s search")
+  assert_contains(footer, "tab search/list")
   assert_contains(footer, "m menu")
   assert_contains(footer, "h doctor")
   assert_contains(footer, "enter open")
+  assert_equal(footer:find("s search", 1, true), nil)
   assert_equal(footer:find("r rename", 1, true), nil)
   assert_equal(footer:find("x close", 1, true), nil)
   assert_equal(footer:find("d delete", 1, true), nil)
@@ -202,10 +209,143 @@ do
   assert_equal(bound.m, "Open Codux Workspace Menu")
   assert_equal(bound.h, "Run Codux Doctor")
   assert_equal(bound["<CR>"], "Open Codux Workspace")
-  assert_equal(bound.s, "Search Codux Workspaces")
+  assert_equal(bound["<Tab>"], "Search/List Codux Workspaces")
+  assert_nil(bound.s)
   assert_nil(bound.r)
   assert_nil(bound.x)
   assert_nil(bound.d)
+end
+
+do
+  local current_win = 20
+  local cursors = {}
+  local controller = manager_mod.new({
+    state = {
+      workspace_manager_win = 10,
+      workspace_manager_search_win = 20,
+      workspace_manager_items = {
+        { name = "Backend Debug" },
+        { name = "Code Review" },
+      },
+      workspace_manager_best_match_index = 2,
+    },
+    is_valid_win = function(win)
+      return win == 10 or win == 20
+    end,
+    get_current_win = function()
+      return current_win
+    end,
+    set_current_win = function(win)
+      current_win = win
+      return true
+    end,
+    set_window_cursor = function(win, cursor)
+      cursors[win] = cursor
+      return true
+    end,
+  })
+
+  assert_true(controller:toggle_search_list_focus())
+  assert_equal(current_win, 10)
+  assert_equal(cursors[10][1], 3)
+
+  assert_true(controller:toggle_search_list_focus())
+  assert_equal(current_win, 20)
+end
+
+do
+  local controller = manager_mod.new({
+    state = {},
+    workspace_manager_max_height = function()
+      return 12
+    end,
+  })
+
+  assert_equal(controller:dashboard_height(1), 5)
+  assert_equal(controller:dashboard_height(9), 9)
+  assert_equal(controller:dashboard_height(40), 12)
+end
+
+do
+  local current_height = 5
+  local configs = {}
+  local controller = manager_mod.new({
+    state = {
+      workspace_manager_win = 10,
+      workspace_manager_footer_win = 11,
+    },
+    is_valid_win = function(win)
+      return win == 10 or win == 11
+    end,
+    get_window_config = function()
+      return {
+        relative = "editor",
+        row = 4,
+        col = 6,
+        width = 84,
+        height = current_height,
+      }
+    end,
+    get_window_height = function(win)
+      if win == 10 then
+        return current_height
+      end
+      return 1
+    end,
+    get_window_width = function()
+      return 84
+    end,
+    set_window_config = function(win, config)
+      configs[win] = config
+      if win == 10 then
+        current_height = config.height
+      end
+      return true
+    end,
+    workspace_manager_max_height = function()
+      return 9
+    end,
+  })
+
+  assert_true(controller:resize_dashboard(20))
+  assert_equal(configs[10].height, 9)
+  assert_equal(configs[10].width, 84)
+  assert_equal(configs[10].row, 4)
+  assert_equal(configs[10].col, 6)
+  assert_equal(configs[11].relative, "win")
+  assert_equal(configs[11].win, 10)
+  assert_equal(configs[11].row, 8)
+  assert_equal(configs[11].width, 84)
+end
+
+do
+  local calls = {}
+  local controller = terminal_mod.new({})
+  function controller:exit()
+    table.insert(calls, { name = "exit" })
+  end
+  function controller:start_terminal(focus, initial_prompt, command, workspace, permission_profile, opts)
+    table.insert(calls, {
+      name = "start_terminal",
+      focus = focus,
+      initial_prompt = initial_prompt,
+      command = command,
+      workspace = workspace,
+      permission_profile = permission_profile,
+      hidden = type(opts) == "table" and opts.hidden,
+    })
+    return "started"
+  end
+
+  assert_equal(controller:restart_hidden_with_command("codex-auto", "auto", "hello"), "started")
+  assert_equal(calls[1].name, "exit")
+  assert_equal(calls[2].name, "start_terminal")
+  assert_equal(calls[2].focus, false)
+  assert_equal(calls[2].initial_prompt, "hello")
+  assert_equal(calls[2].command, "codex-auto")
+  assert_nil(calls[2].workspace)
+  assert_equal(calls[2].permission_profile, "auto")
+  assert_equal(calls[2].hidden, true)
 end
 
 do

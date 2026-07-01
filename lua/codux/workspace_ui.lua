@@ -342,7 +342,7 @@ end
 
 function M.manager_footer_segments(_state, width)
   local full = {
-    { key = "s", desc = "search" },
+    { key = "tab", desc = "search/list" },
     { key = "m", desc = "menu" },
     { key = "h", desc = "doctor" },
     { key = "enter", desc = "open" },
@@ -355,7 +355,7 @@ function M.manager_footer_segments(_state, width)
   end
 
   return {
-    { key = "s", desc = "" },
+    { key = "tab", desc = "" },
     { key = "m", desc = "menu" },
     { key = "h", desc = "" },
     { key = "enter", desc = "" },

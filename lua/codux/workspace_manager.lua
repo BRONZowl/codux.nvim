@@ -32,6 +32,36 @@ function M.new(opts)
     buffer_filetype = type(opts.buffer_filetype) == "function" and opts.buffer_filetype or function()
       return nil
     end,
+    get_window_config = type(opts.get_window_config) == "function" and opts.get_window_config or function(win)
+      local ok, config = pcall(vim.api.nvim_win_get_config, win)
+      return ok and type(config) == "table" and config or {}
+    end,
+    get_window_height = type(opts.get_window_height) == "function" and opts.get_window_height or function(win)
+      local ok, height = pcall(vim.api.nvim_win_get_height, win)
+      return ok and type(height) == "number" and height or nil
+    end,
+    get_window_width = type(opts.get_window_width) == "function" and opts.get_window_width or function(win)
+      local ok, width = pcall(vim.api.nvim_win_get_width, win)
+      return ok and type(width) == "number" and width or nil
+    end,
+    get_current_win = type(opts.get_current_win) == "function" and opts.get_current_win or function()
+      local ok, win = pcall(vim.api.nvim_get_current_win)
+      return ok and type(win) == "number" and win or nil
+    end,
+    set_current_win = type(opts.set_current_win) == "function" and opts.set_current_win or function(win)
+      return pcall(vim.api.nvim_set_current_win, win)
+    end,
+    set_window_cursor = type(opts.set_window_cursor) == "function" and opts.set_window_cursor or function(win, cursor)
+      return pcall(vim.api.nvim_win_set_cursor, win, cursor)
+    end,
+    set_window_config = type(opts.set_window_config) == "function" and opts.set_window_config or function(win, config)
+      return pcall(vim.api.nvim_win_set_config, win, config)
+    end,
+    workspace_manager_max_height = type(opts.workspace_manager_max_height) == "function"
+        and opts.workspace_manager_max_height
+      or function()
+        return nil
+      end,
     workspace_entries_for_project = type(opts.workspace_entries_for_project) == "function"
         and opts.workspace_entries_for_project
       or function()
@@ -103,14 +133,28 @@ function M:start_refresh_timer()
   end))
 end
 
+function M:max_dashboard_height()
+  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local editor_max_height = math.max(1, total_height - 2)
+  local codux_max_height = tonumber(self.workspace_manager_max_height())
+  if codux_max_height and codux_max_height > 0 then
+    return math.max(1, math.min(editor_max_height, math.floor(codux_max_height)))
+  end
+  return editor_max_height
+end
+
+function M:dashboard_height(line_count)
+  local max_height = self:max_dashboard_height()
+  local min_height = math.min(5, max_height)
+  return math.min(max_height, math.max(min_height, line_count or 1))
+end
+
 function M:config(line_count)
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local max_width = math.max(1, total_width - 4)
   local width = math.min(max_width, math.max(80, math.min(88, math.floor(total_width * 0.75))))
-  local max_height = math.max(1, total_height - 2)
-  local min_height = math.min(5, max_height)
-  local height = math.min(max_height, math.max(min_height, line_count or 1))
+  local height = self:dashboard_height(line_count)
 
   return {
     relative = "editor",
@@ -175,8 +219,8 @@ function M:window_height()
     return nil
   end
 
-  local ok, height = pcall(vim.api.nvim_win_get_height, self.state.workspace_manager_win)
-  if ok and type(height) == "number" and height > 0 then
+  local height = self.get_window_height(self.state.workspace_manager_win)
+  if type(height) == "number" and height > 0 then
     return height
   end
 
@@ -188,8 +232,8 @@ function M:window_width()
     return nil
   end
 
-  local ok, width = pcall(vim.api.nvim_win_get_width, self.state.workspace_manager_win)
-  if ok and type(width) == "number" and width > 0 then
+  local width = self.get_window_width(self.state.workspace_manager_win)
+  if type(width) == "number" and width > 0 then
     return width
   end
 
@@ -206,6 +250,62 @@ end
 
 function M:manager_line(entry)
   return self.workspace_ui.manager_line(entry, self:width_or_default())
+end
+
+function M:footer_config()
+  if not self.is_valid_win(self.state.workspace_manager_win) then
+    return nil
+  end
+
+  local height = self:window_height() or 1
+  local width = self:window_width() or 1
+  return {
+    relative = "win",
+    win = self.state.workspace_manager_win,
+    col = 0,
+    row = height - 1,
+    width = width,
+    height = 1,
+    border = "none",
+    style = "minimal",
+    zindex = 51,
+  }
+end
+
+function M:position_footer()
+  if not self.is_valid_win(self.state.workspace_manager_footer_win) then
+    return false
+  end
+  local config = self:footer_config()
+  if not config then
+    return false
+  end
+  return self.set_window_config(self.state.workspace_manager_footer_win, config)
+end
+
+function M:resize_dashboard(line_count)
+  if not self.is_valid_win(self.state.workspace_manager_win) then
+    return false
+  end
+
+  local next_height = self:dashboard_height(line_count)
+  if self:window_height() == next_height then
+    self:position_footer()
+    return true
+  end
+
+  local current = self.get_window_config(self.state.workspace_manager_win)
+  local config = self:config(line_count)
+  config.width = type(current.width) == "number" and current.width or config.width
+  config.col = type(current.col) == "number" and current.col or config.col
+  config.row = type(current.row) == "number" and current.row or config.row
+  config.height = next_height
+
+  local ok = self.set_window_config(self.state.workspace_manager_win, config)
+  if ok then
+    self:position_footer()
+  end
+  return ok
 end
 
 function M:render_footer()
@@ -256,19 +356,7 @@ function M:open_footer()
     return false
   end
 
-  local height = self:window_height() or 1
-  local width = self:window_width() or 1
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, {
-    relative = "win",
-    win = self.state.workspace_manager_win,
-    col = 0,
-    row = height - 1,
-    width = width,
-    height = 1,
-    border = "none",
-    style = "minimal",
-    zindex = 51,
-  })
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, self:footer_config())
   if not win_ok then
     self.ui.delete_buffer(bufnr)
     return false
@@ -309,7 +397,9 @@ function M:render()
   end
 
   table.insert(lines, "")
-  local footer_line = math.max(1, self:window_height() or (#lines + 1))
+  local content_line_count = #lines
+  self:resize_dashboard(content_line_count)
+  local footer_line = math.max(1, self:window_height() or content_line_count)
   while #lines < footer_line do
     table.insert(lines, "")
   end
@@ -410,14 +500,52 @@ function M:clear_query()
   return self:update_query("")
 end
 
+function M:workspace_list_focus_row()
+  if #self.state.workspace_manager_items == 0 then
+    return 1
+  end
+
+  local index = self.state.workspace_manager_selected_index or self.state.workspace_manager_best_match_index or 1
+  index = math.max(1, math.min(#self.state.workspace_manager_items, tonumber(index) or 1))
+  return 2 + index - 1
+end
+
+function M:focus_workspace_list()
+  if not self.is_valid_win(self.state.workspace_manager_win) then
+    return false
+  end
+
+  self.state.workspace_manager_focus_match = false
+  self.set_window_cursor(self.state.workspace_manager_win, { self:workspace_list_focus_row(), 0 })
+  return self.set_current_win(self.state.workspace_manager_win)
+end
+
+function M:focus_search_input()
+  if self.is_valid_win(self.state.workspace_manager_search_win) then
+    return self.set_current_win(self.state.workspace_manager_search_win)
+  end
+
+  return self:open_search_input()
+end
+
+function M:toggle_search_list_focus()
+  if
+    self.is_valid_win(self.state.workspace_manager_search_win)
+    and self.get_current_win() == self.state.workspace_manager_search_win
+  then
+    return self:focus_workspace_list()
+  end
+
+  return self:focus_search_input()
+end
+
 function M:open_search_input()
   if not self.is_valid_win(self.state.workspace_manager_win) then
     return false
   end
 
   if self.is_valid_win(self.state.workspace_manager_search_win) then
-    pcall(vim.api.nvim_set_current_win, self.state.workspace_manager_search_win)
-    return true
+    return self.set_current_win(self.state.workspace_manager_search_win)
   end
 
   local bufnr = self.ui.create_scratch_buffer({
@@ -483,6 +611,11 @@ function M:open_search_input()
   self.bind_close_keys(bufnr, function()
     return self:close()
   end, "Close Codux Workspaces", "n", { escape = true })
+  self.set_buffer_keymap(bufnr, "n", "<Tab>", function()
+    return self:focus_workspace_list()
+  end, "Focus Codux Workspace List", {
+    nowait = true,
+  })
   self.set_buffer_keymap(bufnr, "n", "<CR>", function()
     if not self.state.workspace_manager_best_match_index then
       self.notify("No Codux workspace selected", vim.log.levels.WARN)
@@ -494,9 +627,9 @@ function M:open_search_input()
     self.state.workspace_manager_focus_match = false
     self:render()
     if self.is_valid_win(self.state.workspace_manager_command_win) then
-      pcall(vim.api.nvim_set_current_win, self.state.workspace_manager_command_win)
+      self.set_current_win(self.state.workspace_manager_command_win)
     elseif self.is_valid_win(self.state.workspace_manager_win) then
-      pcall(vim.api.nvim_set_current_win, self.state.workspace_manager_win)
+      self.set_current_win(self.state.workspace_manager_win)
     end
     return true
   end, "Select Codux Workspace")
@@ -801,9 +934,11 @@ function M:bind_commands(target_bufnr)
   end, "Open Codux Menu", {
     nowait = true,
   })
-  self.set_buffer_keymap(target_bufnr, "n", "s", function()
-    return self:open_search_input()
-  end, "Search Codux Workspaces")
+  self.set_buffer_keymap(target_bufnr, "n", "<Tab>", function()
+    return self:toggle_search_list_focus()
+  end, "Search/List Codux Workspaces", {
+    nowait = true,
+  })
   self.set_buffer_keymap(target_bufnr, "n", "m", function()
     return self:open_action_palette()
   end, "Open Codux Workspace Menu")

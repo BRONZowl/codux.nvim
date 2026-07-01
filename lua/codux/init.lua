@@ -677,6 +677,18 @@ render_workspace_manager = function()
   return workspace_manager_controller:render()
 end
 
+local function workspace_manager_max_height()
+  if terminal:valid_win() then
+    local ok, height = pcall(vim.api.nvim_win_get_height, state.win)
+    if ok and type(height) == "number" and height > 0 then
+      return height
+    end
+  end
+
+  local popup_config = terminal:popup_config()
+  return type(popup_config) == "table" and popup_config.height or nil
+end
+
 function M._v5.render_workspace_manager_search()
   return workspace_manager_controller:render_search()
 end
@@ -762,6 +774,7 @@ workspace_manager_controller = workspace_manager_mod.new({
   is_loaded_buf = is_loaded_buf,
   window_buffer = window_buffer,
   buffer_filetype = buffer_filetype,
+  workspace_manager_max_height = workspace_manager_max_height,
   workspace_entries_for_project = workspace_entries_for_project,
   project_root = workspace_manager_project_root,
   workspaces_enabled = workspaces_enabled,
@@ -803,6 +816,10 @@ end
 
 local function start_hidden_with_command(command, permission_profile, initial_prompt)
   return terminal:start_hidden_with_command(command, permission_profile, initial_prompt)
+end
+
+local function restart_hidden_with_command(command, permission_profile, initial_prompt)
+  return terminal:restart_hidden_with_command(command, permission_profile, initial_prompt)
 end
 
 function M.open_workspace_auto(initial_prompt)
@@ -848,11 +865,11 @@ function M.open_hidden(initial_prompt)
 end
 
 function M.open_workspace_auto_hidden(initial_prompt)
-  return start_hidden_with_command(config.workspace_auto_cmd, "auto", initial_prompt)
+  return restart_hidden_with_command(config.workspace_auto_cmd, "auto", initial_prompt)
 end
 
 function M.open_danger_full_access_hidden(initial_prompt)
-  return start_hidden_with_command(config.danger_full_access_cmd, "danger", initial_prompt)
+  return restart_hidden_with_command(config.danger_full_access_cmd, "danger", initial_prompt)
 end
 
 function M.open_workspace_auto_hidden_with_notice()

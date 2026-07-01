@@ -1131,6 +1131,11 @@ function M:restart_with_command(command, focus, permission_profile, initial_prom
   return self:start_terminal(focus ~= false, initial_prompt, command, nil, permission_profile)
 end
 
+function M:restart_hidden_with_command(command, permission_profile, initial_prompt)
+  self:exit()
+  return self:start_terminal(false, initial_prompt, command, nil, permission_profile, { hidden = true })
+end
+
 function M:start_hidden_with_command(command, permission_profile, initial_prompt)
   return self:start_terminal(false, initial_prompt, command, nil, permission_profile, { hidden = true })
 end
