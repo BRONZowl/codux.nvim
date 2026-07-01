@@ -1394,6 +1394,9 @@ function M:prepare_workspace(name, opts)
   if type(existing) == "table" and existing.name ~= display_name and not opts.allow_existing then
     return nil, "workspace already exists"
   end
+  if type(existing) ~= "table" and file_instruction and not opts.allow_existing then
+    return nil, "workspace already exists"
+  end
   if opts.require_existing and type(existing) ~= "table" and not file_instruction then
     return nil, "workspace not found"
   end
