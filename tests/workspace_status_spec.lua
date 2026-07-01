@@ -923,4 +923,372 @@ do
   assert_equal(workspace_ui.sort_entries(entries, "status_recent")[1].name, "old")
 end
 
+do
+  local state_data = {
+    projects = {
+      ["/repo"] = {
+        workspaces = {
+          review = {
+            name = "review",
+            safe_name = "review",
+            project_root = "/repo",
+            tmux_window = "review",
+            status = "inactive",
+            codex_status = "idle",
+          },
+        },
+      },
+    },
+  }
+  local delete_calls = 0
+  local old_filereadable = vim.fn.filereadable
+  vim.fn.filereadable = function()
+    return 1
+  end
+
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = function() end,
+    render_workspace_manager = function() end,
+    close_workspace_manager = function() end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function()
+        return false, "write failed"
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+      project_state = function(_, next_state, root)
+        return next_state.projects[root]
+      end,
+      instruction_file_path = function()
+        return "/repo/.agents/codux/review.md"
+      end,
+      delete_instruction_file = function()
+        delete_calls = delete_calls + 1
+        return true, nil
+      end,
+    },
+  })
+
+  assert_false(runtime:delete_saved_workspace({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+  }))
+  assert_equal(delete_calls, 0, "instruction file should not be deleted when state write fails")
+  vim.fn.filereadable = old_filereadable
+end
+
+do
+  local state_data = {
+    projects = {
+      ["/repo"] = {
+        updated_at = "before",
+        workspaces = {
+          review = {
+            name = "review",
+            safe_name = "review",
+            project_root = "/repo",
+            tmux_window = "review",
+            status = "inactive",
+            codex_status = "idle",
+          },
+        },
+      },
+    },
+  }
+  local write_count = 0
+  local killed = false
+  local old_filereadable = vim.fn.filereadable
+  vim.fn.filereadable = function()
+    return 1
+  end
+
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = function() end,
+    render_workspace_manager = function() end,
+    close_workspace_manager = function() end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        write_count = write_count + 1
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+      project_state = function(_, next_state, root)
+        return next_state.projects[root]
+      end,
+      instruction_file_path = function()
+        return "/repo/.agents/codux/review.md"
+      end,
+      delete_instruction_file = function()
+        return false, "delete instruction failed"
+      end,
+    },
+  })
+  runtime.kill_tmux_window_deferred = function()
+    killed = true
+  end
+
+  assert_false(runtime:delete_saved_workspace({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    window_id = "@1",
+  }))
+  assert_equal(write_count, 2, "failed instruction delete should restore prior state")
+  assert_equal(state_data.projects["/repo"].workspaces.review.name, "review")
+  assert_false(killed, "tmux window should not be killed when delete is rolled back")
+  vim.fn.filereadable = old_filereadable
+end
+
+do
+  local old_tmux = vim.env.TMUX
+  local old_executable = vim.fn.executable
+  local old_isdirectory = vim.fn.isdirectory
+  local old_getcwd = vim.fn.getcwd
+  local old_shellescape = vim.fn.shellescape
+  vim.env.TMUX = "/tmp/tmux,1,0"
+  vim.fn.executable = function()
+    return 1
+  end
+  vim.fn.isdirectory = function(path)
+    return path == "/repo" and 1 or 0
+  end
+  vim.fn.getcwd = function()
+    return "/repo"
+  end
+  vim.fn.shellescape = function(value)
+    return "'" .. tostring(value or ""):gsub("'", "'\\''") .. "'"
+  end
+
+  local wrote_instruction = false
+  local runtime = runtime_mod.new({
+    state = {},
+    get_config = function()
+      return {
+        codex_cmd = "codex",
+        workspace_auto_cmd = "codex-auto",
+        danger_full_access_cmd = "codex-danger",
+        workspaces = {
+          tmux_cmd = "tmux",
+          nvim_cmd = "nvim",
+        },
+      }
+    end,
+    current_target = function()
+      return { path = "/repo/file.lua", type = "file" }
+    end,
+    current_buffer_name = function()
+      return "/repo/file.lua"
+    end,
+    git_root_for = function()
+      return "/repo"
+    end,
+    git_branch_for = function()
+      return "main"
+    end,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "tmux display-message -p #S" then
+        return "session\n", 0
+      end
+      if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+        return "", 0
+      end
+      if command:find("tmux new%-window", 1, false) == 1 then
+        return "", 1
+      end
+      return "", 1
+    end,
+    store = {
+      read_state = function()
+        return { projects = {} }, nil
+      end,
+      project_state = function(_, state, root)
+        state.projects[root] = state.projects[root] or { workspaces = {} }
+        return state.projects[root]
+      end,
+      workspace_from_state = function(record, fallback)
+        local workspace = vim.deepcopy(fallback)
+        if type(record) == "table" then
+          for key, value in pairs(record) do
+            workspace[key] = value
+          end
+        end
+        return workspace
+      end,
+      read_instruction_file = function()
+        return nil
+      end,
+      write_instruction_file = function()
+        wrote_instruction = true
+        return true, nil
+      end,
+      resolve_workspace_resume_session = function() end,
+    },
+  })
+
+  local workspace, error_message = runtime:prepare_workspace("review", {
+    resolved_instruction = "review the backend",
+  })
+  assert_nil(workspace)
+  assert_contains(error_message, "Failed to create tmux window")
+  assert_false(wrote_instruction, "instruction file should not be written when tmux creation fails")
+
+  vim.env.TMUX = old_tmux
+  vim.fn.executable = old_executable
+  vim.fn.isdirectory = old_isdirectory
+  vim.fn.getcwd = old_getcwd
+  vim.fn.shellescape = old_shellescape
+end
+
+do
+  local old_tmux = vim.env.TMUX
+  local old_executable = vim.fn.executable
+  local old_isdirectory = vim.fn.isdirectory
+  local old_getcwd = vim.fn.getcwd
+  local old_shellescape = vim.fn.shellescape
+  vim.env.TMUX = "/tmp/tmux,1,0"
+  vim.fn.executable = function()
+    return 1
+  end
+  vim.fn.isdirectory = function(path)
+    return path == "/repo" and 1 or 0
+  end
+  vim.fn.getcwd = function()
+    return "/repo"
+  end
+  vim.fn.shellescape = function(value)
+    return "'" .. tostring(value or ""):gsub("'", "'\\''") .. "'"
+  end
+
+  local created = false
+  local killed = false
+  local deleted_instruction = false
+  local runtime = runtime_mod.new({
+    state = {},
+    get_config = function()
+      return {
+        codex_cmd = "codex",
+        workspace_auto_cmd = "codex-auto",
+        danger_full_access_cmd = "codex-danger",
+        workspaces = {
+          tmux_cmd = "tmux",
+          nvim_cmd = "nvim",
+        },
+      }
+    end,
+    current_target = function()
+      return { path = "/repo/file.lua", type = "file" }
+    end,
+    current_buffer_name = function()
+      return "/repo/file.lua"
+    end,
+    git_root_for = function()
+      return "/repo"
+    end,
+    git_branch_for = function()
+      return "main"
+    end,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "tmux display-message -p #S" then
+        return "session\n", 0
+      end
+      if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+        if created then
+          return "@1\treview\n", 0
+        end
+        return "", 0
+      end
+      if command:find("tmux new%-window", 1, false) == 1 then
+        created = true
+        return "", 0
+      end
+      if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+        return "nvim\n", 0
+      end
+      if command == "tmux kill-window -t @1" then
+        killed = true
+        return "", 0
+      end
+      return "", 1
+    end,
+    store = {
+      read_state = function()
+        return { projects = {} }, nil
+      end,
+      write_state = function()
+        return false, "state write failed"
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+      project_state = function(_, state, root)
+        state.projects[root] = state.projects[root] or { workspaces = {} }
+        return state.projects[root]
+      end,
+      workspace_from_state = function(record, fallback)
+        local workspace = vim.deepcopy(fallback)
+        if type(record) == "table" then
+          for key, value in pairs(record) do
+            workspace[key] = value
+          end
+        end
+        return workspace
+      end,
+      state_record = function(_, workspace)
+        return {
+          name = workspace.name,
+          safe_name = workspace.safe_name,
+          project_root = workspace.project_root,
+          tmux_window = workspace.window_name,
+          status = workspace.status,
+          codex_status = workspace.codex_status,
+        }
+      end,
+      read_instruction_file = function()
+        return nil
+      end,
+      write_instruction_file = function()
+        return true, nil
+      end,
+      delete_instruction_file = function()
+        deleted_instruction = true
+        return true, nil
+      end,
+      resolve_workspace_resume_session = function() end,
+    },
+  })
+
+  local workspace, error_message = runtime:prepare_workspace("review", {
+    resolved_instruction = "review the backend",
+  })
+  assert_nil(workspace)
+  assert_equal(error_message, "state write failed")
+  assert_true(killed, "new tmux window should be cleaned up when state write fails")
+  assert_true(deleted_instruction, "new instruction file should be cleaned up when state write fails")
+
+  vim.env.TMUX = old_tmux
+  vim.fn.executable = old_executable
+  vim.fn.isdirectory = old_isdirectory
+  vim.fn.getcwd = old_getcwd
+  vim.fn.shellescape = old_shellescape
+end
+
 print("workspace_status_spec.lua: ok")

@@ -1066,6 +1066,7 @@ function M:rename_saved_workspace(entry, new_name)
 end
 
 function M:delete_saved_workspace(entry)
+  entry = type(entry) == "table" and entry or {}
   local root = entry.project_root or self.state.workspace_manager_project_root
   local state_data, state_error = self:read_state()
   if state_error then
@@ -1083,12 +1084,7 @@ function M:delete_saved_workspace(entry)
     return false
   end
 
-  local delete_instruction_ok, delete_instruction_error = self:delete_instruction_file(root, entry.safe_name)
-  if not delete_instruction_ok then
-    self.notify(delete_instruction_error, vim.log.levels.ERROR)
-    return false
-  end
-
+  local previous_project = vim.deepcopy(project)
   project.workspaces[entry.safe_name] = nil
   if next(project.workspaces) == nil and vim.empty_dict then
     project.workspaces = vim.empty_dict()
@@ -1100,7 +1096,27 @@ function M:delete_saved_workspace(entry)
     return false
   end
 
-  self.notify("Deleted Codux workspace " .. entry.name)
+  local delete_instruction_ok, delete_instruction_error = self:delete_instruction_file(root, entry.safe_name)
+  if not delete_instruction_ok then
+    if type(existing) == "table" then
+      state_data.projects[root] = previous_project
+      local restore_ok, restore_error = self:write_state(state_data)
+      if not restore_ok then
+        local message = (delete_instruction_error or "Failed to delete Codux workspace instruction file")
+          .. "; "
+          .. (restore_error or "failed to restore workspace state")
+        self.notify(message, vim.log.levels.ERROR)
+      else
+        self.notify(delete_instruction_error, vim.log.levels.ERROR)
+      end
+    else
+      self.notify(delete_instruction_error, vim.log.levels.ERROR)
+    end
+    self.render_workspace_manager()
+    return false
+  end
+
+  self.notify("Deleted Codux workspace " .. tostring(entry.name or entry.safe_name))
   self.close_workspace_manager()
   self:kill_tmux_window_deferred(entry.window_id, entry.window_name)
   return true
@@ -1417,11 +1433,6 @@ function M:prepare_workspace(name, opts)
   if resolved_instruction then
     workspace.resolved_instruction = resolved_instruction
   end
-  local instruction_ok, instruction_error =
-    self:write_instruction_file(workspace.project_root, workspace.safe_name, workspace.resolved_instruction)
-  if not instruction_ok then
-    return nil, instruction_error
-  end
   if saved_workspace then
     self:resolve_workspace_resume_session(workspace)
   end
@@ -1430,6 +1441,18 @@ function M:prepare_workspace(name, opts)
     self:ensure_tmux_window(session, workspace.project_root, workspace.window_name, self:nvim_command(workspace))
   if not window_id then
     return nil, "Failed to create tmux window " .. workspace.window_name
+  end
+
+  local wrote_new_instruction_file = file_instruction == nil
+    and type(workspace.resolved_instruction) == "string"
+    and trim(workspace.resolved_instruction) ~= ""
+  local instruction_ok, instruction_error =
+    self:write_instruction_file(workspace.project_root, workspace.safe_name, workspace.resolved_instruction)
+  if not instruction_ok then
+    if created then
+      self:kill_tmux_window(window_id)
+    end
+    return nil, instruction_error
   end
 
   workspace.window_id = window_id
@@ -1456,6 +1479,12 @@ function M:prepare_workspace(name, opts)
 
   local write_ok, write_error = self:write_state(state_data)
   if not write_ok then
+    if created then
+      self:kill_tmux_window(window_id)
+    end
+    if wrote_new_instruction_file then
+      self:delete_instruction_file(workspace.project_root, workspace.safe_name)
+    end
     return nil, write_error
   end
 
