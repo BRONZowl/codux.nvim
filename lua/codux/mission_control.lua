@@ -48,6 +48,8 @@ function M:objective_editor_config(line_count)
     border = "rounded",
     title = " Codux Mission Objective ",
     title_pos = "center",
+    footer = " Ctrl-s/:w preview | Ctrl-q cancel ",
+    footer_pos = "center",
     width = width,
     height = height,
     col = math.max(0, math.floor((total_width - width) / 2)),
@@ -111,6 +113,7 @@ function M:open_objective_editor(name, default_objective)
     return false
   end
 
+  pcall(vim.api.nvim_buf_set_name, bufnr, "codux://mission-objective/" .. tostring(bufnr))
   local objective_lines = vim.split(tostring(default_objective or ""), "\n", { plain = true })
   if #objective_lines == 0 then
     objective_lines = { "" }

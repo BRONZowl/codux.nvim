@@ -102,6 +102,7 @@ end
 
 local runtime_mod = require("codux.workspace_runtime")
 local mission_mod = require("codux.mission")
+local mission_control_mod = require("codux.mission_control")
 local prompt_actions_mod = require("codux.prompt_actions")
 local workspace_store_mod = require("codux.workspace_store")
 local workspace_ui = require("codux.workspace_ui")
@@ -171,6 +172,35 @@ do
   assert_equal(grouped[1].name, "Alpha")
   assert_equal(#grouped[1].roles, 2)
   assert_equal(grouped[1].roles[1].mission_role, "Architect")
+end
+
+if type(vim.api) == "table" then
+  local captured_mission
+  local controller = mission_control_mod.new({
+    namespace = vim.api.nvim_create_namespace("codux.mission_control.test"),
+    notify = function() end,
+    set_buffer_keymap = function(bufnr, modes, lhs, rhs, desc, opts)
+      opts = type(opts) == "table" and opts or {}
+      return pcall(vim.keymap.set, modes, lhs, rhs, {
+        buffer = bufnr,
+        silent = opts.silent ~= false,
+        desc = desc,
+      })
+    end,
+    bind_close_keys = function() end,
+  })
+  function controller:open_preview(mission)
+    captured_mission = mission
+    return true
+  end
+
+  assert_true(controller:open_objective_editor("Save Test"))
+  local bufnr = vim.api.nvim_get_current_buf()
+  assert_contains(vim.api.nvim_buf_get_name(bufnr), "codux://mission-objective/")
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "mission objective" })
+  vim.cmd("write")
+  assert_equal(captured_mission.name, "Save Test")
+  assert_equal(captured_mission.objective, "mission objective")
 end
 
 do
