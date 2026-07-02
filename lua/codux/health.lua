@@ -103,6 +103,21 @@ function M.doctor_lines(deps)
   else
     add("[warn]", "project root not detected")
   end
+  local ignore_status = type(deps.workspace_instruction_ignore_status) == "function"
+      and deps.workspace_instruction_ignore_status(root)
+    or nil
+  if type(ignore_status) == "table" then
+    if ignore_status.status == "ignored" then
+      add("[ok]", "workspace instruction files ignored by Git")
+    elseif ignore_status.status == "not_ignored" then
+      add(
+        "[warn]",
+        "workspace instruction files are not ignored by Git; add "
+          .. tostring(ignore_status.rule or ".agents/")
+          .. " to .gitignore or run :CoduxWorkspaceIgnore"
+      )
+    end
+  end
 
   local state_data = {}
   local state_error
@@ -243,6 +258,18 @@ function M.check()
         else
           health_warn("workspace instruction directory parent is not writable: " .. parent)
         end
+      end
+    end
+    local ignore_status = info.workspace_instruction_ignore_status
+    if type(ignore_status) == "table" then
+      if ignore_status.status == "ignored" then
+        health_ok("workspace instruction files ignored by Git")
+      elseif ignore_status.status == "not_ignored" then
+        health_warn(
+          "workspace instruction files are not ignored by Git; add "
+            .. tostring(ignore_status.rule or ".agents/")
+            .. " to .gitignore or run :CoduxWorkspaceIgnore"
+        )
       end
     end
   end

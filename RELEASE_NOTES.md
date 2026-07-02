@@ -10,6 +10,7 @@ codux.nvim v0.7.0 turns the workspace dashboard into the central control surface
 - Added workspace profile, branch, session age, and target columns to the dashboard.
 - Added an `m` dashboard workspace menu for rename workspace, edit instructions, close workspace, close all workspaces, and delete workspace, with `h` running Doctor directly from the dashboard.
 - Added `j`/`k` movement for the selected dashboard workspace after confirming a fuzzy-search result.
+- Warn when project-local workspace instruction files are not ignored by Git, and added `:CoduxWorkspaceIgnore` to add the ignore rule explicitly.
 - Added `X` and `:CoduxWorkspaceCloseAll` to close all current-project Codux workspaces after confirmation.
 - Treat stale saved tmux windows as `inactive` in the dashboard.
 - Checked all tmux panes when deciding whether a workspace window is open in Neovim.

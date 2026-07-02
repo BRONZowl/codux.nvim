@@ -121,6 +121,7 @@ local state = {
   workspace_manager_project_root = nil,
   workspace_manager_refresh_timer = nil,
   workspace_manager_ns = vim.api.nvim_create_namespace("codux.workspace_manager"),
+  workspace_instruction_ignore_warnings = {},
   workspace_target_signature = nil,
   workspace_target_update_pending = false,
   closing_popup = false,
@@ -601,6 +602,10 @@ function M._v5.workspace_instruction_file_records(root)
   return workspace_runtime:instruction_file_records(root)
 end
 
+function M._v5.workspace_instruction_ignore_status(root)
+  return workspace_runtime:workspace_instruction_ignore_status(root)
+end
+
 function M._v5.normalize_record(record, safe_name, root)
   return workspace_runtime:normalize_record(record, safe_name, root)
 end
@@ -915,6 +920,12 @@ function M.close_all_workspace_windows(project_root)
   return workspace_runtime:close_all_saved_workspace_windows(root)
 end
 
+function M.ignore_workspace_files(project_root)
+  local ok, message = workspace_runtime:ensure_workspace_instruction_gitignore(project_root or workspace_manager_project_root())
+  notify(message, ok and vim.log.levels.INFO or vim.log.levels.WARN)
+  return ok
+end
+
 function M.restore_workspaces(opts)
   return workspace_runtime:restore_workspaces(opts)
 end
@@ -1091,6 +1102,7 @@ function M.doctor()
     current_tmux_session = current_tmux_session,
     workspace_state_file = workspace_state_file,
     workspace_instruction_directory = M._v5.workspace_instruction_directory,
+    workspace_instruction_ignore_status = M._v5.workspace_instruction_ignore_status,
     project_root = workspace_manager_project_root,
     read_workspace_state = read_workspace_state,
     workspace_entries_for_project = workspace_entries_for_project,
@@ -1125,6 +1137,7 @@ function M.health_info()
     workspace = state.workspace,
     workspace_state_file = workspace_state_file(),
     workspace_instruction_directory = M._v5.workspace_instruction_directory(workspace_manager_project_root()),
+    workspace_instruction_ignore_status = M._v5.workspace_instruction_ignore_status(workspace_manager_project_root()),
   }
 end
 
@@ -1219,6 +1232,10 @@ local function create_commands()
   vim.api.nvim_create_user_command("CoduxWorkspaceCloseAll", function()
     M.close_all_workspace_windows()
   end, { force = true, desc = "Close all current-project Codux workspaces" })
+
+  vim.api.nvim_create_user_command("CoduxWorkspaceIgnore", function()
+    M.ignore_workspace_files()
+  end, { force = true, desc = "Add Codux workspace files to the current project's .gitignore" })
 
   vim.api.nvim_create_user_command("CoduxWorkspaces", function()
     M.open_workspaces()

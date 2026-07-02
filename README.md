@@ -128,6 +128,7 @@
 <p>
   Workspace names are persisted per project in <code>stdpath("data")/codux/workspaces.json</code>.
   Instruction files in <code>.agents/codux/</code> are project-local and editable; when a non-empty instruction file exists, Codux uses it over the saved JSON copy.
+  Codux warns when <code>.agents/codux/</code> is not ignored by Git in the current project; run <code>:CoduxWorkspaceIgnore</code> once to add the ignore rule to that project's <code>.gitignore</code>.
   If workspace state is missing but an instruction file remains, the workspace dashboard can recover that workspace entry from the file.
   Creating a workspace with an existing name shows <code>workspace already exists</code>.
 </p>
@@ -276,6 +277,11 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td>Manage current Codux workspaces</td>
 <td><code>&lt;leader&gt;zW</code></td>
 <td><code>:CoduxWorkspaces</code></td>
+</tr>
+<tr>
+<td>Ignore local workspace files</td>
+<td></td>
+<td><code>:CoduxWorkspaceIgnore</code></td>
 </tr>
 <tr>
 <td>Send current file or explorer node</td>
