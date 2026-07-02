@@ -19,6 +19,28 @@ if type(vim) ~= "table" then
   vim = {
     deepcopy = deepcopy,
     env = {},
+    tbl_isempty = function(value)
+      return type(value) ~= "table" or next(value) == nil
+    end,
+    split = function(value, separator)
+      value = tostring(value or "")
+      separator = tostring(separator or "")
+      if separator == "" then
+        return { value }
+      end
+      local parts = {}
+      local start = 1
+      while true do
+        local found = value:find(separator, start, true)
+        if not found then
+          table.insert(parts, value:sub(start))
+          break
+        end
+        table.insert(parts, value:sub(start, found - 1))
+        start = found + #separator
+      end
+      return parts
+    end,
     o = {
       columns = 120,
       lines = 40,
@@ -42,6 +64,9 @@ if type(vim) ~= "table" then
       end,
       readfile = function()
         return {}
+      end,
+      mkdir = function()
+        return 1
       end,
       strcharpart = function(value, start, length)
         value = tostring(value or "")
@@ -76,6 +101,8 @@ if type(vim) ~= "table" then
 end
 
 local runtime_mod = require("codux.workspace_runtime")
+local prompt_actions_mod = require("codux.prompt_actions")
+local workspace_store_mod = require("codux.workspace_store")
 local workspace_ui = require("codux.workspace_ui")
 local manager_mod = require("codux.workspace_manager")
 local terminal_mod = require("codux.terminal")
@@ -108,6 +135,77 @@ local function assert_contains(value, expected, message)
   if not tostring(value or ""):find(expected, 1, true) then
     error((message or "assertion failed") .. ": expected " .. tostring(value) .. " to contain " .. tostring(expected), 2)
   end
+end
+
+do
+  local selected = prompt_actions_mod.selection_from_lines({ "abcdef", "ghijkl" }, 2, 4, "V")
+  assert_equal(selected, "abcdef\nghijkl")
+end
+
+do
+  local selected = prompt_actions_mod.selection_from_lines({ "abcdef", "ghijkl" }, 2, 4, "v")
+  assert_equal(selected, "bcdef\nghij")
+end
+
+do
+  local selected = prompt_actions_mod.selection_from_lines({ "abcdef", "ghijkl" }, 2, 4, "\22")
+  assert_equal(selected, "bcd\nhij")
+end
+
+do
+  local selected = prompt_actions_mod.selection_from_lines({ "abcdef", "ghijkl" }, 2, 4, "\19")
+  assert_equal(selected, "bcd\nhij")
+end
+
+do
+  local actions = prompt_actions_mod.new({
+    current_buffer = function()
+      return 1
+    end,
+    buffer_lines = function(_, start_line, end_line)
+      assert_equal(start_line, 0)
+      assert_equal(end_line, 2)
+      return { "abcdef", "ghijkl" }
+    end,
+  })
+  local selected, start_line, end_line = actions:selection_from_positions({ 0, 2, 2, 0 }, { 0, 1, 4, 0 }, "\22")
+  assert_equal(selected, "bcd\nhij")
+  assert_equal(start_line, 1)
+  assert_equal(end_line, 2)
+end
+
+do
+  local actions = prompt_actions_mod.new({
+    current_buffer = function()
+      return 1
+    end,
+    buffer_lines = function(_, start_line, end_line)
+      assert_equal(start_line, 0)
+      assert_equal(end_line, 1)
+      return { "abcdef" }
+    end,
+  })
+  local selected, start_line, end_line = actions:selection_from_positions({ 0, 1, 4, 0 }, { 0, 1, 2, 0 }, "\22")
+  assert_equal(selected, "bcd")
+  assert_equal(start_line, 1)
+  assert_equal(end_line, 1)
+end
+
+do
+  local actions = prompt_actions_mod.new({
+    current_buffer = function()
+      return 1
+    end,
+    buffer_lines = function(_, start_line, end_line)
+      assert_equal(start_line, 0)
+      assert_equal(end_line, 2)
+      return { "abcdef", "ghijkl" }
+    end,
+  })
+  local selected, start_line, end_line = actions:selection_from_positions({ 0, 2, 2, 0 }, { 0, 1, 4, 0 }, "\19")
+  assert_equal(selected, "bcd\nhij")
+  assert_equal(start_line, 1)
+  assert_equal(end_line, 2)
 end
 
 local function runtime_with_tmux(responses, state)
@@ -462,7 +560,6 @@ end
 
 do
   local old_filereadable = vim.fn.filereadable
-  local old_readfile = vim.fn.readfile
   local old_writefile = vim.fn.writefile
   local written_path
   local written_lines
@@ -488,6 +585,38 @@ do
   assert_true(ok)
   assert_equal(message, "Added .agents/ to .gitignore")
   assert_equal(written_path, "/repo/.gitignore")
+  assert_equal(written_lines[#written_lines], ".agents/")
+end
+
+do
+  local old_filereadable = vim.fn.filereadable
+  local old_readfile = vim.fn.readfile
+  local old_writefile = vim.fn.writefile
+  local written_lines
+  vim.fn.filereadable = function()
+    return 1
+  end
+  vim.fn.readfile = function()
+    return { "*.log" }
+  end
+  vim.fn.writefile = function(lines)
+    written_lines = lines
+    return 0
+  end
+
+  local runtime = runtime_mod.new({
+    get_config = default_workspace_config,
+    system = function()
+      return "", 0
+    end,
+  })
+  local ok, message = runtime:ensure_workspace_instruction_gitignore("/repo")
+  vim.fn.filereadable = old_filereadable
+  vim.fn.readfile = old_readfile
+  vim.fn.writefile = old_writefile
+
+  assert_true(ok)
+  assert_equal(message, "Added .agents/ to .gitignore")
   assert_equal(written_lines[#written_lines], ".agents/")
 end
 
@@ -521,6 +650,138 @@ do
   assert_true(ok)
   assert_equal(message, "Codux workspace instructions are already ignored by Git")
   assert_false(wrote)
+end
+
+do
+  local old_filereadable = vim.fn.filereadable
+  local old_writefile = vim.fn.writefile
+  vim.fn.filereadable = function()
+    return 0
+  end
+  vim.fn.writefile = function()
+    return -1
+  end
+
+  local runtime = runtime_mod.new({
+    get_config = default_workspace_config,
+    system = function()
+      return "", 1
+    end,
+  })
+  local ok, message = runtime:ensure_workspace_instruction_gitignore("/repo")
+  vim.fn.filereadable = old_filereadable
+  vim.fn.writefile = old_writefile
+
+  assert_false(ok)
+  assert_equal(message, "Failed to update .gitignore")
+end
+
+do
+  local old_mkdir = vim.fn.mkdir
+  local old_writefile = vim.fn.writefile
+  local wrote = false
+  vim.fn.mkdir = function()
+    return 0
+  end
+  vim.fn.writefile = function()
+    wrote = true
+    return 0
+  end
+
+  local store = workspace_store_mod.new({
+    get_workspace_config = function()
+      return default_workspace_config().workspaces
+    end,
+  })
+  local ok, message = store:write_instruction_file("/repo", "review", "review the backend")
+  vim.fn.mkdir = old_mkdir
+  vim.fn.writefile = old_writefile
+
+  assert_false(ok)
+  assert_equal(message, "Failed to create Codux workspace instruction directory")
+  assert_false(wrote)
+end
+
+do
+  local old_mkdir = vim.fn.mkdir
+  local old_writefile = vim.fn.writefile
+  vim.fn.mkdir = function()
+    return 1
+  end
+  vim.fn.writefile = function()
+    return -1
+  end
+
+  local store = workspace_store_mod.new({
+    get_workspace_config = function()
+      return default_workspace_config().workspaces
+    end,
+  })
+  local ok, message = store:write_instruction_file("/repo", "review", "review the backend")
+  vim.fn.mkdir = old_mkdir
+  vim.fn.writefile = old_writefile
+
+  assert_false(ok)
+  assert_equal(message, "Failed to write Codux workspace instruction file")
+end
+
+do
+  local old_mkdir = vim.fn.mkdir
+  local old_writefile = vim.fn.writefile
+  local wrote = false
+  vim.fn.mkdir = function()
+    return 0
+  end
+  vim.fn.writefile = function()
+    wrote = true
+    return 0
+  end
+
+  local store = workspace_store_mod.new({
+    get_workspace_config = function()
+      return {
+        state_file = "/tmp/codux-workspaces.json",
+      }
+    end,
+    json_encode = function()
+      return "{}"
+    end,
+  })
+  local ok, message = store:write_state({ projects = {} })
+  vim.fn.mkdir = old_mkdir
+  vim.fn.writefile = old_writefile
+
+  assert_false(ok)
+  assert_equal(message, "Failed to create Codux workspace state directory")
+  assert_false(wrote)
+end
+
+do
+  local old_mkdir = vim.fn.mkdir
+  local old_writefile = vim.fn.writefile
+  vim.fn.mkdir = function()
+    return 1
+  end
+  vim.fn.writefile = function()
+    return -1
+  end
+
+  local store = workspace_store_mod.new({
+    get_workspace_config = function()
+      return {
+        state_file = "/tmp/codux-workspaces.json",
+      }
+    end,
+    json_encode = function()
+      return "{}"
+    end,
+  })
+  local ok, message = store:write_state({ projects = {} })
+  vim.fn.mkdir = old_mkdir
+  vim.fn.writefile = old_writefile
+
+  assert_false(ok)
+  assert_equal(message, "Failed to write Codux workspace state")
 end
 
 do

@@ -3,6 +3,10 @@ M.__index = M
 
 local function noop() end
 
+local function is_blockwise_mode(mode)
+  return mode == "\22" or mode == "\19"
+end
+
 function M.normalize_selection_positions(start_pos, end_pos)
   local start_line = start_pos[2]
   local start_col = start_pos[3]
@@ -26,7 +30,11 @@ function M.selection_from_lines(lines, start_col, end_col, mode)
     return nil
   end
 
-  if mode ~= "V" and mode ~= "S" then
+  if is_blockwise_mode(mode) then
+    for index, line in ipairs(lines) do
+      lines[index] = string.sub(line, start_col, end_col)
+    end
+  elseif mode ~= "V" and mode ~= "S" then
     if #lines == 1 then
       lines[1] = string.sub(lines[1], start_col, end_col)
     else
@@ -117,6 +125,11 @@ function M:selection_from_positions(start_pos, end_pos, mode)
   local start_line, start_col, end_line, end_col = M.normalize_selection_positions(start_pos, end_pos)
   if not start_line then
     return nil
+  end
+
+  if is_blockwise_mode(mode) then
+    start_line, end_line = math.min(start_pos[2], end_pos[2]), math.max(start_pos[2], end_pos[2])
+    start_col, end_col = math.min(start_pos[3], end_pos[3]), math.max(start_pos[3], end_pos[3])
   end
 
   local lines = self.buffer_lines(bufnr, start_line - 1, end_line)

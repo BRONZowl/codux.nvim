@@ -363,9 +363,6 @@ function M:ensure_workspace_instruction_gitignore(root)
   if status.status == "unknown" then
     return false, "not inside a Git repository or unable to check .gitignore"
   end
-  if status.status == "ignored" then
-    return true, "Codux workspace instructions are already ignored by Git"
-  end
 
   local rule = status.rule or self:workspace_instruction_ignore_rule(root)
   if type(rule) ~= "string" or rule == "" then
@@ -394,8 +391,8 @@ function M:ensure_workspace_instruction_gitignore(root)
   table.insert(lines, "# Codux workspace instructions")
   table.insert(lines, rule)
 
-  local ok = pcall(vim.fn.writefile, lines, path)
-  if not ok then
+  local ok, result = pcall(vim.fn.writefile, lines, path)
+  if not ok or result ~= 0 then
     return false, "Failed to update .gitignore"
   end
 

@@ -142,15 +142,15 @@ function Store:write_instruction_file(root, safe_name, instruction)
 
   local directory = vim.fn.fnamemodify(path, ":h")
   if directory ~= "" then
-    local mkdir_ok = pcall(vim.fn.mkdir, directory, "p")
-    if not mkdir_ok then
+    local mkdir_ok, mkdir_result = pcall(vim.fn.mkdir, directory, "p")
+    if not mkdir_ok or mkdir_result ~= 1 then
       return false, "Failed to create Codux workspace instruction directory"
     end
   end
 
   local lines = vim.split(instruction, "\n", { plain = true })
-  local ok = pcall(vim.fn.writefile, lines, path)
-  if not ok then
+  local ok, result = pcall(vim.fn.writefile, lines, path)
+  if not ok or result ~= 0 then
     return false, "Failed to write Codux workspace instruction file"
   end
 
@@ -357,15 +357,15 @@ function Store:write_state(state_data)
   local path = self:state_file()
   local directory = vim.fn.fnamemodify(path, ":h")
   if directory ~= "" then
-    local mkdir_ok = pcall(vim.fn.mkdir, directory, "p")
-    if not mkdir_ok then
+    local mkdir_ok, mkdir_result = pcall(vim.fn.mkdir, directory, "p")
+    if not mkdir_ok or mkdir_result ~= 1 then
       return false, "Failed to create Codux workspace state directory"
     end
   end
 
   local encoded = self.json_encode(self:normalize_state(state_data))
-  local ok = pcall(vim.fn.writefile, { encoded }, path)
-  if not ok then
+  local ok, result = pcall(vim.fn.writefile, { encoded }, path)
+  if not ok or result ~= 0 then
     return false, "Failed to write Codux workspace state"
   end
 
