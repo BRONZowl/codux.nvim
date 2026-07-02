@@ -79,6 +79,31 @@ function M.workspace_target_signature(path, target_type, branch)
   }, "\0")
 end
 
+function M.target_path_exists(path)
+  if type(path) ~= "string" or path == "" then
+    return false
+  end
+  if path:match("^term://") or path:match("^codux://") then
+    return false
+  end
+
+  local dir_ok, is_dir = pcall(vim.fn.isdirectory, path)
+  if dir_ok and is_dir == 1 then
+    return true
+  end
+
+  local file_ok, is_file = pcall(vim.fn.filereadable, path)
+  return file_ok and is_file == 1
+end
+
+function M.normalize_workspace_target(path, target_type, root)
+  if M.target_path_exists(path) then
+    return path, target_type == "directory" and "directory" or "file"
+  end
+
+  return root, "directory"
+end
+
 function M.parse_create_args(args)
   args = type(args) == "table" and args or {}
   local name = args[1]
@@ -1416,13 +1441,15 @@ function M:prepare_workspace(name, opts)
     status = "idle",
   }
   local workspace = self:workspace_from_state(existing, fallback)
+  workspace.project_root = workspace.project_root or root
+  workspace.target_path, workspace.target_type =
+    M.normalize_workspace_target(workspace.target_path, workspace.target_type, workspace.project_root)
   if custom_instruction then
     workspace.custom_instruction = custom_instruction
   end
   workspace.session = session
   workspace.safe_name = workspace.safe_name or safe_name_or_error
   workspace.window_name = M.workspace_window_name(workspace.safe_name)
-  workspace.project_root = workspace.project_root or root
   workspace.tmux_target = M.tmux_target(session, workspace.window_name)
   local saved_workspace = type(existing) == "table" or (opts.require_existing and file_instruction ~= nil)
   workspace.open_visible = not saved_workspace
@@ -1636,6 +1663,7 @@ function M:sync_target(event, current_filetype)
 
   local target_type = context.target and context.target.type or (vim.fn.isdirectory(path) == 1 and "directory" or "file")
   local branch = context.branch or ""
+  path, target_type = M.normalize_workspace_target(path, target_type, root)
   local signature = M.workspace_target_signature(path, target_type, branch)
   if signature == self.state.workspace_target_signature then
     return true

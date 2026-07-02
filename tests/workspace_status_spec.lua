@@ -172,6 +172,8 @@ local function default_state_record(_, workspace)
     safe_name = workspace.safe_name,
     project_root = workspace.project_root,
     resolved_instruction = workspace.resolved_instruction,
+    target_path = workspace.target_path,
+    target_type = workspace.target_type,
     tmux_window = workspace.window_name,
     status = workspace.status,
     codex_status = workspace.codex_status,
@@ -199,6 +201,7 @@ local function with_workspace_prepare_env(callback)
   local old_tmux = vim.env.TMUX
   local old_executable = vim.fn.executable
   local old_isdirectory = vim.fn.isdirectory
+  local old_filereadable = vim.fn.filereadable
   local old_getcwd = vim.fn.getcwd
   local old_shellescape = vim.fn.shellescape
 
@@ -208,6 +211,9 @@ local function with_workspace_prepare_env(callback)
   end
   vim.fn.isdirectory = function(path)
     return path == "/repo" and 1 or 0
+  end
+  vim.fn.filereadable = function(path)
+    return path == "/repo/file.lua" and 1 or 0
   end
   vim.fn.getcwd = function()
     return "/repo"
@@ -220,6 +226,7 @@ local function with_workspace_prepare_env(callback)
   vim.env.TMUX = old_tmux
   vim.fn.executable = old_executable
   vim.fn.isdirectory = old_isdirectory
+  vim.fn.filereadable = old_filereadable
   vim.fn.getcwd = old_getcwd
   vim.fn.shellescape = old_shellescape
   if not ok then
@@ -1430,6 +1437,163 @@ do
     assert_equal(workspace.resolved_instruction, "existing instructions")
     assert_false(workspace.open_visible)
     assert_equal(store.state_data().projects["/repo"].workspaces.review.resolved_instruction, "existing instructions")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local target_path, target_type = runtime_mod.normalize_workspace_target("/repo", "directory", "/fallback")
+    assert_equal(target_path, "/repo")
+    assert_equal(target_type, "directory")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local created = false
+    local new_window_command
+    local store = workspace_store({
+      state_data = workspace_state({
+        review = review_workspace_record({
+          resolved_instruction = "existing instructions",
+          target_path = "/repo/neo-tree filesystem [1]",
+          target_type = "file",
+        }),
+      }),
+      read_instruction_file = function()
+        return "existing instructions"
+      end,
+    })
+    local runtime = workspace_prepare_runtime({
+      store = store.store,
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          if created then
+            return "@1\treview\n", 0
+          end
+          return "", 0
+        end
+        if command:find("tmux new%-window", 1, false) == 1 then
+          created = true
+          new_window_command = command
+          return "", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local workspace, error_message = runtime:prepare_workspace("review", {
+      allow_existing = true,
+      require_existing = true,
+      project_root = "/repo",
+    })
+    assert_nil(error_message)
+    assert_equal(workspace.target_path, "/repo")
+    assert_equal(workspace.target_type, "directory")
+    assert_contains(new_window_command, "'nvim' '.'")
+    assert_equal(store.state_data().projects["/repo"].workspaces.review.target_path, "/repo")
+    assert_equal(store.state_data().projects["/repo"].workspaces.review.target_type, "directory")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local store = workspace_store({
+      state_data = workspace_state({
+        review = review_workspace_record({
+          target_path = "/repo/file.lua",
+          target_type = "file",
+        }),
+      }),
+    })
+    local runtime = workspace_prepare_runtime({
+      state = {
+        workspace = {
+          project_root = "/repo",
+          safe_name = "review",
+          target_path = "/repo/file.lua",
+          target_type = "file",
+          git_branch = "main",
+        },
+      },
+      store = store.store,
+      current_target = function()
+        return nil
+      end,
+      current_buffer_name = function()
+        return "/repo/neo-tree filesystem [1]"
+      end,
+    })
+
+    assert_true(runtime:sync_target("BufEnter", function()
+      return "neo-tree"
+    end))
+    assert_equal(store.state_data().projects["/repo"].workspaces.review.target_path, "/repo")
+    assert_equal(store.state_data().projects["/repo"].workspaces.review.target_type, "directory")
+    assert_equal(runtime.state.workspace.target_path, "/repo")
+    assert_equal(runtime.state.workspace.target_type, "directory")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local created = false
+    local new_window_command
+    local store = workspace_store({
+      state_data = workspace_state({
+        review = review_workspace_record({
+          resolved_instruction = "existing instructions",
+          target_path = "/repo/file.lua",
+          target_type = "file",
+        }),
+      }),
+      read_instruction_file = function()
+        return "existing instructions"
+      end,
+    })
+    local runtime = workspace_prepare_runtime({
+      store = store.store,
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          if created then
+            return "@1\treview\n", 0
+          end
+          return "", 0
+        end
+        if command:find("tmux new%-window", 1, false) == 1 then
+          created = true
+          new_window_command = command
+          return "", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local workspace, error_message = runtime:prepare_workspace("review", {
+      allow_existing = true,
+      require_existing = true,
+      project_root = "/repo",
+    })
+    assert_nil(error_message)
+    assert_equal(workspace.target_path, "/repo/file.lua")
+    assert_equal(workspace.target_type, "file")
+    assert_contains(new_window_command, "'nvim' '/repo/file.lua'")
+    assert_equal(store.state_data().projects["/repo"].workspaces.review.target_path, "/repo/file.lua")
+    assert_equal(store.state_data().projects["/repo"].workspaces.review.target_type, "file")
   end)
 end
 
