@@ -6,7 +6,8 @@ local command_util = require("codux.command")
 local function noop() end
 
 local function trim(value)
-  return (value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  local trimmed = (value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  return trimmed
 end
 
 local function strip_trailing_slashes(value)
@@ -339,6 +340,14 @@ function M:git_current_ref(root)
   return "HEAD"
 end
 
+function M:git_rev_parse(root, ref)
+  local output = self:git_output(root, "rev-parse", tostring(ref or "HEAD"))
+  if output and output ~= "" then
+    return output
+  end
+  return nil
+end
+
 function M:git_checkout_clean(root)
   local output, code = self.system({ "git", "-C", root, "status", "--porcelain" })
   if code ~= 0 then
@@ -440,13 +449,37 @@ function M:create_git_worktree(base_root, worktree_path, branch, base_ref)
 end
 
 function M:remove_git_worktree(base_root, worktree_path)
-  local _, code = self.system({ "git", "-C", base_root, "worktree", "remove", "--force", worktree_path })
-  return code == 0
+  local output, code = self.system({ "git", "-C", base_root, "worktree", "remove", "--force", worktree_path })
+  if code == 0 then
+    return true, nil
+  end
+  local message = "Failed to remove Git worktree " .. tostring(worktree_path)
+  local detail = trim(output)
+  if detail:find("is not a working tree", 1, true) then
+    return true, nil
+  end
+  if detail ~= "" then
+    message = message .. ": " .. detail
+  end
+  return false, message
 end
 
 function M:delete_git_branch(base_root, branch)
   local _, code = self.system({ "git", "-C", base_root, "branch", "-D", branch })
   return code == 0
+end
+
+function M:delete_git_branch_in_common_dir(git_common_dir, branch)
+  local output, code = self.system({ "git", "--git-dir=" .. tostring(git_common_dir or ""), "branch", "-D", branch })
+  if code == 0 then
+    return true, nil
+  end
+  local message = "Failed to delete Git branch " .. tostring(branch)
+  local detail = trim(output)
+  if detail ~= "" then
+    message = message .. ": " .. detail
+  end
+  return false, message
 end
 
 function M:move_git_worktree(base_root, old_path, new_path)
@@ -466,12 +499,65 @@ function M:workspace_branch_merged(entry)
   end
   local branch = entry.worktree_branch
   local base = entry.worktree_base
+  local base_commit = entry.worktree_base_commit
   local root = entry.project_root or entry.worktree_path
-  if type(branch) ~= "string" or branch == "" or type(base) ~= "string" or base == "" or type(root) ~= "string" then
+  if
+    type(branch) ~= "string"
+    or branch == ""
+    or type(base) ~= "string"
+    or base == ""
+    or type(base_commit) ~= "string"
+    or base_commit == ""
+    or type(root) ~= "string"
+  then
     return false
   end
+
+  local count_output, count_code = self.system({ "git", "-C", root, "rev-list", "--count", base_commit .. ".." .. branch })
+  if count_code ~= 0 or tonumber(trim(count_output)) == nil or tonumber(trim(count_output)) <= 0 then
+    return false
+  end
+
   local _, code = self.system({ "git", "-C", root, "merge-base", "--is-ancestor", branch, base })
   return code == 0
+end
+
+function M:backfill_workspace_base_commit(entry)
+  entry = type(entry) == "table" and entry or {}
+  if entry.workspace_kind ~= "worktree" or (type(entry.worktree_base_commit) == "string" and entry.worktree_base_commit ~= "") then
+    return false
+  end
+
+  local root = entry.project_root or entry.worktree_path
+  local branch = entry.worktree_branch
+  local base = entry.worktree_base
+  if type(root) ~= "string" or root == "" or type(branch) ~= "string" or branch == "" or type(base) ~= "string" or base == "" then
+    return false
+  end
+
+  local commit = self:git_output(root, "merge-base", branch, base)
+  if not commit or commit == "" then
+    return false
+  end
+
+  local state_data, state_error = self:read_state()
+  if state_error then
+    return false
+  end
+  local project = type(state_data.projects) == "table" and state_data.projects[entry.project_root] or nil
+  local workspaces = type(project) == "table" and project.workspaces or nil
+  local record = type(workspaces) == "table" and workspaces[entry.safe_name] or nil
+  if type(record) ~= "table" then
+    return false
+  end
+
+  record.worktree_base_commit = commit
+  project.updated_at = self:timestamp()
+  local write_ok = self:write_state(state_data)
+  if write_ok then
+    entry.worktree_base_commit = commit
+  end
+  return write_ok
 end
 
 function M:prompt_merged_workspaces(root)
@@ -486,7 +572,9 @@ function M:prompt_merged_workspaces(root)
 
   for _, entry in ipairs(entries) do
     local key = tostring(entry.project_root or "") .. "\0" .. tostring(entry.safe_name or "")
-    if not self.state.merged_workspace_cleanup_declined[key] and self:workspace_branch_merged(entry) then
+    if entry.workspace_kind == "worktree" and (type(entry.worktree_base_commit) ~= "string" or entry.worktree_base_commit == "") then
+      self:backfill_workspace_base_commit(entry)
+    elseif not self.state.merged_workspace_cleanup_declined[key] and self:workspace_branch_merged(entry) then
       local choice = vim.fn.confirm(
         "Codux workspace " .. tostring(entry.name or entry.safe_name) .. " has been merged. Delete workspace/worktree?",
         "&Yes\n&No",
@@ -1238,6 +1326,7 @@ function M:entries_for_project(root)
                 worktree_path = record.worktree_path,
                 worktree_branch = record.worktree_branch,
                 worktree_base = record.worktree_base,
+                worktree_base_commit = record.worktree_base_commit,
                 window_name = window_name,
                 tmux_target = M.tmux_target(session, window_name) or record.tmux_target,
                 codex_status = record.codex_status or "idle",
@@ -1656,6 +1745,15 @@ function M:delete_saved_workspace(entry)
   if type(existing) == "table" and existing.workspace_kind == "worktree" then
     local worktree_path = existing.worktree_path or existing.project_root or root
     local worktree_branch = existing.worktree_branch
+    local git_common_dir = existing.git_common_dir
+    if type(git_common_dir) ~= "string" or git_common_dir == "" then
+      git_common_dir = self:git_common_dir(worktree_path)
+    end
+    if type(git_common_dir) ~= "string" or git_common_dir == "" then
+      self.notify("Failed to resolve Git common directory for " .. tostring(worktree_path), vim.log.levels.ERROR)
+      self.render_workspace_manager()
+      return false
+    end
     if entry.window_id and not self:kill_tmux_window(entry.window_id) then
       self.notify("Failed to close tmux window " .. tostring(entry.window_name), vim.log.levels.ERROR)
       return false
@@ -1668,15 +1766,19 @@ function M:delete_saved_workspace(entry)
       return false
     end
 
-    if not self:remove_git_worktree(root, worktree_path) then
-      self.notify("Failed to remove Git worktree " .. tostring(worktree_path), vim.log.levels.ERROR)
+    local remove_ok, remove_error = self:remove_git_worktree(root, worktree_path)
+    if not remove_ok then
+      self.notify(remove_error or ("Failed to remove Git worktree " .. tostring(worktree_path)), vim.log.levels.ERROR)
       self.render_workspace_manager()
       return false
     end
-    if type(worktree_branch) == "string" and worktree_branch ~= "" and not self:delete_git_branch(root, worktree_branch) then
-      self.notify("Failed to delete Git branch " .. tostring(worktree_branch), vim.log.levels.ERROR)
-      self.render_workspace_manager()
-      return false
+    if type(worktree_branch) == "string" and worktree_branch ~= "" then
+      local branch_ok, branch_error = self:delete_git_branch_in_common_dir(git_common_dir, worktree_branch)
+      if not branch_ok then
+        self.notify(branch_error or ("Failed to delete Git branch " .. tostring(worktree_branch)), vim.log.levels.ERROR)
+        self.render_workspace_manager()
+        return false
+      end
     end
 
     project.workspaces[entry.safe_name] = nil
@@ -1874,6 +1976,7 @@ function M:bootstrap_lua(workspace)
   local worktree_path = workspace.worktree_path or ""
   local worktree_branch = workspace.worktree_branch or ""
   local worktree_base = workspace.worktree_base or ""
+  local worktree_base_commit = workspace.worktree_base_commit or ""
   local window_name = workspace.window_name or ""
   local custom_instruction = workspace.custom_instruction or ""
   local resolved_instruction = workspace.resolved_instruction or ""
@@ -1893,7 +1996,7 @@ function M:bootstrap_lua(workspace)
     "local profile=" .. self:lua_string(profile),
     "local prompt=" .. self:lua_string(initial_prompt),
     "local show_codux=" .. tostring(show_codux),
-    "local workspace={name=" .. self:lua_string(name) .. ",safe_name=" .. self:lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. self:lua_string(branch) .. ",workspace_kind=" .. self:lua_string(workspace_kind) .. ",git_common_dir=" .. self:lua_string(git_common_dir) .. ",worktree_path=" .. self:lua_string(worktree_path) .. ",worktree_branch=" .. self:lua_string(worktree_branch) .. ",worktree_base=" .. self:lua_string(worktree_base) .. ",window_name=" .. self:lua_string(window_name) .. ",custom_instruction=" .. self:lua_string(custom_instruction) .. ",resolved_instruction=" .. self:lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. self:lua_string(codex_status) .. ",status=" .. self:lua_string(status) .. ",codex_session_id=" .. self:lua_string(codex_session_id) .. ",codex_session_path=" .. self:lua_string(codex_session_path) .. ",codex_session_captured_at=" .. self:lua_string(codex_session_captured_at) .. ",open_visible=" .. tostring(open_visible) .. "}",
+    "local workspace={name=" .. self:lua_string(name) .. ",safe_name=" .. self:lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. self:lua_string(branch) .. ",workspace_kind=" .. self:lua_string(workspace_kind) .. ",git_common_dir=" .. self:lua_string(git_common_dir) .. ",worktree_path=" .. self:lua_string(worktree_path) .. ",worktree_branch=" .. self:lua_string(worktree_branch) .. ",worktree_base=" .. self:lua_string(worktree_base) .. ",worktree_base_commit=" .. self:lua_string(worktree_base_commit) .. ",window_name=" .. self:lua_string(window_name) .. ",custom_instruction=" .. self:lua_string(custom_instruction) .. ",resolved_instruction=" .. self:lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. self:lua_string(codex_status) .. ",status=" .. self:lua_string(status) .. ",codex_session_id=" .. self:lua_string(codex_session_id) .. ",codex_session_path=" .. self:lua_string(codex_session_path) .. ",codex_session_captured_at=" .. self:lua_string(codex_session_captured_at) .. ",open_visible=" .. tostring(open_visible) .. "}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
@@ -1992,6 +2095,7 @@ function M:prepare_workspace(name, opts)
   local created_worktree_path = nil
   local created_worktree_branch = nil
   local worktree_base = nil
+  local worktree_base_commit = nil
   local git_common_dir = nil
 
   if creating_worktree then
@@ -2007,6 +2111,10 @@ function M:prepare_workspace(name, opts)
     end
     created_worktree_path = self:worktree_path(base_root, safe_name_or_error)
     worktree_base = self:git_current_ref(base_root)
+    worktree_base_commit = self:git_rev_parse(base_root, worktree_base)
+    if not worktree_base_commit then
+      return nil, "failed to resolve workspace base commit"
+    end
     git_common_dir = self:git_common_dir(base_root)
     if not git_common_dir then
       return nil, "not inside a Git repository"
@@ -2082,6 +2190,7 @@ function M:prepare_workspace(name, opts)
     worktree_path = created_worktree_path,
     worktree_branch = created_worktree_branch,
     worktree_base = worktree_base,
+    worktree_base_commit = worktree_base_commit,
     window_name = M.workspace_window_name(safe_name_or_error),
     custom_instruction = custom_instruction,
     resolved_instruction = resolved_instruction,

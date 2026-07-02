@@ -293,6 +293,7 @@ local function default_state_record(_, workspace)
     worktree_path = workspace.worktree_path,
     worktree_branch = workspace.worktree_branch,
     worktree_base = workspace.worktree_base,
+    worktree_base_commit = workspace.worktree_base_commit,
   }
 end
 
@@ -382,6 +383,9 @@ local function workspace_prepare_runtime(opts)
       if command == "git -C /repo branch --show-current" then
         return "main\n", 0
       end
+      if command == "git -C /repo rev-parse main" then
+        return "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", 0
+      end
       if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
         return "/repo/.git\n", 0
       end
@@ -456,6 +460,7 @@ local function workspace_delete_runtime(store, opts)
     notify = opts.notify or function() end,
     render_workspace_manager = opts.render_workspace_manager or function() end,
     close_workspace_manager = opts.close_workspace_manager or function() end,
+    system = opts.system,
     store = store,
   })
 end
@@ -1068,6 +1073,61 @@ do
 end
 
 do
+  local old_confirm = vim.fn.confirm
+  vim.fn.confirm = function()
+    error("fresh workspace should not prompt for deletion")
+  end
+  local state_data = workspace_state({}, {})
+  state_data.projects = {
+    ["/codux-worktrees/review"] = {
+      workspaces = {
+        review = review_workspace_record({
+          project_root = "/codux-worktrees/review",
+          workspace_kind = "worktree",
+          git_common_dir = "/repo/.git",
+          worktree_path = "/codux-worktrees/review",
+          worktree_branch = "dev/review",
+          worktree_base = "main",
+          worktree_base_commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        }),
+      },
+    },
+  }
+  local runtime = runtime_mod.new({
+    state = {},
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      instruction_file_records = function()
+        return {}
+      end,
+    },
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
+        return "/repo/.git\n", 0
+      end
+      if command == "git -C /codux-worktrees/review rev-list --count aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa..dev/review" then
+        return "0\n", 0
+      end
+      if command == "git -C /codux-worktrees/review merge-base --is-ancestor dev/review main" then
+        return "", 0
+      end
+      return "", 1
+    end,
+  })
+
+  local ok, err = pcall(function()
+    assert_true(runtime:prompt_merged_workspaces("/repo"))
+  end)
+  vim.fn.confirm = old_confirm
+  if not ok then
+    error(err, 0)
+  end
+end
+
+do
   local old_filereadable = vim.fn.filereadable
   local old_confirm = vim.fn.confirm
   vim.fn.filereadable = function()
@@ -1087,6 +1147,7 @@ do
           worktree_path = "/codux-worktrees/review",
           worktree_branch = "dev/review",
           worktree_base = "main",
+          worktree_base_commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         }),
       },
     },
@@ -1125,6 +1186,9 @@ do
       if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
         return "/repo/.git\n", 0
       end
+      if command == "git -C /codux-worktrees/review rev-list --count aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa..dev/review" then
+        return "1\n", 0
+      end
       if command == "git -C /codux-worktrees/review merge-base --is-ancestor dev/review main" then
         return "", 0
       end
@@ -1132,7 +1196,7 @@ do
         removed_worktree = true
         return "", 0
       end
-      if command == "git -C /codux-worktrees/review branch -D dev/review" then
+      if command == "git --git-dir=/repo/.git branch -D dev/review" then
         deleted_branch = true
         return "", 0
       end
@@ -1147,6 +1211,69 @@ do
     assert_nil(state_data.projects["/codux-worktrees/review"].workspaces.review)
   end)
   vim.fn.filereadable = old_filereadable
+  vim.fn.confirm = old_confirm
+  if not ok then
+    error(err, 0)
+  end
+end
+
+do
+  local old_confirm = vim.fn.confirm
+  vim.fn.confirm = function()
+    error("backfilled workspace should not prompt during the same dashboard refresh")
+  end
+  local state_data = workspace_state({}, {})
+  state_data.projects = {
+    ["/codux-worktrees/review"] = {
+      workspaces = {
+        review = review_workspace_record({
+          project_root = "/codux-worktrees/review",
+          workspace_kind = "worktree",
+          git_common_dir = "/repo/.git",
+          worktree_path = "/codux-worktrees/review",
+          worktree_branch = "dev/review",
+          worktree_base = "main",
+        }),
+      },
+    },
+  }
+  local runtime = runtime_mod.new({
+    state = {},
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+      project_state = project_state,
+      instruction_file_records = function()
+        return {}
+      end,
+    },
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
+        return "/repo/.git\n", 0
+      end
+      if command == "git -C /codux-worktrees/review merge-base dev/review main" then
+        return "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n", 0
+      end
+      return "", 1
+    end,
+  })
+
+  local ok, err = pcall(function()
+    assert_true(runtime:prompt_merged_workspaces("/repo"))
+    assert_equal(
+      state_data.projects["/codux-worktrees/review"].workspaces.review.worktree_base_commit,
+      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    )
+  end)
   vim.fn.confirm = old_confirm
   if not ok then
     error(err, 0)
@@ -2006,6 +2133,204 @@ end
 
 do
   with_filereadable(1, function()
+    local deleted_instruction = false
+    local removed_worktree = false
+    local deleted_branch = false
+    local closed = false
+    local state_data = {
+      projects = {
+        ["/codux-worktrees/review"] = {
+          workspaces = {
+            review = review_workspace_record({
+              project_root = "/codux-worktrees/review",
+              workspace_kind = "worktree",
+              git_common_dir = "/repo/.git",
+              worktree_path = "/codux-worktrees/review",
+              worktree_branch = "dev/review",
+              worktree_base = "main",
+            }),
+          },
+        },
+      },
+    }
+    local store = workspace_store({
+      state_data = state_data,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      delete_instruction_file = function(_, root, safe_name)
+        deleted_instruction = root == "/codux-worktrees/review" and safe_name == "review"
+        return true, nil
+      end,
+    })
+    local runtime = workspace_delete_runtime(store.store, {
+      close_workspace_manager = function()
+        closed = true
+      end,
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "git -C /codux-worktrees/review worktree remove --force /codux-worktrees/review" then
+          removed_worktree = true
+          return "", 0
+        end
+        if command == "git --git-dir=/repo/.git branch -D dev/review" then
+          deleted_branch = true
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+
+    assert_true(runtime:delete_saved_workspace({
+      name = "review",
+      safe_name = "review",
+      project_root = "/codux-worktrees/review",
+      workspace_kind = "worktree",
+      git_common_dir = "/repo/.git",
+      worktree_path = "/codux-worktrees/review",
+      worktree_branch = "dev/review",
+    }))
+    assert_true(deleted_instruction)
+    assert_true(removed_worktree)
+    assert_true(deleted_branch)
+    assert_true(closed)
+    assert_nil(state_data.projects["/codux-worktrees/review"].workspaces.review)
+  end)
+end
+
+do
+  with_filereadable(1, function()
+    local notification
+    local rendered = false
+    local closed = false
+    local removed_worktree = false
+    local state_data = {
+      projects = {
+        ["/codux-worktrees/review"] = {
+          workspaces = {
+            review = review_workspace_record({
+              project_root = "/codux-worktrees/review",
+              workspace_kind = "worktree",
+              git_common_dir = "/repo/.git",
+              worktree_path = "/codux-worktrees/review",
+              worktree_branch = "dev/review",
+              worktree_base = "main",
+            }),
+          },
+        },
+      },
+    }
+    local store = workspace_store({
+      state_data = state_data,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      delete_instruction_file = function()
+        return true, nil
+      end,
+    })
+    local runtime = workspace_delete_runtime(store.store, {
+      notify = function(message)
+        notification = message
+      end,
+      render_workspace_manager = function()
+        rendered = true
+      end,
+      close_workspace_manager = function()
+        closed = true
+      end,
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "git -C /codux-worktrees/review worktree remove --force /codux-worktrees/review" then
+          removed_worktree = true
+          return "", 0
+        end
+        if command == "git --git-dir=/repo/.git branch -D dev/review" then
+          return "fatal: branch delete failed\n", 1
+        end
+        return "", 1
+      end,
+    })
+
+    assert_false(runtime:delete_saved_workspace({
+      name = "review",
+      safe_name = "review",
+      project_root = "/codux-worktrees/review",
+      workspace_kind = "worktree",
+      git_common_dir = "/repo/.git",
+      worktree_path = "/codux-worktrees/review",
+      worktree_branch = "dev/review",
+    }))
+    assert_true(removed_worktree)
+    assert_contains(notification, "Failed to delete Git branch dev/review")
+    assert_contains(notification, "fatal: branch delete failed")
+    assert_true(rendered)
+    assert_false(closed)
+    assert_equal(state_data.projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev/review")
+  end)
+end
+
+do
+  with_filereadable(1, function()
+    local deleted_branch = false
+    local state_data = {
+      projects = {
+        ["/codux-worktrees/review"] = {
+          workspaces = {
+            review = review_workspace_record({
+              project_root = "/codux-worktrees/review",
+              workspace_kind = "worktree",
+              git_common_dir = "/repo/.git",
+              worktree_path = "/codux-worktrees/review",
+              worktree_branch = "dev/review",
+              worktree_base = "main",
+            }),
+          },
+        },
+      },
+    }
+    local store = workspace_store({
+      state_data = state_data,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      delete_instruction_file = function()
+        return true, nil
+      end,
+    })
+    local runtime = workspace_delete_runtime(store.store, {
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "git -C /codux-worktrees/review worktree remove --force /codux-worktrees/review" then
+          return "fatal: '/codux-worktrees/review' is not a working tree\n", 128
+        end
+        if command == "git --git-dir=/repo/.git branch -D dev/review" then
+          deleted_branch = true
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+
+    assert_true(runtime:delete_saved_workspace({
+      name = "review",
+      safe_name = "review",
+      project_root = "/codux-worktrees/review",
+      workspace_kind = "worktree",
+      git_common_dir = "/repo/.git",
+      worktree_path = "/codux-worktrees/review",
+      worktree_branch = "dev/review",
+    }))
+    assert_true(deleted_branch)
+    assert_nil(state_data.projects["/codux-worktrees/review"].workspaces.review)
+  end)
+end
+
+do
+  with_filereadable(1, function()
     local delete_calls = 0
     local store = workspace_store({
       state_data = workspace_state({}),
@@ -2089,11 +2414,16 @@ do
     assert_equal(workspace.workspace_kind, "worktree")
     assert_equal(workspace.worktree_branch, "dev/review")
     assert_equal(workspace.worktree_base, "main")
+    assert_equal(workspace.worktree_base_commit, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
     assert_equal(workspace.git_common_dir, "/repo/.git")
     assert_equal(workspace.target_path, "/codux-worktrees/review/file.lua")
     assert_contains(table.concat(commands, "\n"), "git -C /repo status --porcelain")
     assert_contains(table.concat(commands, "\n"), "git -C /repo worktree add -b dev/review /codux-worktrees/review main")
     assert_equal(store.state_data().projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev/review")
+    assert_equal(
+      store.state_data().projects["/codux-worktrees/review"].workspaces.review.worktree_base_commit,
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    )
   end)
 end
 
