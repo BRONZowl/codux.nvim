@@ -165,12 +165,18 @@ end
 do
   local mission, error_message = mission_mod.plan("Crew", "Ship it", {
     roles = {
-      { name = "Builder One", safe_name = "Builder One" },
+      { name = "Build Lead", safe_name = "Build Lead", focus = "Build the feature." },
+      { safe_name = "QA Lead", focus = "Verify the feature." },
     },
   })
   assert_nil(error_message)
-  assert_equal(mission.roles[1].safe_name, "builder-one")
-  assert_equal(mission.roles[1].workspace_name, "crew-builder-one")
+  assert_equal(mission.roles[1].name, "Build Lead")
+  assert_equal(mission.roles[1].safe_name, "build-lead")
+  assert_equal(mission.roles[1].workspace_name, "crew-build-lead")
+  assert_contains(mission.roles[1].instruction, "You are the Build Lead")
+  assert_equal(mission.roles[2].name, "QA Lead")
+  assert_equal(mission.roles[2].safe_name, "qa-lead")
+  assert_equal(mission.roles[2].workspace_name, "crew-qa-lead")
 end
 
 do
@@ -215,6 +221,34 @@ if type(vim.api) == "table" then
     captured_mission = mission
     return true
   end
+
+  local old_columns = vim.o.columns
+  local old_lines = vim.o.lines
+  local old_cmdheight = vim.o.cmdheight
+  vim.o.columns = 42
+  vim.o.lines = 12
+  vim.o.cmdheight = 1
+  local objective_config = controller:objective_editor_config(20)
+  local preview_config = controller:preview_config(20)
+  local dashboard_config = controller:dashboard_config(20)
+  assert_true(objective_config.width <= 38)
+  assert_true(preview_config.width <= 38)
+  assert_true(dashboard_config.width <= 38)
+  assert_true(objective_config.height <= 7)
+  assert_true(preview_config.height <= 7)
+  assert_true(dashboard_config.height <= 7)
+  vim.o.columns = 140
+  vim.o.lines = 40
+  vim.o.cmdheight = 1
+  objective_config = controller:objective_editor_config(20)
+  preview_config = controller:preview_config(20)
+  dashboard_config = controller:dashboard_config(20)
+  assert_equal(objective_config.width, 96)
+  assert_equal(preview_config.width, 92)
+  assert_equal(dashboard_config.width, 106)
+  vim.o.columns = old_columns
+  vim.o.lines = old_lines
+  vim.o.cmdheight = old_cmdheight
 
   assert_true(controller:open_objective_editor("Save Test"))
   local bufnr = vim.api.nvim_get_current_buf()
@@ -2661,6 +2695,49 @@ do
     assert_equal(record.mission_id, "mission:mission")
     assert_equal(record.mission_role, "Builder")
     assert_equal(record.mission_objective, "Build it")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local state_data = {
+      projects = {
+        ["/codux-worktrees/mission-builder"] = {
+          workspaces = {
+            ["mission-builder"] = review_workspace_record({
+              name = "mission-builder",
+              safe_name = "mission-builder",
+              project_root = "/codux-worktrees/mission-builder",
+              workspace_kind = "worktree",
+            }),
+          },
+        },
+      },
+    }
+    local runtime = workspace_prepare_runtime({
+      store = workspace_store({
+        state_data = state_data,
+      }).store,
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        return "", 1
+      end,
+    })
+    local mission = assert(mission_mod.plan("Mission", "Build it", {
+      roles = {
+        { name = "Builder" },
+      },
+    }))
+
+    local ok, error_message = runtime:preflight_mission(mission)
+    assert_false(ok)
+    assert_equal(error_message, "workspace already exists: mission-builder")
+    assert_equal(table.concat(commands, "\n"):find("worktree add", 1, true), nil)
   end)
 end
 

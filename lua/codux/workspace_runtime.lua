@@ -2384,6 +2384,8 @@ function M:preflight_mission(mission)
     return false, clean_error
   end
 
+  local state_data = self:read_state()
+  local projects = type(state_data) == "table" and type(state_data.projects) == "table" and state_data.projects or {}
   local seen = {}
   for _, role in ipairs(mission.roles) do
     local workspace_name = role.workspace_name
@@ -2397,6 +2399,11 @@ function M:preflight_mission(mission)
     seen[safe_name_or_error] = true
 
     local worktree_path = self:worktree_path(base_root, safe_name_or_error)
+    local project = type(projects[worktree_path]) == "table" and projects[worktree_path] or nil
+    local workspaces = type(project) == "table" and type(project.workspaces) == "table" and project.workspaces or nil
+    if type(workspaces) == "table" and type(workspaces[safe_name_or_error]) == "table" then
+      return false, "workspace already exists: " .. safe_name_or_error
+    end
     if M.target_path_exists(worktree_path) then
       return false, "worktree path already exists: " .. worktree_path
     end
