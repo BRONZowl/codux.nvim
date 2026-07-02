@@ -163,6 +163,28 @@ do
 end
 
 do
+  local mission, error_message = mission_mod.plan("Crew", "Ship it", {
+    roles = {
+      { name = "Builder One", safe_name = "Builder One" },
+    },
+  })
+  assert_nil(error_message)
+  assert_equal(mission.roles[1].safe_name, "builder-one")
+  assert_equal(mission.roles[1].workspace_name, "crew-builder-one")
+end
+
+do
+  local mission, error_message = mission_mod.plan("Crew", "Ship it", {
+    roles = {
+      { name = "Builder One", safe_name = "Builder One" },
+      { name = "Builder-One", safe_name = "builder-one" },
+    },
+  })
+  assert_nil(mission)
+  assert_equal(error_message, "Duplicate mission role: builder-one")
+end
+
+do
   local grouped = mission_mod.group_entries({
     { name = "alpha-builder", mission_id = "mission:alpha", mission_name = "Alpha", mission_role = "Builder" },
     { name = "plain" },
@@ -197,6 +219,7 @@ if type(vim.api) == "table" then
   assert_true(controller:open_objective_editor("Save Test"))
   local bufnr = vim.api.nvim_get_current_buf()
   assert_contains(vim.api.nvim_buf_get_name(bufnr), "codux://mission-objective/")
+  assert_equal(vim.b[bufnr].codux_disable_completion, true)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "mission objective" })
   vim.cmd("write")
   assert_equal(captured_mission.name, "Save Test")

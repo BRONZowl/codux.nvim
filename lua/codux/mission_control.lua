@@ -10,6 +10,33 @@ local function trim(value)
   return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function disable_completion(is_loaded_buf, bufnr)
+  if type(is_loaded_buf) == "function" and not is_loaded_buf(bufnr) then
+    return false
+  end
+
+  for _, option in ipairs({ "complete", "completefunc", "omnifunc", "thesaurusfunc", "tagfunc", "dictionary" }) do
+    pcall(vim.api.nvim_set_option_value, option, "", { buf = bufnr })
+  end
+
+  local buffer_vars = {
+    blink_cmp_enabled = false,
+    cmp_enabled = false,
+    codux_disable_completion = true,
+    completion = false,
+    copilot_enabled = false,
+    minicompletion_disable = true,
+  }
+
+  for key, value in pairs(buffer_vars) do
+    pcall(function()
+      vim.b[bufnr][key] = value
+    end)
+  end
+
+  return true
+end
+
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
   local controller = {
@@ -17,6 +44,7 @@ function M.new(opts)
     mission = type(opts.mission) == "table" and opts.mission or mission_mod,
     ui = type(opts.ui) == "table" and opts.ui or ui,
     workspace_ui = type(opts.workspace_ui) == "table" and opts.workspace_ui or require("codux.workspace_ui"),
+    is_loaded_buf = type(opts.is_loaded_buf) == "function" and opts.is_loaded_buf or ui.is_loaded_buf,
     notify = type(opts.notify) == "function" and opts.notify or noop,
     create_mission = type(opts.create_mission) == "function" and opts.create_mission or noop,
     workspace_entries_for_project = type(opts.workspace_entries_for_project) == "function"
@@ -129,9 +157,13 @@ function M:open_objective_editor(name, default_objective)
     number = true,
     relativenumber = false,
     cursorline = true,
+    signcolumn = "yes",
+    winfixbuf = true,
     wrap = true,
     linebreak = true,
   })
+  disable_completion(self.is_loaded_buf, bufnr)
+  pcall(vim.cmd, "stopinsert")
 
   local closed = false
   local saved = false
@@ -187,7 +219,6 @@ function M:open_objective_editor(name, default_objective)
   self.set_buffer_keymap(bufnr, "n", "<C-s>", save_editor, "Preview Codux Mission")
   self.set_buffer_keymap(bufnr, "i", "<C-s>", save_editor, "Preview Codux Mission")
   self.bind_close_keys(bufnr, close_editor, "Cancel Codux Mission", { "n", "i" })
-  pcall(vim.cmd, "startinsert")
   return true
 end
 

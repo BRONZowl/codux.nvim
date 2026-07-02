@@ -13,13 +13,17 @@ local function lines(value)
   return result
 end
 
+local function safe_name(value)
+  return trim(value):lower():gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
+end
+
 function M.sanitize_mission_name(name)
   local display_name = trim(name)
   if display_name == "" then
     return nil, "Mission name is required"
   end
 
-  local safe = display_name:lower():gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
+  local safe = safe_name(display_name)
   if safe == "" then
     return nil, "Mission name must contain letters, numbers, dots, dashes, or underscores"
   end
@@ -117,9 +121,9 @@ function M.plan(name, objective, opts)
   local seen = {}
   for _, role in ipairs(roles) do
     role = type(role) == "table" and role or {}
-    local safe_role = trim(role.safe_name)
+    local safe_role = safe_name(role.safe_name)
     if safe_role == "" then
-      safe_role = trim(role.name):lower():gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
+      safe_role = safe_name(role.name)
     end
     if safe_role == "" then
       return nil, "Mission role name is required"
