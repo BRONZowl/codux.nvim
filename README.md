@@ -128,6 +128,12 @@
 </p>
 
 <p>
+  Use <code>:CoduxMissionCreate</code> or <code>&lt;leader&gt;zm</code> to launch Mission Control.
+  Codux prompts for one mission objective, previews a default crew of architect, builder, reviewer, and QA roles, then creates a clean Git worktree workspace for each role and starts each agent with workspace-auto permissions.
+  Mission role workspaces keep their mission metadata in Codux workspace state, and <code>:CoduxMissions</code> or <code>&lt;leader&gt;zM</code> opens a mission dashboard for jumping back into each role.
+</p>
+
+<p>
   Workspace names are persisted per project in <code>stdpath("data")/codux/workspaces.json</code>.
   Instruction files in <code>.agents/codux/</code> are project-local and editable; when a non-empty instruction file exists, Codux uses it over the saved JSON copy.
   Codux warns when <code>.agents/codux/</code> is not ignored by Git in the current project; run <code>:CoduxWorkspaceIgnore</code> once to add the ignore rule to that project's <code>.gitignore</code>.
@@ -280,6 +286,16 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td>Manage current Codux workspaces</td>
 <td><code>&lt;leader&gt;zW</code></td>
 <td><code>:CoduxWorkspaces</code></td>
+</tr>
+<tr>
+<td>Create a Codux mission crew</td>
+<td><code>&lt;leader&gt;zm</code></td>
+<td><code>:CoduxMissionCreate</code></td>
+</tr>
+<tr>
+<td>Manage Codux missions</td>
+<td><code>&lt;leader&gt;zM</code></td>
+<td><code>:CoduxMissions</code></td>
 </tr>
 <tr>
 <td>Ignore local workspace files</td>

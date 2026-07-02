@@ -2,6 +2,8 @@ local M = {}
 local command_util = require("codux.command")
 local context_mod = require("codux.context")
 local health_mod = require("codux.health")
+local mission_control_mod = require("codux.mission_control")
+local mission_mod = require("codux.mission")
 local prompt_actions_mod = require("codux.prompt_actions")
 local terminal_mod = require("codux.terminal")
 local token_monitor_mod = require("codux.token_monitor")
@@ -56,6 +58,8 @@ local defaults = {
     diff = "<leader>zg",
     workspace = "<leader>zw",
     workspaces = "<leader>zW",
+    mission = "<leader>zm",
+    missions = "<leader>zM",
     mode = "<leader>zp",
   },
   prompts = {
@@ -125,6 +129,9 @@ local state = {
   workspace_manager_project_root = nil,
   workspace_manager_refresh_timer = nil,
   workspace_manager_ns = vim.api.nvim_create_namespace("codux.workspace_manager"),
+  mission_dashboard_buf = nil,
+  mission_dashboard_win = nil,
+  mission_dashboard_items = {},
   workspace_instruction_ignore_warnings = {},
   workspace_target_signature = nil,
   workspace_target_update_pending = false,
@@ -149,6 +156,7 @@ local context_util
 local which_key_controller
 local workspace_create_controller
 local workspace_manager_controller
+local mission_controller
 local workspace_runtime
 local prompt_actions
 local current_target
@@ -898,6 +906,10 @@ function M.create_workspace(name, opts)
   return workspace_runtime:create_workspace(name, opts)
 end
 
+function M.create_mission(mission, objective, opts)
+  return workspace_runtime:create_mission(mission, objective, opts)
+end
+
 function M.open_workspace(name)
   return M.create_workspace(name)
 end
@@ -1014,6 +1026,33 @@ end
 
 function M.open_workspaces()
   return workspace_manager_controller:open()
+end
+
+mission_controller = mission_control_mod.new({
+  state = state,
+  mission = mission_mod,
+  ui = ui,
+  workspace_ui = workspace_ui,
+  notify = notify,
+  create_mission = function(mission)
+    return M.create_mission(mission)
+  end,
+  workspace_entries_for_project = workspace_entries_for_project,
+  open_saved_workspace = function(name, project_root)
+    return M.open_saved_workspace(name, project_root)
+  end,
+  project_root = workspace_manager_project_root,
+  set_buffer_keymap = M._v5.set_buffer_keymap,
+  bind_close_keys = M._v5.bind_close_keys,
+  namespace = state.workspace_manager_ns,
+})
+
+function M.open_mission_prompt()
+  return mission_controller:open_prompt()
+end
+
+function M.open_missions()
+  return mission_controller:open_dashboard()
 end
 
 function M.close()
@@ -1248,6 +1287,18 @@ local function create_commands()
     M.open_workspaces()
   end, { force = true, desc = "Show current Codux workspaces" })
 
+  vim.api.nvim_create_user_command("CoduxMissionCreate", function(opts)
+    if type(opts.args) == "string" and opts.args ~= "" then
+      mission_controller:open_objective_editor(opts.args)
+      return
+    end
+    M.open_mission_prompt()
+  end, { force = true, nargs = "?", desc = "Create a Codux Mission Control crew" })
+
+  vim.api.nvim_create_user_command("CoduxMissions", function()
+    M.open_missions()
+  end, { force = true, desc = "Show Codux missions" })
+
   vim.api.nvim_create_user_command("CoduxToggle", function()
     M.toggle()
   end, { force = true, desc = "Toggle the Codex popup" })
@@ -1392,6 +1443,8 @@ function M.setup(opts)
   set_mapping("n", mappings.diff, M.send_git_diff, "send git diff to codex")
   set_mapping("n", mappings.workspace, M.open_workspace_prompt, "create codux workspace")
   set_mapping("n", mappings.workspaces, M.open_workspaces, "current codux workspaces")
+  set_mapping("n", mappings.mission, M.open_mission_prompt, "create codux mission")
+  set_mapping("n", mappings.missions, M.open_missions, "current codux missions")
   local action_desc = which_key_controller:mode_action_desc()
   if action_desc then
     set_mapping("n", mappings.mode, M.toggle_plan_mode, action_desc)

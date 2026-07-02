@@ -412,6 +412,8 @@ function M:normal_entries(mappings)
     { lhs = mappings.diff, desc = "send git diff to codex" },
     { lhs = mappings.workspace, desc = "create codux workspace" },
     { lhs = mappings.workspaces, desc = "current codux workspaces" },
+    { lhs = mappings.mission, desc = "create codux mission" },
+    { lhs = mappings.missions, desc = "current codux missions" },
   }
   local action_desc = self:mode_action_desc()
   if action_desc then

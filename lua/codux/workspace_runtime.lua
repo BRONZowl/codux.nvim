@@ -2,6 +2,7 @@ local M = {}
 M.__index = M
 
 local command_util = require("codux.command")
+local mission_mod = require("codux.mission")
 
 local function noop() end
 
@@ -1347,6 +1348,10 @@ function M:entries_for_project(root)
                 worktree_branch = record.worktree_branch,
                 worktree_base = record.worktree_base,
                 worktree_base_commit = record.worktree_base_commit,
+                mission_id = record.mission_id,
+                mission_name = record.mission_name,
+                mission_role = record.mission_role,
+                mission_objective = record.mission_objective,
                 window_name = window_name,
                 tmux_target = M.tmux_target(session, window_name) or record.tmux_target,
                 codex_status = record.codex_status or "idle",
@@ -2160,6 +2165,14 @@ function M:prepare_workspace(name, opts)
   if resolved_instruction == "" then
     resolved_instruction = nil
   end
+  local initial_prompt = type(opts.initial_prompt) == "string" and trim(opts.initial_prompt) or nil
+  if initial_prompt == "" then
+    initial_prompt = nil
+  end
+  local permission_profile = opts.permission_profile == "auto" and "auto"
+    or opts.permission_profile == "danger" and "danger"
+    or opts.permission_profile == "default" and "default"
+    or self:permission_profile()
 
   local state_data, state_error = self:read_state()
   if state_error then
@@ -2211,10 +2224,14 @@ function M:prepare_workspace(name, opts)
     worktree_branch = created_worktree_branch,
     worktree_base = worktree_base,
     worktree_base_commit = worktree_base_commit,
+    mission_id = opts.mission_id,
+    mission_name = opts.mission_name,
+    mission_role = opts.mission_role,
+    mission_objective = opts.mission_objective,
     window_name = M.workspace_window_name(safe_name_or_error),
     custom_instruction = custom_instruction,
     resolved_instruction = resolved_instruction,
-    permission_profile = self:permission_profile(),
+    permission_profile = permission_profile,
     codex_status = "idle",
     status = "idle",
   }
@@ -2225,6 +2242,14 @@ function M:prepare_workspace(name, opts)
   if custom_instruction then
     workspace.custom_instruction = custom_instruction
   end
+  if initial_prompt then
+    workspace.initial_prompt = initial_prompt
+  end
+  workspace.permission_profile = permission_profile
+  workspace.mission_id = opts.mission_id or workspace.mission_id
+  workspace.mission_name = opts.mission_name or workspace.mission_name
+  workspace.mission_role = opts.mission_role or workspace.mission_role
+  workspace.mission_objective = opts.mission_objective or workspace.mission_objective
   workspace.session = session
   workspace.safe_name = workspace.safe_name or safe_name_or_error
   workspace.window_name = M.workspace_window_name(workspace.safe_name)
@@ -2313,6 +2338,12 @@ function M:create_workspace(name, opts)
   local workspace, error_message = self:prepare_workspace(name, {
     custom_instruction = opts.custom_instruction,
     resolved_instruction = opts.resolved_instruction,
+    initial_prompt = opts.initial_prompt,
+    permission_profile = opts.permission_profile,
+    mission_id = opts.mission_id,
+    mission_name = opts.mission_name,
+    mission_role = opts.mission_role,
+    mission_objective = opts.mission_objective,
   })
   if not workspace then
     self.notify(error_message or "Failed to prepare Codux workspace", vim.log.levels.ERROR)
@@ -2326,6 +2357,109 @@ function M:create_workspace(name, opts)
 
   local branch = workspace.git_branch ~= "" and " on " .. workspace.git_branch or ""
   self.notify("Opened Codux workspace " .. workspace.name .. branch)
+  return true
+end
+
+function M:preflight_mission(mission)
+  mission = type(mission) == "table" and mission or {}
+  if type(mission.roles) ~= "table" or #mission.roles == 0 then
+    return false, "Mission requires at least one role"
+  end
+  if not self:workspaces_enabled() then
+    return false, "Codux workspaces are disabled"
+  end
+  if vim.fn.executable(self:tmux_cmd()) ~= 1 then
+    return false, "tmux not found on PATH"
+  end
+
+  local session = self:current_tmux_session()
+  if not session then
+    return false, "no tmux session running"
+  end
+
+  local context = self:target_context()
+  local base_root = context.root
+  local clean, clean_error = self:git_checkout_clean(base_root)
+  if not clean then
+    return false, clean_error
+  end
+
+  local seen = {}
+  for _, role in ipairs(mission.roles) do
+    local workspace_name = role.workspace_name
+    local display_name, safe_name_or_error = M.sanitize_workspace_name(workspace_name)
+    if not display_name then
+      return false, safe_name_or_error
+    end
+    if seen[safe_name_or_error] then
+      return false, "Duplicate mission workspace: " .. safe_name_or_error
+    end
+    seen[safe_name_or_error] = true
+
+    local worktree_path = self:worktree_path(base_root, safe_name_or_error)
+    if M.target_path_exists(worktree_path) then
+      return false, "worktree path already exists: " .. worktree_path
+    end
+    local branch, branch_error = self:resolve_worktree_branch(base_root, safe_name_or_error)
+    if not branch then
+      return false, branch_error
+    end
+    if self:tmux_window_id(session, M.workspace_window_name(safe_name_or_error)) then
+      return false, "tmux window already exists: " .. safe_name_or_error
+    end
+    local instruction_path = self:instruction_file_path(worktree_path, safe_name_or_error)
+    if instruction_path and vim.fn.filereadable(instruction_path) == 1 then
+      return false, "workspace instruction already exists: " .. instruction_path
+    end
+  end
+
+  return true, nil
+end
+
+function M:create_mission(mission_or_name, objective, opts)
+  opts = type(opts) == "table" and opts or {}
+  local mission = mission_or_name
+  local error_message = nil
+  if type(mission_or_name) ~= "table" or type(mission_or_name.roles) ~= "table" then
+    mission, error_message = mission_mod.plan(mission_or_name, objective, opts)
+  end
+  if not mission then
+    self.notify(error_message or "Failed to plan Codux mission", vim.log.levels.ERROR)
+    return false
+  end
+
+  local preflight_ok, preflight_error = self:preflight_mission(mission)
+  if not preflight_ok then
+    self.notify(preflight_error or "Codux mission preflight failed", vim.log.levels.ERROR)
+    return false
+  end
+
+  local created = {}
+  for _, role in ipairs(mission.roles) do
+    local workspace, workspace_error = self:prepare_workspace(role.workspace_name, {
+      custom_instruction = role.instruction,
+      resolved_instruction = role.instruction,
+      initial_prompt = role.initial_prompt,
+      permission_profile = "auto",
+      mission_id = mission.mission_id,
+      mission_name = mission.name,
+      mission_role = role.name,
+      mission_objective = mission.objective,
+    })
+    if not workspace then
+      for index = #created, 1, -1 do
+        self:delete_saved_workspace(created[index])
+      end
+      self.notify(workspace_error or "Failed to launch Codux mission", vim.log.levels.ERROR)
+      return false
+    end
+    table.insert(created, workspace)
+  end
+
+  if self.state.workspace_manager_project_root then
+    self.render_workspace_manager()
+  end
+  self.notify("Launched Codux mission " .. tostring(mission.name) .. " with " .. tostring(#created) .. " roles")
   return true
 end
 

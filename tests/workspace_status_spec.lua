@@ -101,6 +101,7 @@ if type(vim) ~= "table" then
 end
 
 local runtime_mod = require("codux.workspace_runtime")
+local mission_mod = require("codux.mission")
 local prompt_actions_mod = require("codux.prompt_actions")
 local workspace_store_mod = require("codux.workspace_store")
 local workspace_ui = require("codux.workspace_ui")
@@ -135,6 +136,41 @@ local function assert_contains(value, expected, message)
   if not tostring(value or ""):find(expected, 1, true) then
     error((message or "assertion failed") .. ": expected " .. tostring(value) .. " to contain " .. tostring(expected), 2)
   end
+end
+
+do
+  local mission, error_message = mission_mod.plan("Blow Socks Off", "Build a standout agentic engineering feature.")
+  assert_nil(error_message)
+  assert_equal(mission.name, "Blow Socks Off")
+  assert_equal(mission.safe_name, "blow-socks-off")
+  assert_equal(mission.mission_id, "mission:blow-socks-off")
+  assert_equal(#mission.roles, 4)
+  assert_equal(mission.roles[1].workspace_name, "blow-socks-off-architect")
+  assert_contains(mission.roles[1].instruction, "Mission: Blow Socks Off")
+  assert_contains(mission.roles[1].initial_prompt, "Start your Mission Control role now.")
+end
+
+do
+  local mission, error_message = mission_mod.plan("Crew", "Ship it", {
+    roles = {
+      { name = "One", safe_name = "same" },
+      { name = "Two", safe_name = "same" },
+    },
+  })
+  assert_nil(mission)
+  assert_equal(error_message, "Duplicate mission role: same")
+end
+
+do
+  local grouped = mission_mod.group_entries({
+    { name = "alpha-builder", mission_id = "mission:alpha", mission_name = "Alpha", mission_role = "Builder" },
+    { name = "plain" },
+    { name = "alpha-architect", mission_id = "mission:alpha", mission_name = "Alpha", mission_role = "Architect" },
+  })
+  assert_equal(#grouped, 1)
+  assert_equal(grouped[1].name, "Alpha")
+  assert_equal(#grouped[1].roles, 2)
+  assert_equal(grouped[1].roles[1].mission_role, "Architect")
 end
 
 do
@@ -284,6 +320,7 @@ local function default_state_record(_, workspace)
     resolved_instruction = workspace.resolved_instruction,
     target_path = workspace.target_path,
     target_type = workspace.target_type,
+    permission_profile = workspace.permission_profile,
     tmux_window = workspace.window_name,
     status = workspace.status,
     codex_status = workspace.codex_status,
@@ -294,6 +331,10 @@ local function default_state_record(_, workspace)
     worktree_branch = workspace.worktree_branch,
     worktree_base = workspace.worktree_base,
     worktree_base_commit = workspace.worktree_base_commit,
+    mission_id = workspace.mission_id,
+    mission_name = workspace.mission_name,
+    mission_role = workspace.mission_role,
+    mission_objective = workspace.mission_objective,
   }
 end
 
@@ -2509,6 +2550,64 @@ do
       store.state_data().projects["/codux-worktrees/review"].workspaces.review.worktree_base_commit,
       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     )
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local created = false
+    local store = workspace_store()
+    local runtime = workspace_prepare_runtime({
+      store = store.store,
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-builder" then
+          return "", 1
+        end
+        if command == "git -C /repo worktree add -b dev/mission-builder /codux-worktrees/mission-builder main" then
+          return "", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          if created then
+            return "@1\tmission-builder\n", 0
+          end
+          return "", 0
+        end
+        if command:find("tmux new%-window", 1, false) == 1 then
+          created = true
+          return "", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local workspace, error_message = runtime:prepare_workspace("mission-builder", {
+      resolved_instruction = "builder instructions",
+      initial_prompt = "start building",
+      permission_profile = "auto",
+      mission_id = "mission:mission",
+      mission_name = "Mission",
+      mission_role = "Builder",
+      mission_objective = "Build it",
+    })
+    assert_nil(error_message)
+    assert_equal(workspace.permission_profile, "auto")
+    assert_equal(workspace.status, "active")
+    assert_equal(workspace.codex_status, "working")
+    assert_contains(table.concat(commands, "\n"), "start building")
+    local record = store.state_data().projects["/codux-worktrees/mission-builder"].workspaces["mission-builder"]
+    assert_equal(record.permission_profile, "auto")
+    assert_equal(record.mission_id, "mission:mission")
+    assert_equal(record.mission_role, "Builder")
+    assert_equal(record.mission_objective, "Build it")
   end)
 end
 
