@@ -1192,7 +1192,7 @@ do
       if command == "git -C /codux-worktrees/review merge-base --is-ancestor dev/review main" then
         return "", 0
       end
-      if command == "git -C /codux-worktrees/review worktree remove --force /codux-worktrees/review" then
+      if command == "git --git-dir=/repo/.git worktree remove --force /codux-worktrees/review" then
         removed_worktree = true
         return "", 0
       end
@@ -2170,7 +2170,7 @@ do
       end,
       system = function(args)
         local command = table.concat(args, " ")
-        if command == "git -C /codux-worktrees/review worktree remove --force /codux-worktrees/review" then
+        if command == "git --git-dir=/repo/.git worktree remove --force /codux-worktrees/review" then
           removed_worktree = true
           return "", 0
         end
@@ -2196,6 +2196,79 @@ do
     assert_true(deleted_branch)
     assert_true(closed)
     assert_nil(state_data.projects["/codux-worktrees/review"].workspaces.review)
+  end)
+end
+
+do
+  with_filereadable(1, function()
+    local notification
+    local rendered = false
+    local closed = false
+    local attempted_branch_delete = false
+    local state_data = {
+      projects = {
+        ["/codux-worktrees/review"] = {
+          workspaces = {
+            review = review_workspace_record({
+              project_root = "/codux-worktrees/review",
+              workspace_kind = "worktree",
+              git_common_dir = "/repo/.git",
+              worktree_path = "/codux-worktrees/review",
+              worktree_branch = "dev/review",
+              worktree_base = "main",
+            }),
+          },
+        },
+      },
+    }
+    local store = workspace_store({
+      state_data = state_data,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      delete_instruction_file = function()
+        return true, nil
+      end,
+    })
+    local runtime = workspace_delete_runtime(store.store, {
+      notify = function(message)
+        notification = message
+      end,
+      render_workspace_manager = function()
+        rendered = true
+      end,
+      close_workspace_manager = function()
+        closed = true
+      end,
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "git --git-dir=/repo/.git worktree remove --force /codux-worktrees/review" then
+          return "fatal: worktree is locked\n", 1
+        end
+        if command == "git --git-dir=/repo/.git branch -D dev/review" then
+          attempted_branch_delete = true
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+
+    assert_false(runtime:delete_saved_workspace({
+      name = "review",
+      safe_name = "review",
+      project_root = "/codux-worktrees/review",
+      workspace_kind = "worktree",
+      git_common_dir = "/repo/.git",
+      worktree_path = "/codux-worktrees/review",
+      worktree_branch = "dev/review",
+    }))
+    assert_contains(notification, "Failed to remove Git worktree /codux-worktrees/review")
+    assert_contains(notification, "fatal: worktree is locked")
+    assert_true(rendered)
+    assert_false(closed)
+    assert_false(attempted_branch_delete)
+    assert_equal(state_data.projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev/review")
   end)
 end
 
@@ -2243,7 +2316,7 @@ do
       end,
       system = function(args)
         local command = table.concat(args, " ")
-        if command == "git -C /codux-worktrees/review worktree remove --force /codux-worktrees/review" then
+        if command == "git --git-dir=/repo/.git worktree remove --force /codux-worktrees/review" then
           removed_worktree = true
           return "", 0
         end
@@ -2304,8 +2377,8 @@ do
     local runtime = workspace_delete_runtime(store.store, {
       system = function(args)
         local command = table.concat(args, " ")
-        if command == "git -C /codux-worktrees/review worktree remove --force /codux-worktrees/review" then
-          return "fatal: '/codux-worktrees/review' is not a working tree\n", 128
+        if command == "git --git-dir=/repo/.git worktree remove --force /codux-worktrees/review" then
+          return "", 0
         end
         if command == "git --git-dir=/repo/.git branch -D dev/review" then
           deleted_branch = true

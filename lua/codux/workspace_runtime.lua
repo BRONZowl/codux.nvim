@@ -464,6 +464,22 @@ function M:remove_git_worktree(base_root, worktree_path)
   return false, message
 end
 
+function M:remove_git_worktree_in_common_dir(git_common_dir, worktree_path)
+  local output, code = self.system({ "git", "--git-dir=" .. tostring(git_common_dir or ""), "worktree", "remove", "--force", worktree_path })
+  if code == 0 then
+    return true, nil
+  end
+  local message = "Failed to remove Git worktree " .. tostring(worktree_path)
+  local detail = trim(output)
+  if detail:find("is not a working tree", 1, true) then
+    return true, nil
+  end
+  if detail ~= "" then
+    message = message .. ": " .. detail
+  end
+  return false, message
+end
+
 function M:delete_git_branch(base_root, branch)
   local _, code = self.system({ "git", "-C", base_root, "branch", "-D", branch })
   return code == 0
@@ -1766,7 +1782,7 @@ function M:delete_saved_workspace(entry)
       return false
     end
 
-    local remove_ok, remove_error = self:remove_git_worktree(root, worktree_path)
+    local remove_ok, remove_error = self:remove_git_worktree_in_common_dir(git_common_dir, worktree_path)
     if not remove_ok then
       self.notify(remove_error or ("Failed to remove Git worktree " .. tostring(worktree_path)), vim.log.levels.ERROR)
       self.render_workspace_manager()
