@@ -4,6 +4,10 @@ local function trim(value)
   return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function slug(value)
+  return trim(value):lower():gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
+end
+
 local function lines(value)
   value = tostring(value or "")
   local result = {}
@@ -19,7 +23,7 @@ function M.sanitize_mission_name(name)
     return nil, "Mission name is required"
   end
 
-  local safe = display_name:lower():gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
+  local safe = slug(display_name)
   if safe == "" then
     return nil, "Mission name must contain letters, numbers, dots, dashes, or underscores"
   end
@@ -117,10 +121,15 @@ function M.plan(name, objective, opts)
   local seen = {}
   for _, role in ipairs(roles) do
     role = type(role) == "table" and role or {}
-    local safe_role = trim(role.safe_name)
-    if safe_role == "" then
-      safe_role = trim(role.name):lower():gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
+    local role_name = trim(role.name)
+    local safe_role_source = trim(role.safe_name)
+    if role_name == "" then
+      role_name = safe_role_source
     end
+    if safe_role_source == "" then
+      safe_role_source = role_name
+    end
+    local safe_role = slug(safe_role_source)
     if safe_role == "" then
       return nil, "Mission role name is required"
     end
@@ -130,7 +139,7 @@ function M.plan(name, objective, opts)
     seen[safe_role] = true
 
     local normalized_role = {
-      name = trim(role.name) ~= "" and trim(role.name) or safe_role,
+      name = role_name ~= "" and role_name or safe_role,
       safe_name = safe_role,
       focus = trim(role.focus),
     }

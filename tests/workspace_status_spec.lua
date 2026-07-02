@@ -163,6 +163,34 @@ do
 end
 
 do
+  local mission, error_message = mission_mod.plan("Crew", "Ship it", {
+    roles = {
+      { name = "Build Lead", safe_name = "Build Lead", focus = "Build the feature." },
+      { safe_name = "QA Lead", focus = "Verify the feature." },
+    },
+  })
+  assert_nil(error_message)
+  assert_equal(mission.roles[1].name, "Build Lead")
+  assert_equal(mission.roles[1].safe_name, "build-lead")
+  assert_equal(mission.roles[1].workspace_name, "crew-build-lead")
+  assert_contains(mission.roles[1].instruction, "You are the Build Lead")
+  assert_equal(mission.roles[2].name, "QA Lead")
+  assert_equal(mission.roles[2].safe_name, "qa-lead")
+  assert_equal(mission.roles[2].workspace_name, "crew-qa-lead")
+end
+
+do
+  local mission, error_message = mission_mod.plan("Crew", "Ship it", {
+    roles = {
+      { name = "Builder", safe_name = "Builder" },
+      { name = "Second Builder", safe_name = "builder" },
+    },
+  })
+  assert_nil(mission)
+  assert_equal(error_message, "Duplicate mission role: builder")
+end
+
+do
   local grouped = mission_mod.group_entries({
     { name = "alpha-builder", mission_id = "mission:alpha", mission_name = "Alpha", mission_role = "Builder" },
     { name = "plain" },
