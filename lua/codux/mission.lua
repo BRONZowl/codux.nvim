@@ -17,6 +17,21 @@ local function safe_name(value)
   return trim(value):lower():gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
 end
 
+local function default_role_by_name(name)
+  local target = safe_name(name)
+  if target == "" then
+    return nil
+  end
+
+  for _, role in ipairs(M.DEFAULT_ROLES or {}) do
+    if safe_name(role.safe_name or role.name) == target or safe_name(role.name) == target then
+      return role
+    end
+  end
+
+  return nil
+end
+
 function M.sanitize_mission_name(name)
   local display_name = trim(name)
   if display_name == "" then
@@ -97,6 +112,33 @@ function M.role_prompt(mission_name, objective, role)
   }, "\n")
 end
 
+function M.extract_role_focus(instruction)
+  if type(instruction) ~= "string" then
+    return ""
+  end
+
+  local focus = instruction:match("\nRole focus:\n(.-)\n\nStay inside this workspace")
+    or instruction:match("^Role focus:\n(.-)\n\nStay inside this workspace")
+  return trim(focus)
+end
+
+function M.role_from_entry(entry)
+  entry = type(entry) == "table" and entry or {}
+  local role_name = trim(entry.mission_role or entry.name or entry.safe_name)
+  local role_safe_name = safe_name(entry.mission_role or role_name)
+  local default_role = default_role_by_name(role_name) or default_role_by_name(role_safe_name) or {}
+  local focus = trim(default_role.focus)
+  if focus == "" then
+    focus = M.extract_role_focus(entry.resolved_instruction or entry.custom_instruction)
+  end
+
+  return {
+    name = role_name ~= "" and role_name or role_safe_name,
+    safe_name = role_safe_name ~= "" and role_safe_name or safe_name(role_name),
+    focus = focus,
+  }
+end
+
 function M.plan(name, objective, opts)
   opts = type(opts) == "table" and opts or {}
   local mission_name, safe_name_or_error = M.sanitize_mission_name(name)
@@ -156,6 +198,64 @@ function M.plan(name, objective, opts)
   return mission, nil
 end
 
+function M.status_counts(mission)
+  local counts = {
+    total = 0,
+    active = 0,
+    question = 0,
+    idle = 0,
+    inactive = 0,
+  }
+
+  for _, entry in ipairs(type(mission) == "table" and type(mission.roles) == "table" and mission.roles or {}) do
+    counts.total = counts.total + 1
+    local status = entry.status
+    if status == "active" then
+      counts.active = counts.active + 1
+    elseif status == "question" then
+      counts.question = counts.question + 1
+    elseif status == "idle" then
+      counts.idle = counts.idle + 1
+    else
+      counts.inactive = counts.inactive + 1
+    end
+  end
+
+  return counts
+end
+
+function M.status_label(mission)
+  local counts = M.status_counts(mission)
+  if counts.question > 0 then
+    return "question"
+  end
+  if counts.active > 0 then
+    return "active"
+  end
+  if counts.idle > 0 then
+    return "idle"
+  end
+  return "inactive"
+end
+
+function M.find_mission(missions, name)
+  local query = trim(name)
+  if query == "" then
+    return nil, "Mission name is required"
+  end
+
+  local query_safe = safe_name(query)
+  for _, mission in ipairs(type(missions) == "table" and missions or {}) do
+    local mission_name = trim(mission.name or mission.mission_id)
+    local mission_safe = safe_name(mission_name)
+    if mission_name == query or mission_safe == query_safe or mission.mission_id == query then
+      return mission, nil
+    end
+  end
+
+  return nil, "mission not found"
+end
+
 function M.preview_lines(mission)
   mission = type(mission) == "table" and mission or {}
   local result = {
@@ -209,6 +309,17 @@ function M.group_entries(entries)
   end
 
   return order
+end
+
+function M.names(missions)
+  local result = {}
+  for _, mission in ipairs(type(missions) == "table" and missions or {}) do
+    table.insert(result, mission.name or mission.mission_id)
+  end
+  table.sort(result, function(left, right)
+    return tostring(left):lower() < tostring(right):lower()
+  end)
+  return result
 end
 
 return M

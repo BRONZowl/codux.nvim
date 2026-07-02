@@ -8,6 +8,7 @@ codux.nvim v0.7.1 makes Codux workspaces isolated Git worktrees and hardens work
 
 - Made new Codux workspaces Git worktrees under `../codux-worktrees/`, created only when the current checkout is clean, using `dev/<workspace>` or the next available namespace such as `dev1/<workspace>`.
 - Added merged-workspace cleanup prompts that remove the saved workspace, worktree, instruction file, and branch after confirmation.
+- Upgraded Mission Control with a richer mission dashboard plus `:CoduxMissionEdit` and `:CoduxMissionDelete` for objective updates and whole-mission cleanup.
 - Added `j`/`k` movement for the selected dashboard workspace after confirming a fuzzy-search result.
 - Warn when project-local workspace instruction files are not ignored by Git, and added `:CoduxWorkspaceIgnore` to add the ignore rule explicitly.
 - Hardened workspace target reopening, renamed-workspace tmux target tracking, instruction cleanup, instruction-only workspace deletes, and stale worktree deletion.

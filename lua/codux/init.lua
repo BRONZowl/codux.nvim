@@ -662,6 +662,10 @@ function M._v5.names_for_project(root)
   return workspace_runtime:names_for_project(root)
 end
 
+function M._v5.mission_names_for_project(root)
+  return workspace_runtime:mission_names_for_project(root)
+end
+
 function M._v5.reconcile_project(root)
   return workspace_runtime:reconcile_project(root)
 end
@@ -910,6 +914,18 @@ function M.create_mission(mission, objective, opts)
   return workspace_runtime:create_mission(mission, objective, opts)
 end
 
+function M.update_mission_objective(name, objective, opts)
+  local ok, error_message = workspace_runtime:update_mission_objective(name, objective, opts)
+  if not ok and error_message then
+    notify(error_message, vim.log.levels.ERROR)
+  end
+  return ok
+end
+
+function M.delete_mission(name, opts)
+  return workspace_runtime:delete_mission(name, opts)
+end
+
 function M.open_workspace(name)
   return M.create_workspace(name)
 end
@@ -1037,6 +1053,12 @@ mission_controller = mission_control_mod.new({
   create_mission = function(mission)
     return M.create_mission(mission)
   end,
+  update_mission_objective = function(name, objective, root)
+    return M.update_mission_objective(name, objective, { project_root = root })
+  end,
+  delete_mission = function(name, root)
+    return M.delete_mission(name, { project_root = root })
+  end,
   workspace_entries_for_project = workspace_entries_for_project,
   open_saved_workspace = function(name, project_root)
     return M.open_saved_workspace(name, project_root)
@@ -1053,6 +1075,14 @@ end
 
 function M.open_missions()
   return mission_controller:open_dashboard()
+end
+
+function M.edit_mission_objective(name)
+  return mission_controller:open_saved_objective_editor(name, workspace_manager_project_root())
+end
+
+function M.delete_saved_mission(name)
+  return mission_controller:delete_saved_mission(name, workspace_manager_project_root())
 end
 
 function M.close()
@@ -1202,6 +1232,10 @@ function M._v5.complete_workspace_names(arglead)
   return M._v5.filter_completion(M._v5.names_for_project(workspace_manager_project_root()), arglead)
 end
 
+function M._v5.complete_mission_names(arglead)
+  return M._v5.filter_completion(M._v5.mission_names_for_project(workspace_manager_project_root()), arglead)
+end
+
 function M._v5.complete_create(arglead, _cmdline, _cursorpos)
   return M._v5.filter_completion({ "--custom" }, arglead)
 end
@@ -1298,6 +1332,14 @@ local function create_commands()
   vim.api.nvim_create_user_command("CoduxMissions", function()
     M.open_missions()
   end, { force = true, desc = "Show Codux missions" })
+
+  vim.api.nvim_create_user_command("CoduxMissionEdit", function(opts)
+    M.edit_mission_objective(opts.args)
+  end, { force = true, nargs = 1, complete = M._v5.complete_mission_names, desc = "Edit a Codux mission objective" })
+
+  vim.api.nvim_create_user_command("CoduxMissionDelete", function(opts)
+    M.delete_saved_mission(opts.args)
+  end, { force = true, nargs = 1, complete = M._v5.complete_mission_names, desc = "Delete a Codux mission" })
 
   vim.api.nvim_create_user_command("CoduxToggle", function()
     M.toggle()

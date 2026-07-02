@@ -1352,6 +1352,8 @@ function M:entries_for_project(root)
                 mission_name = record.mission_name,
                 mission_role = record.mission_role,
                 mission_objective = record.mission_objective,
+                custom_instruction = record.custom_instruction,
+                resolved_instruction = record.resolved_instruction,
                 window_name = window_name,
                 tmux_target = M.tmux_target(session, window_name) or record.tmux_target,
                 codex_status = record.codex_status or "idle",
@@ -1408,6 +1410,100 @@ function M:entries_for_project(root)
   end)
 
   return entries, nil
+end
+
+function M:missions_for_project(root)
+  local entries, error_message = self:entries_for_project(root)
+  if error_message then
+    return {}, error_message
+  end
+
+  return mission_mod.group_entries(entries), nil
+end
+
+function M:mission_for_name(root, name)
+  local missions, error_message = self:missions_for_project(root)
+  if error_message then
+    return nil, error_message
+  end
+
+  return mission_mod.find_mission(missions, name)
+end
+
+function M:mission_names_for_project(root)
+  local missions, error_message = self:missions_for_project(root)
+  if error_message then
+    return {}
+  end
+
+  return mission_mod.names(missions)
+end
+
+function M:update_mission_objective(name, objective, opts)
+  opts = type(opts) == "table" and opts or {}
+  objective = type(objective) == "string" and trim(objective) or ""
+  if objective == "" then
+    return false, "Mission objective is required"
+  end
+
+  local root = opts.project_root or self:project_root()
+  local mission, mission_error = self:mission_for_name(root, name)
+  if not mission then
+    return false, mission_error or "mission not found"
+  end
+
+  local state_data, state_error = self:read_state()
+  if state_error then
+    return false, state_error
+  end
+
+  local updated = 0
+  for _, entry in ipairs(mission.roles) do
+    local entry_root = entry.project_root or root
+    local safe_name = entry.safe_name
+    if type(entry_root) == "string" and entry_root ~= "" and type(safe_name) == "string" and safe_name ~= "" then
+      local role = mission_mod.role_from_entry(entry)
+      local instruction = mission_mod.role_instruction(mission.name, objective, role)
+      local instruction_ok, instruction_error = self:write_instruction_file(entry_root, safe_name, instruction)
+      if not instruction_ok then
+        return false, instruction_error
+      end
+
+      local project = self:project_state(state_data, entry_root)
+      local record = project.workspaces[safe_name]
+      if type(record) == "table" then
+        record.mission_objective = objective
+        record.custom_instruction = instruction
+        record.resolved_instruction = instruction
+        project.updated_at = self:timestamp()
+        updated = updated + 1
+      end
+
+      if self.state.workspace and self.state.workspace.project_root == entry_root and self.state.workspace.safe_name == safe_name then
+        self.state.workspace.mission_objective = objective
+        self.state.workspace.custom_instruction = instruction
+        self.state.workspace.resolved_instruction = instruction
+      end
+    end
+  end
+
+  local write_ok, write_error = self:write_state(state_data)
+  if not write_ok then
+    return false, write_error
+  end
+
+  if self.state.workspace_manager_project_root then
+    self.render_workspace_manager()
+  end
+
+  self.notify(
+    "Updated Codux mission "
+      .. tostring(mission.name or name)
+      .. " objective for "
+      .. tostring(updated)
+      .. " roles"
+  )
+  return true, nil
 end
 
 function M:saved_workspace_instruction_request(entry)
@@ -2513,6 +2609,36 @@ function M:delete_workspace(name)
     return false
   end
   return self:delete_saved_workspace(entry)
+end
+
+function M:delete_mission(name, opts)
+  opts = type(opts) == "table" and opts or {}
+  local root = opts.project_root or self:project_root()
+  local mission, mission_error = self:mission_for_name(root, name)
+  if not mission then
+    self.notify(mission_error or "mission not found", vim.log.levels.ERROR)
+    return false
+  end
+
+  local deleted = 0
+  for _, entry in ipairs(vim.deepcopy(mission.roles)) do
+    if self:delete_saved_workspace(entry) then
+      deleted = deleted + 1
+    else
+      self.notify(
+        "Stopped deleting Codux mission "
+          .. tostring(mission.name or name)
+          .. " after "
+          .. tostring(deleted)
+          .. " roles",
+        vim.log.levels.ERROR
+      )
+      return false
+    end
+  end
+
+  self.notify("Deleted Codux mission " .. tostring(mission.name or name) .. " with " .. tostring(deleted) .. " roles")
+  return true
 end
 
 function M:restore_workspaces(opts)

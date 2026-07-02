@@ -57,6 +57,10 @@ function M.new(opts)
         return {}
       end,
     open_saved_workspace = type(opts.open_saved_workspace) == "function" and opts.open_saved_workspace or noop,
+    update_mission_objective = type(opts.update_mission_objective) == "function"
+        and opts.update_mission_objective
+      or noop,
+    delete_mission = type(opts.delete_mission) == "function" and opts.delete_mission or noop,
     project_root = type(opts.project_root) == "function" and opts.project_root or function()
       return vim.loop.cwd()
     end,
@@ -68,7 +72,8 @@ function M.new(opts)
   return setmetatable(controller, M)
 end
 
-function M:objective_editor_config(line_count)
+function M:objective_editor_config(line_count, opts)
+  opts = type(opts) == "table" and opts or {}
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local max_width = available_dimension(total_width, 4)
@@ -80,9 +85,9 @@ function M:objective_editor_config(line_count)
     relative = "editor",
     style = "minimal",
     border = "rounded",
-    title = " Codux Mission Objective ",
+    title = opts.title or " Codux Mission Objective ",
     title_pos = "center",
-    footer = " Ctrl-s/:w preview | Ctrl-q cancel ",
+    footer = opts.footer or " Ctrl-s/:w preview | Ctrl-q cancel ",
     footer_pos = "center",
     width = width,
     height = height,
@@ -124,8 +129,10 @@ function M:dashboard_config(line_count)
     relative = "editor",
     style = "minimal",
     border = "rounded",
-    title = " codux missions ",
+    title = " codux mission dashboard ",
     title_pos = "center",
+    footer = " Enter open | e objective | d delete | r refresh | q close ",
+    footer_pos = "center",
     width = width,
     height = height,
     col = math.max(0, math.floor((total_width - width) / 2)),
@@ -133,7 +140,8 @@ function M:dashboard_config(line_count)
   }
 end
 
-function M:open_objective_editor(name, default_objective)
+function M:open_objective_editor(name, default_objective, opts)
+  opts = type(opts) == "table" and opts or {}
   local mission_name, name_error = self.mission.sanitize_mission_name(name)
   if not mission_name then
     self.notify(name_error, vim.log.levels.ERROR)
@@ -157,7 +165,7 @@ function M:open_objective_editor(name, default_objective)
     objective_lines = { "" }
   end
   self.ui.set_lines(bufnr, objective_lines)
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:objective_editor_config(#objective_lines))
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:objective_editor_config(#objective_lines, opts))
   if not win_ok then
     self.ui.delete_buffer(bufnr)
     self.notify("Failed to open Codux mission editor", vim.log.levels.ERROR)
@@ -190,6 +198,17 @@ function M:open_objective_editor(name, default_objective)
     local objective = trim(table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n"))
     if objective == "" then
       self.notify("Mission objective is required", vim.log.levels.WARN)
+      return
+    end
+
+    if type(opts.on_save) == "function" then
+      local ok = opts.on_save(mission_name, objective)
+      if ok == false then
+        return
+      end
+
+      saved = true
+      close_editor()
       return
     end
 
@@ -300,33 +319,152 @@ function M:dashboard_lines(root)
   end
 
   local missions = self.mission.group_entries(entries)
-  local lines = {}
+  local lines = {
+    "Mission Control",
+  }
   local items = {}
   if #missions == 0 then
-    return { "No Codux missions" }, items
+    return { "Mission Control", "", "No Codux missions" }, items
   end
 
+  local total_roles = 0
+  local total_active = 0
+  local total_question = 0
+  local total_idle = 0
+  for _, mission in ipairs(missions) do
+    local counts = self.mission.status_counts(mission)
+    total_roles = total_roles + counts.total
+    total_active = total_active + counts.active
+    total_question = total_question + counts.question
+    total_idle = total_idle + counts.idle
+  end
+
+  table.insert(
+    lines,
+    string.format(
+      "%d missions | %d roles | %d active | %d question | %d idle",
+      #missions,
+      total_roles,
+      total_active,
+      total_question,
+      total_idle
+    )
+  )
+
   for mission_index, mission in ipairs(missions) do
-    if mission_index > 1 then
-      table.insert(lines, "")
-    end
-    table.insert(lines, tostring(mission.name or mission.mission_id))
+    table.insert(lines, "")
+    local counts = self.mission.status_counts(mission)
+    local status = self.mission.status_label(mission)
+    local mission_name = self.workspace_ui.truncate_display_tail(tostring(mission.name or mission.mission_id), 34)
+    table.insert(lines, string.format("%-34s %-8s %2d roles", mission_name, status, counts.total))
+    items[#lines] = { kind = "mission", mission = mission }
     if type(mission.objective) == "string" and mission.objective ~= "" then
-      table.insert(lines, "  " .. mission.objective:gsub("\n.*$", ""))
+      local objective = mission.objective:gsub("\n.*$", "")
+      table.insert(lines, "  objective  " .. self.workspace_ui.truncate_display_tail(objective, 76))
+      items[#lines] = { kind = "mission", mission = mission }
     end
+    table.insert(lines, "  role           status    mode  age   workspace")
     for _, entry in ipairs(mission.roles) do
       local role = entry.mission_role or entry.name or entry.safe_name
       local status = entry.status or "inactive"
       local mode = self.workspace_ui.manager_mode_label(entry)
       local age = self.workspace_ui.relative_age_label(self.workspace_ui.session_timestamp(entry))
-      local target = type(entry.target_path) == "string" and entry.target_path ~= "" and vim.fn.fnamemodify(entry.target_path, ":t") or ""
-      local line = string.format("  %-12s %-8s %-4s %-4s %s", role, status, mode, age, target)
+      local workspace = entry.name or entry.safe_name or ""
+      local line = string.format(
+        "  %-14s %-8s %-4s %-4s %s",
+        self.workspace_ui.truncate_display_tail(role, 14),
+        status,
+        mode,
+        age,
+        self.workspace_ui.truncate_display_tail(workspace, 34)
+      )
       table.insert(lines, line)
-      items[#lines] = entry
+      items[#lines] = { kind = "role", mission = mission, entry = entry }
     end
   end
 
   return lines, items
+end
+
+function M:mission_for_name(root, name)
+  local entries, error_message = self.workspace_entries_for_project(root)
+  if error_message then
+    return nil, error_message
+  end
+
+  local missions = self.mission.group_entries(entries)
+  return self.mission.find_mission(missions, name)
+end
+
+function M:open_saved_objective_editor(name, root)
+  root = root or self.project_root()
+  local mission, mission_error = self:mission_for_name(root, name)
+  if not mission then
+    self.notify(mission_error or "mission not found", vim.log.levels.ERROR)
+    return false
+  end
+
+  return self:open_objective_editor(mission.name, mission.objective, {
+    title = " Edit Codux Mission Objective ",
+    footer = " Ctrl-s/:w save | Ctrl-q cancel ",
+    on_save = function(_, objective)
+      return self.update_mission_objective(mission.name, objective, root)
+    end,
+  })
+end
+
+function M:delete_saved_mission(name, root, opts)
+  opts = type(opts) == "table" and opts or {}
+  root = root or self.project_root()
+  local mission, mission_error = self:mission_for_name(root, name)
+  if not mission then
+    self.notify(mission_error or "mission not found", vim.log.levels.ERROR)
+    return false
+  end
+
+  if opts.confirm ~= false then
+    local choice = vim.fn.confirm("Delete Codux mission " .. tostring(mission.name or mission.mission_id) .. "?", "&Yes\n&No", 2)
+    if choice ~= 1 then
+      return false
+    end
+  end
+
+  return self.delete_mission(mission.name or mission.mission_id, root)
+end
+
+function M:highlight_dashboard(bufnr, lines, items)
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, self.namespace, 0, -1)
+  pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Title", 0, 0, -1)
+  pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", 1, 0, -1)
+
+  for index, line in ipairs(lines) do
+    local item = items[index]
+    if item and item.kind == "mission" and not line:find("^%s+objective", 1, false) then
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKey", index - 1, 0, -1)
+    elseif item and item.kind == "mission" then
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
+    elseif line:find("^%s+role%s+", 1, false) then
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Identifier", index - 1, 0, -1)
+    elseif item and item.kind == "role" then
+      local status = item.entry and item.entry.status or "inactive"
+      local group = status == "question" and "WarningMsg"
+        or status == "active" and "MoreMsg"
+        or status == "idle" and "Identifier"
+        or "Comment"
+      local status_start = line:find(status, 1, true)
+      if status_start then
+        pcall(
+          vim.api.nvim_buf_add_highlight,
+          bufnr,
+          self.namespace,
+          group,
+          index - 1,
+          status_start - 1,
+          status_start - 1 + #status
+        )
+      end
+    end
+  end
 end
 
 function M:open_dashboard()
@@ -343,6 +481,7 @@ function M:open_dashboard()
   end
 
   self.ui.set_lines(bufnr, lines, { modifiable = true })
+  self:highlight_dashboard(bufnr, lines, items)
   local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:dashboard_config(#lines))
   if not win_ok then
     self.ui.delete_buffer(bufnr)
@@ -370,7 +509,13 @@ function M:open_dashboard()
     if not ok then
       return false
     end
-    local entry = items[cursor[1]]
+    local item = items[cursor[1]]
+    if not item then
+      return false
+    end
+    local entry = item.kind == "role" and item.entry
+      or item.kind == "mission" and item.mission and item.mission.roles and item.mission.roles[1]
+      or nil
     if not entry then
       return false
     end
@@ -378,7 +523,63 @@ function M:open_dashboard()
     return self.open_saved_workspace(entry.name or entry.safe_name, entry.project_root)
   end
 
+  local function selected_mission()
+    local ok, cursor = pcall(vim.api.nvim_win_get_cursor, win)
+    if not ok then
+      return nil
+    end
+    local item = items[cursor[1]]
+    if not item then
+      return nil
+    end
+    return item.mission
+  end
+
+  local function edit_selected_mission()
+    local mission = selected_mission()
+    if not mission then
+      self.notify("No Codux mission selected", vim.log.levels.WARN)
+      return false
+    end
+    close_dashboard()
+    return self:open_objective_editor(mission.name, mission.objective, {
+      title = " Edit Codux Mission Objective ",
+      footer = " Ctrl-s/:w save | Ctrl-q cancel ",
+      on_save = function(_, objective)
+        local ok = self.update_mission_objective(mission.name, objective, root)
+        if ok ~= false then
+          vim.schedule(function()
+            self:open_dashboard()
+          end)
+        end
+        return ok
+      end,
+    })
+  end
+
+  local function delete_selected_mission()
+    local mission = selected_mission()
+    if not mission then
+      self.notify("No Codux mission selected", vim.log.levels.WARN)
+      return false
+    end
+    local choice = vim.fn.confirm("Delete Codux mission " .. tostring(mission.name or mission.mission_id) .. "?", "&Yes\n&No", 2)
+    if choice ~= 1 then
+      return false
+    end
+    close_dashboard()
+    return self.delete_mission(mission.name or mission.mission_id, root)
+  end
+
+  local function refresh_dashboard()
+    close_dashboard()
+    return self:open_dashboard()
+  end
+
   self.set_buffer_keymap(bufnr, "n", "<CR>", open_selected, "Open Codux Mission Role")
+  self.set_buffer_keymap(bufnr, "n", "e", edit_selected_mission, "Edit Codux Mission Objective")
+  self.set_buffer_keymap(bufnr, "n", "d", delete_selected_mission, "Delete Codux Mission")
+  self.set_buffer_keymap(bufnr, "n", "r", refresh_dashboard, "Refresh Codux Missions")
   self.bind_close_keys(bufnr, close_dashboard, "Close Codux Missions", "n", { escape = true, q = true })
   return true
 end

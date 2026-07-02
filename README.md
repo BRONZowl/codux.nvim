@@ -130,7 +130,9 @@
 <p>
   Use <code>:CoduxMissionCreate</code> or <code>&lt;leader&gt;zm</code> to launch Mission Control.
   Codux prompts for one mission objective, previews a default crew of architect, builder, reviewer, and QA roles, then creates a clean Git worktree workspace for each role and starts each agent with workspace-auto permissions.
-  Mission role workspaces keep their mission metadata in Codux workspace state, and <code>:CoduxMissions</code> or <code>&lt;leader&gt;zM</code> opens a mission dashboard for jumping back into each role.
+  Mission role workspaces keep their mission metadata in Codux workspace state, and <code>:CoduxMissions</code> or <code>&lt;leader&gt;zM</code> opens a mission dashboard with mission status, objective preview, role status, and workspace jump actions.
+  From the mission dashboard, press <code>&lt;CR&gt;</code> to open a role, <code>e</code> to edit the mission objective across all role instructions, <code>d</code> to delete the whole mission after confirmation, or <code>r</code> to refresh.
+  Command equivalents are <code>:CoduxMissionEdit &lt;mission&gt;</code> and <code>:CoduxMissionDelete &lt;mission&gt;</code>.
 </p>
 
 <p>
@@ -296,6 +298,16 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td>Manage Codux missions</td>
 <td><code>&lt;leader&gt;zM</code></td>
 <td><code>:CoduxMissions</code></td>
+</tr>
+<tr>
+<td>Edit a Codux mission objective</td>
+<td></td>
+<td><code>:CoduxMissionEdit &lt;mission&gt;</code></td>
+</tr>
+<tr>
+<td>Delete a Codux mission</td>
+<td></td>
+<td><code>:CoduxMissionDelete &lt;mission&gt;</code></td>
 </tr>
 <tr>
 <td>Ignore local workspace files</td>

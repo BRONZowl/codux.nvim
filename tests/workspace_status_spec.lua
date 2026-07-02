@@ -200,6 +200,20 @@ do
   assert_equal(grouped[1].name, "Alpha")
   assert_equal(#grouped[1].roles, 2)
   assert_equal(grouped[1].roles[1].mission_role, "Architect")
+  assert_equal(mission_mod.status_label(grouped[1]), "inactive")
+  local found = assert(mission_mod.find_mission(grouped, "alpha"))
+  assert_equal(found.name, "Alpha")
+  assert_equal(mission_mod.names(grouped)[1], "Alpha")
+end
+
+do
+  local role = mission_mod.role_from_entry({
+    mission_role = "Research Lead",
+    resolved_instruction = "Role focus:\nTrack architecture risks.\n\nStay inside this workspace",
+  })
+  assert_equal(role.name, "Research Lead")
+  assert_equal(role.safe_name, "research-lead")
+  assert_equal(role.focus, "Track architecture risks.")
 end
 
 if type(vim.api) == "table" then
@@ -484,6 +498,7 @@ local function workspace_prepare_runtime(opts)
   local custom_system = opts.system
   return runtime_mod.new({
     state = opts.state or {},
+    notify = opts.notify,
     get_config = opts.get_config or default_workspace_config,
     current_target = opts.current_target or function()
       return { path = "/repo/file.lua", type = "file" }
@@ -585,6 +600,9 @@ local function workspace_store(opts)
       end,
       delete_instruction_file = opts.delete_instruction_file or function()
         return true, nil
+      end,
+      instruction_file_records = opts.instruction_file_records or function()
+        return {}
       end,
       resolve_workspace_resume_session = opts.resolve_workspace_resume_session or function() end,
     },
@@ -2817,6 +2835,67 @@ do
     assert_equal(builder.mission_objective, "Build it")
     assert_contains(table.concat(commands, "\n"), "git -C /repo status --porcelain")
     assert_contains(table.concat(commands, "\n"), "Start your Mission Control role now.")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local written = {}
+    local notifications = {}
+    local state_data = workspace_state({
+      ["mission-architect"] = review_workspace_record({
+        name = "mission-architect",
+        safe_name = "mission-architect",
+        mission_id = "mission:mission",
+        mission_name = "Mission",
+        mission_role = "Architect",
+        mission_objective = "Build it",
+        resolved_instruction = mission_mod.role_instruction("Mission", "Build it", {
+          name = "Architect",
+          safe_name = "architect",
+          focus = "Design it",
+        }),
+      }),
+      ["mission-builder"] = review_workspace_record({
+        name = "mission-builder",
+        safe_name = "mission-builder",
+        mission_id = "mission:mission",
+        mission_name = "Mission",
+        mission_role = "Builder",
+        mission_objective = "Build it",
+        resolved_instruction = mission_mod.role_instruction("Mission", "Build it", {
+          name = "Builder",
+          safe_name = "builder",
+          focus = "Build it",
+        }),
+      }),
+    })
+    local store = workspace_store({
+      state_data = state_data,
+      write_instruction_file = function(_, root, safe_name, instruction)
+        written[root .. "/" .. safe_name] = instruction
+        return true, nil
+      end,
+    })
+    local runtime = workspace_prepare_runtime({
+      store = store.store,
+      notify = function(message)
+        table.insert(notifications, message)
+      end,
+    })
+
+    local ok, error_message = runtime:update_mission_objective("Mission", "Ship the dashboard")
+    assert_nil(error_message)
+    assert_true(ok)
+    local architect = store.state_data().projects["/repo"].workspaces["mission-architect"]
+    local builder = store.state_data().projects["/repo"].workspaces["mission-builder"]
+    assert_equal(architect.mission_objective, "Ship the dashboard")
+    assert_equal(builder.mission_objective, "Ship the dashboard")
+    assert_contains(architect.resolved_instruction, "Ship the dashboard")
+    assert_contains(builder.resolved_instruction, "Ship the dashboard")
+    assert_contains(written["/repo/mission-architect"], "Mission: Mission")
+    assert_contains(written["/repo/mission-builder"], "Role focus:")
+    assert_contains(notifications[#notifications], "Updated Codux mission Mission objective for 2 roles")
   end)
 end
 
