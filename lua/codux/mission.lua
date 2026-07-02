@@ -13,6 +13,38 @@ local function lines(value)
   return result
 end
 
+function M.objective_preview(objective, max_width)
+  local first_line = tostring(objective or ""):gsub("\r", ""):match("([^\n]*)") or ""
+  first_line = trim(first_line)
+  if first_line == "" then
+    return "No objective"
+  end
+
+  max_width = tonumber(max_width) or 80
+  if #first_line <= max_width then
+    return first_line
+  end
+
+  return first_line:sub(1, math.max(1, max_width - 3)) .. "..."
+end
+
+function M.update_instruction_objective(instruction, objective)
+  if type(instruction) ~= "string" then
+    return instruction
+  end
+  objective = trim(objective)
+  if instruction == "" or objective == "" then
+    return instruction
+  end
+
+  local prefix, suffix = instruction:match("^(.-\nObjective:\n).-(\n\nRole focus:\n.*)$")
+  if not prefix then
+    return instruction
+  end
+
+  return prefix .. objective .. suffix
+end
+
 local function safe_name(value)
   return trim(value):lower():gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
 end

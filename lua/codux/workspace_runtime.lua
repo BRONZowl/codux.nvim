@@ -1507,6 +1507,152 @@ function M:entry_for_name(root, name)
   return nil, "workspace not found"
 end
 
+local function mission_matches_selector(mission, selector)
+  selector = trim(selector)
+  if selector == "" then
+    return false
+  end
+
+  if mission.mission_id == selector or mission.name == selector then
+    return true
+  end
+
+  local display_name, safe_name = mission_mod.sanitize_mission_name(selector)
+  if not display_name then
+    return false
+  end
+
+  return mission.mission_id == mission_mod.mission_id(safe_name) or tostring(mission.name or ""):lower() == display_name:lower()
+end
+
+function M:missions_for_project(root)
+  local entries, error_message = self:entries_for_project(root)
+  if error_message then
+    return {}, error_message
+  end
+
+  return mission_mod.group_entries(entries), nil
+end
+
+function M:mission_for_project(root, selector)
+  local missions, error_message = self:missions_for_project(root)
+  if error_message then
+    return nil, error_message
+  end
+
+  for _, mission in ipairs(missions) do
+    if mission_matches_selector(mission, selector) then
+      return mission, nil
+    end
+  end
+
+  return nil, "mission not found"
+end
+
+function M:mission_names_for_project(root)
+  local missions, error_message = self:missions_for_project(root)
+  if error_message then
+    return {}
+  end
+
+  local names = {}
+  for _, mission in ipairs(missions) do
+    table.insert(names, mission.name or mission.mission_id)
+  end
+  return names
+end
+
+function M:update_mission_objective(root, selector, objective)
+  objective = trim(objective)
+  if objective == "" then
+    return false, "Mission objective is required"
+  end
+
+  local mission, mission_error = self:mission_for_project(root, selector)
+  if not mission then
+    return false, mission_error
+  end
+
+  local state_data, state_error = self:read_state()
+  if state_error then
+    return false, state_error
+  end
+
+  local updated = 0
+  local instruction_updates = {}
+  local now = self:timestamp()
+  for _, entry in ipairs(mission.roles) do
+    local entry_root = entry.project_root
+    local safe_name = entry.safe_name
+    local project = type(state_data.projects) == "table" and type(entry_root) == "string" and state_data.projects[entry_root]
+      or nil
+    local workspaces = type(project) == "table" and project.workspaces or nil
+    local record = type(workspaces) == "table" and type(safe_name) == "string" and workspaces[safe_name] or nil
+    if type(record) == "table" then
+      record.mission_objective = objective
+      record.resolved_instruction = mission_mod.update_instruction_objective(record.resolved_instruction, objective)
+      record.custom_instruction = mission_mod.update_instruction_objective(record.custom_instruction, objective)
+      project.updated_at = now
+      updated = updated + 1
+      table.insert(instruction_updates, {
+        root = entry_root,
+        safe_name = safe_name,
+        instruction = record.resolved_instruction or record.custom_instruction,
+      })
+    end
+  end
+
+  if updated == 0 then
+    return false, "mission not found"
+  end
+
+  local write_ok, write_error = self:write_state(state_data)
+  if not write_ok then
+    return false, write_error
+  end
+
+  for _, update in ipairs(instruction_updates) do
+    if type(update.instruction) == "string" and trim(update.instruction) ~= "" then
+      local instruction_ok, instruction_error =
+        self:write_instruction_file(update.root, update.safe_name, update.instruction)
+      if not instruction_ok then
+        self.notify(instruction_error or "Failed to update Codux mission instruction", vim.log.levels.WARN)
+      end
+    end
+  end
+
+  if type(self.state.workspace) == "table" and self.state.workspace.mission_id == mission.mission_id then
+    self.state.workspace.mission_objective = objective
+    self.state.workspace.resolved_instruction =
+      mission_mod.update_instruction_objective(self.state.workspace.resolved_instruction, objective)
+    self.state.workspace.custom_instruction =
+      mission_mod.update_instruction_objective(self.state.workspace.custom_instruction, objective)
+  end
+  if self.state.workspace_manager_project_root == root then
+    self.render_workspace_manager()
+  end
+
+  return true, nil
+end
+
+function M:delete_mission(root, selector)
+  local mission, mission_error = self:mission_for_project(root, selector)
+  if not mission then
+    return false, mission_error
+  end
+
+  local deleted = 0
+  for _, entry in ipairs(vim.deepcopy(mission.roles)) do
+    if self:delete_saved_workspace(entry) then
+      deleted = deleted + 1
+    else
+      return false, "Failed to delete mission role " .. tostring(entry.name or entry.safe_name)
+    end
+  end
+
+  return deleted > 0, nil
+end
+
 function M:names_for_project(root)
   local entries, error_message = self:entries_for_project(root)
   if error_message then

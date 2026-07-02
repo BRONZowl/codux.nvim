@@ -202,6 +202,55 @@ do
   assert_equal(grouped[1].roles[1].mission_role, "Architect")
 end
 
+do
+  assert_equal(mission_mod.objective_preview("Ship a polished mission dashboard\nwith controls", 80), "Ship a polished mission dashboard")
+  assert_equal(mission_mod.objective_preview("123456789", 6), "123...")
+  local instruction = mission_mod.role_instruction("Alpha", "Old objective", {
+    name = "Builder",
+    safe_name = "builder",
+    focus = "Build it.",
+  })
+  local updated = mission_mod.update_instruction_objective(instruction, "New objective")
+  assert_contains(updated, "Objective:\nNew objective\n\nRole focus:")
+end
+
+do
+  local controller = mission_control_mod.new({
+    workspace_entries_for_project = function()
+      return {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          mission_id = "mission:alpha",
+          mission_name = "Alpha",
+          mission_role = "Builder",
+          mission_objective = "Build the dashboard\nKeep it sharp",
+          status = "active",
+          codex_mode = "execute",
+          target_path = "/repo/lua/codux/init.lua",
+        },
+        {
+          name = "alpha-reviewer",
+          safe_name = "alpha-reviewer",
+          mission_id = "mission:alpha",
+          mission_name = "Alpha",
+          mission_role = "Reviewer",
+          mission_objective = "Build the dashboard\nKeep it sharp",
+          status = "question",
+        },
+      }, nil
+    end,
+  })
+  local lines, items = controller:dashboard_lines("/repo")
+  assert_equal(lines[1], "CODUX MISSION CONTROL")
+  assert_contains(table.concat(lines, "\n"), "Keys: <CR> open")
+  assert_contains(table.concat(lines, "\n"), "Alpha")
+  assert_contains(table.concat(lines, "\n"), "Objective: Build the dashboard")
+  assert_equal(items[5].type, "mission")
+  assert_equal(items[8].type, "role")
+  assert_equal(items[8].entry.safe_name, "alpha-builder")
+end
+
 if type(vim.api) == "table" then
   local captured_mission
   local controller = mission_control_mod.new({
@@ -1210,6 +1259,117 @@ do
   assert_equal(by_name.docs.project_root, "/repo")
   assert_equal(by_name.review.project_root, "/codux-worktrees/review")
   assert_equal(by_name.review.worktree_branch, "dev/review")
+end
+
+do
+  local builder_instruction = mission_mod.role_instruction("Alpha", "Old objective", {
+    name = "Builder",
+    safe_name = "builder",
+    focus = "Build it.",
+  })
+  local reviewer_instruction = mission_mod.role_instruction("Alpha", "Old objective", {
+    name = "Reviewer",
+    safe_name = "reviewer",
+    focus = "Review it.",
+  })
+  local state_data = {
+    projects = {
+      ["/codux-worktrees/alpha-builder"] = {
+        workspaces = {
+          ["alpha-builder"] = review_workspace_record({
+            name = "alpha-builder",
+            safe_name = "alpha-builder",
+            project_root = "/codux-worktrees/alpha-builder",
+            workspace_kind = "worktree",
+            git_common_dir = "/repo/.git",
+            mission_id = "mission:alpha",
+            mission_name = "Alpha",
+            mission_role = "Builder",
+            mission_objective = "Old objective",
+            resolved_instruction = builder_instruction,
+          }),
+        },
+      },
+      ["/codux-worktrees/alpha-reviewer"] = {
+        workspaces = {
+          ["alpha-reviewer"] = review_workspace_record({
+            name = "alpha-reviewer",
+            safe_name = "alpha-reviewer",
+            project_root = "/codux-worktrees/alpha-reviewer",
+            workspace_kind = "worktree",
+            git_common_dir = "/repo/.git",
+            mission_id = "mission:alpha",
+            mission_name = "Alpha",
+            mission_role = "Reviewer",
+            mission_objective = "Old objective",
+            resolved_instruction = reviewer_instruction,
+          }),
+        },
+      },
+    },
+  }
+  local written_instructions = {}
+  local runtime = runtime_mod.new({
+    state = {
+      workspace = {
+        mission_id = "mission:alpha",
+        mission_objective = "Old objective",
+        resolved_instruction = builder_instruction,
+      },
+    },
+    notify = function() end,
+    render_workspace_manager = function() end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-07-02T00:00:00Z"
+      end,
+      instruction_file_records = function()
+        return {}
+      end,
+      write_instruction_file = function(_, root, safe_name, instruction)
+        table.insert(written_instructions, root .. ":" .. safe_name .. ":" .. instruction)
+        return true, nil
+      end,
+    },
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
+        return "/repo/.git\n", 0
+      end
+      return "", 1
+    end,
+  })
+
+  assert_equal(runtime:mission_names_for_project("/repo")[1], "Alpha")
+  local ok, error_message = runtime:update_mission_objective("/repo", "Alpha", "New objective")
+  assert_true(ok)
+  assert_nil(error_message)
+  assert_equal(
+    state_data.projects["/codux-worktrees/alpha-builder"].workspaces["alpha-builder"].mission_objective,
+    "New objective"
+  )
+  assert_contains(
+    state_data.projects["/codux-worktrees/alpha-reviewer"].workspaces["alpha-reviewer"].resolved_instruction,
+    "Objective:\nNew objective\n\nRole focus:"
+  )
+  assert_equal(runtime.state.workspace.mission_objective, "New objective")
+  assert_equal(#written_instructions, 2)
+
+  local deleted = {}
+  runtime.delete_saved_workspace = function(_, entry)
+    table.insert(deleted, entry.safe_name)
+    return true
+  end
+  assert_true(runtime:delete_mission("/repo", "mission:alpha"))
+  table.sort(deleted)
+  assert_equal(table.concat(deleted, ","), "alpha-builder,alpha-reviewer")
 end
 
 do

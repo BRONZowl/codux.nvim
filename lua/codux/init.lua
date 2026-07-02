@@ -910,6 +910,14 @@ function M.create_mission(mission, objective, opts)
   return workspace_runtime:create_mission(mission, objective, opts)
 end
 
+function M.update_mission_objective(root, mission, objective)
+  return workspace_runtime:update_mission_objective(root or workspace_manager_project_root(), mission, objective)
+end
+
+function M.delete_mission(root, mission)
+  return workspace_runtime:delete_mission(root or workspace_manager_project_root(), mission)
+end
+
 function M.open_workspace(name)
   return M.create_workspace(name)
 end
@@ -1041,6 +1049,12 @@ mission_controller = mission_control_mod.new({
   open_saved_workspace = function(name, project_root)
     return M.open_saved_workspace(name, project_root)
   end,
+  update_mission_objective = function(root, mission, objective)
+    return M.update_mission_objective(root, mission, objective)
+  end,
+  delete_mission = function(root, mission)
+    return M.delete_mission(root, mission)
+  end,
   project_root = workspace_manager_project_root,
   set_buffer_keymap = M._v5.set_buffer_keymap,
   bind_close_keys = M._v5.bind_close_keys,
@@ -1053,6 +1067,67 @@ end
 
 function M.open_missions()
   return mission_controller:open_dashboard()
+end
+
+function M.open_mission_dashboard()
+  return M.open_missions()
+end
+
+function M.edit_mission(name)
+  name = trim(name)
+  if name == "" then
+    return M.open_missions()
+  end
+
+  local root = workspace_manager_project_root()
+  local mission, error_message = workspace_runtime:mission_for_project(root, name)
+  if not mission then
+    notify(error_message or "mission not found", vim.log.levels.ERROR)
+    return false
+  end
+
+  return mission_controller:open_objective_editor(mission.name, mission.objective, {
+    on_save = function(_, objective)
+      local ok, update_error = M.update_mission_objective(root, mission.mission_id, objective)
+      if not ok then
+        notify(update_error or "Failed to update Codux mission", vim.log.levels.ERROR)
+        return false
+      end
+      notify("Updated Codux mission objective for " .. tostring(mission.name))
+      return true
+    end,
+  })
+end
+
+function M.delete_mission_by_name(name)
+  name = trim(name)
+  if name == "" then
+    return M.open_missions()
+  end
+
+  local root = workspace_manager_project_root()
+  local mission, error_message = workspace_runtime:mission_for_project(root, name)
+  if not mission then
+    notify(error_message or "mission not found", vim.log.levels.ERROR)
+    return false
+  end
+
+  local choice = vim.fn.confirm(
+    "Delete Codux mission " .. tostring(mission.name) .. " and all role workspaces?",
+    "&Yes\n&No",
+    2
+  )
+  if choice ~= 1 then
+    return false
+  end
+
+  local ok, delete_error = M.delete_mission(root, mission.mission_id)
+  if not ok then
+    notify(delete_error or "Failed to delete Codux mission", vim.log.levels.ERROR)
+    return false
+  end
+  notify("Deleted Codux mission " .. tostring(mission.name))
+  return true
 end
 
 function M.close()
@@ -1202,6 +1277,10 @@ function M._v5.complete_workspace_names(arglead)
   return M._v5.filter_completion(M._v5.names_for_project(workspace_manager_project_root()), arglead)
 end
 
+function M._v5.complete_mission_names(arglead)
+  return M._v5.filter_completion(workspace_runtime:mission_names_for_project(workspace_manager_project_root()), arglead)
+end
+
 function M._v5.complete_create(arglead, _cmdline, _cursorpos)
   return M._v5.filter_completion({ "--custom" }, arglead)
 end
@@ -1298,6 +1377,28 @@ local function create_commands()
   vim.api.nvim_create_user_command("CoduxMissions", function()
     M.open_missions()
   end, { force = true, desc = "Show Codux missions" })
+
+  vim.api.nvim_create_user_command("CoduxMissionDashboard", function()
+    M.open_mission_dashboard()
+  end, { force = true, desc = "Show the Codux mission dashboard" })
+
+  vim.api.nvim_create_user_command("CoduxMissionEdit", function(opts)
+    M.edit_mission(opts.args)
+  end, {
+    force = true,
+    nargs = "?",
+    complete = M._v5.complete_mission_names,
+    desc = "Edit a Codux mission objective",
+  })
+
+  vim.api.nvim_create_user_command("CoduxMissionDelete", function(opts)
+    M.delete_mission_by_name(opts.args)
+  end, {
+    force = true,
+    nargs = "?",
+    complete = M._v5.complete_mission_names,
+    desc = "Delete a Codux mission and its role workspaces",
+  })
 
   vim.api.nvim_create_user_command("CoduxToggle", function()
     M.toggle()
