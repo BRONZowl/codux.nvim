@@ -363,6 +363,18 @@ local function workspace_prepare_runtime(opts)
     current_buffer_name = opts.current_buffer_name or function()
       return "/repo/file.lua"
     end,
+    current_buffer = opts.current_buffer or function()
+      return 1
+    end,
+    alternate_buffer = opts.alternate_buffer or function()
+      return 1
+    end,
+    list_buffers = opts.list_buffers or function()
+      return {}
+    end,
+    is_loaded_buf = opts.is_loaded_buf or function()
+      return false
+    end,
     git_root_for = opts.git_root_for or function()
       return "/repo"
     end,
@@ -2777,6 +2789,45 @@ do
     local target_path, target_type = runtime_mod.normalize_workspace_target("/repo", "directory", "/fallback")
     assert_equal(target_path, "/repo")
     assert_equal(target_type, "directory")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    assert_false(runtime_mod.target_path_exists("health://"))
+    assert_false(runtime_mod.target_path_exists("codux://codex"))
+    assert_false(runtime_mod.target_path_exists("term://terminal"))
+
+    local target_path, target_type = runtime_mod.normalize_workspace_target("health://", "file", "/repo")
+    assert_equal(target_path, "/repo")
+    assert_equal(target_type, "directory")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local runtime = workspace_prepare_runtime({
+      current_target = function()
+        return { path = "health://", type = "file" }
+      end,
+      current_buffer_name = function()
+        return "health://"
+      end,
+      git_root_for = function(path)
+        assert_equal(path, "/repo")
+        return "/repo"
+      end,
+      git_branch_for = function(path)
+        assert_equal(path, "/repo")
+        return "main"
+      end,
+    })
+
+    local context = runtime:target_context()
+    assert_nil(context.path)
+    assert_equal(context.directory, "/repo")
+    assert_equal(context.root, "/repo")
+    assert_equal(context.branch, "main")
   end)
 end
 

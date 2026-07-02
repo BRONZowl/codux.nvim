@@ -119,7 +119,7 @@
 </p>
 
 <p>
-  Inside tmux, Codux creates or reuses a <code>backend-debug</code> window in the current tmux session, restores Neo-tree to the same target when available, and starts new workspaces with your current Codex permission profile.
+  Inside tmux, Codux creates or reuses a window named after the workspace in the current tmux session, restores Neo-tree to the same target when available, and starts new workspaces with your current Codex permission profile.
   Reopened saved workspaces keep their stored profile.
   Reopened saved workspaces resume the stored Codex session id when available, so the workspace returns to the same Codex conversation instead of starting a new one.
   Workspace windows use the requested workspace name for the tmux window.

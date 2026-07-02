@@ -140,11 +140,15 @@ function M.workspace_target_signature(path, target_type, branch)
   }, "\0")
 end
 
+function M.virtual_path(path)
+  return type(path) == "string" and path:match("^[%w+.-]+://") ~= nil
+end
+
 function M.target_path_exists(path)
   if type(path) ~= "string" or path == "" then
     return false
   end
-  if path:match("^term://") or path:match("^codux://") then
+  if M.virtual_path(path) then
     return false
   end
 
@@ -775,7 +779,7 @@ function M:path_directory(path)
   if type(path) ~= "string" or path == "" then
     return nil
   end
-  if path:match("^term://") then
+  if M.virtual_path(path) then
     return nil
   end
 
@@ -2440,7 +2444,7 @@ function M:sync_target(event, current_filetype)
 
   local context = self:target_context()
   local path = context.path
-  if type(path) ~= "string" or path == "" or path:match("^term://") or path:match("^codux://") then
+  if type(path) ~= "string" or path == "" or M.virtual_path(path) then
     return false
   end
 

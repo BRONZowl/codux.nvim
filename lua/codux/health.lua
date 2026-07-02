@@ -37,6 +37,22 @@ local function executable(name)
   return vim.fn.executable(name) == 1
 end
 
+local function writable_existing_ancestor(path)
+  local current = vim.fn.fnamemodify(path, ":h")
+  local previous = nil
+  while type(current) == "string" and current ~= "" and current ~= previous do
+    if vim.fn.isdirectory(current) == 1 then
+      if vim.fn.filewritable(current) == 2 then
+        return current
+      end
+      return nil
+    end
+    previous = current
+    current = vim.fn.fnamemodify(current, ":h")
+  end
+  return nil
+end
+
 function M.doctor_lines(deps)
   deps = type(deps) == "table" and deps or {}
   local lines = { "codux.nvim doctor", "" }
@@ -252,10 +268,11 @@ function M.check()
           health_warn("workspace instruction directory is not writable: " .. instruction_dir)
         end
       else
-        local parent = vim.fn.fnamemodify(instruction_dir, ":h")
-        if vim.fn.isdirectory(parent) == 1 and vim.fn.filewritable(parent) == 2 then
+        local ancestor = writable_existing_ancestor(instruction_dir)
+        if ancestor then
           health_ok("workspace instruction directory will be created on first workspace use")
         else
+          local parent = vim.fn.fnamemodify(instruction_dir, ":h")
           health_warn("workspace instruction directory parent is not writable: " .. parent)
         end
       end
