@@ -135,7 +135,7 @@
 <p>
   Use <code>:CoduxWorkspaces</code> or <code>&lt;leader&gt;zW</code> to open <code>current codux workspaces</code>.
   Codux opens a <code>Codux workspace:</code> search field above the dashboard; type a fuzzy workspace name to filter the dashboard and preview the closest match.
-  Press <code>&lt;Tab&gt;</code> to switch between the search field and workspace list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>&lt;CR&gt;</code> to open, <code>h</code> to run Doctor, and <code>m</code> to open the selected-workspace menu.
+  Press <code>&lt;Tab&gt;</code> to switch between the search field and workspace list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>j</code>/<code>k</code> to move, <code>&lt;CR&gt;</code> to open, <code>h</code> to run Doctor, and <code>m</code> to open the selected-workspace menu.
   The workspace menu exposes rename workspace, edit instructions, close workspace, close all workspaces, and delete workspace.
   Deleting a workspace removes its saved state and matching <code>.agents/codux/&lt;workspace&gt;.md</code> instruction file.
   Press <code>&lt;Tab&gt;</code> from the dashboard to search again, or <code>&lt;C-q&gt;</code> to close the dashboard and search field.
@@ -321,6 +321,11 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td>Stop Codex</td>
 <td></td>
 <td><code>:CoduxExit</code></td>
+</tr>
+<tr>
+<td>Move workspace dashboard selection</td>
+<td><code>j</code> / <code>k</code></td>
+<td></td>
 </tr>
 <tr>
 <td>Troubleshoot Codux setup</td>

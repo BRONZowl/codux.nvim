@@ -361,6 +361,7 @@ end
 do
   local footer = workspace_ui.footer_line(workspace_ui.manager_footer_segments({}, 200))
   assert_contains(footer, "tab search/list")
+  assert_contains(footer, "j/k move")
   assert_contains(footer, "m menu")
   assert_contains(footer, "h doctor")
   assert_contains(footer, "enter open")
@@ -402,6 +403,8 @@ do
 
   assert_equal(bound.m, "Open Codux Workspace Menu")
   assert_equal(bound.h, "Run Codux Doctor")
+  assert_equal(bound.j, "Next Codux Workspace")
+  assert_equal(bound.k, "Previous Codux Workspace")
   assert_equal(bound["<CR>"], "Open Codux Workspace")
   assert_equal(bound["<Tab>"], "Search/List Codux Workspaces")
   assert_nil(bound.s)
@@ -413,6 +416,7 @@ end
 do
   local current_win = 20
   local cursors = {}
+  local render_count = 0
   local controller = manager_mod.new({
     state = {
       workspace_manager_win = 10,
@@ -420,8 +424,11 @@ do
       workspace_manager_items = {
         { name = "Backend Debug" },
         { name = "Code Review" },
+        { name = "Architecture" },
       },
       workspace_manager_best_match_index = 2,
+      workspace_manager_search_confirmed = true,
+      workspace_manager_selected_index = 2,
     },
     is_valid_win = function(win)
       return win == 10 or win == 20
@@ -438,6 +445,10 @@ do
       return true
     end,
   })
+  function controller:render()
+    render_count = render_count + 1
+    return true
+  end
 
   assert_true(controller:toggle_search_list_focus())
   assert_equal(current_win, 10)
@@ -445,6 +456,21 @@ do
 
   assert_true(controller:toggle_search_list_focus())
   assert_equal(current_win, 20)
+
+  assert_true(controller:move_workspace_selection(1))
+  assert_equal(controller.state.workspace_manager_selected_index, 3)
+  assert_equal(cursors[10][1], 4)
+  assert_equal(controller:selected_item().name, "Architecture")
+
+  assert_true(controller:move_workspace_selection(1))
+  assert_equal(controller.state.workspace_manager_selected_index, 3)
+  assert_equal(cursors[10][1], 4)
+
+  assert_true(controller:move_workspace_selection(-1))
+  assert_equal(controller.state.workspace_manager_selected_index, 2)
+  assert_equal(cursors[10][1], 3)
+  assert_equal(controller:selected_item().name, "Code Review")
+  assert_equal(render_count, 3)
 end
 
 do

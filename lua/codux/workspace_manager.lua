@@ -407,19 +407,29 @@ function M:render()
   self.ui.set_lines(self.state.workspace_manager_buf, lines, { modifiable = true })
   pcall(vim.api.nvim_buf_clear_namespace, self.state.workspace_manager_buf, ns, 0, -1)
   pcall(vim.api.nvim_buf_add_highlight, self.state.workspace_manager_buf, ns, "WhichKeyDesc", 0, 0, -1)
-  if self.state.workspace_manager_best_match_index then
-    local best_row = 2 + self.state.workspace_manager_best_match_index - 1
+  local highlight_index = self.state.workspace_manager_search_confirmed and self.state.workspace_manager_selected_index
+    or self.state.workspace_manager_best_match_index
+  if highlight_index then
+    local highlight_row = 2 + highlight_index - 1
     local match_highlight = self.state.workspace_manager_search_confirmed and "IncSearch" or "Visual"
     local full_line_ok = pcall(
       vim.api.nvim_buf_set_extmark,
       self.state.workspace_manager_buf,
       ns,
-      best_row - 1,
+      highlight_row - 1,
       0,
       { line_hl_group = match_highlight }
     )
     if not full_line_ok then
-      pcall(vim.api.nvim_buf_add_highlight, self.state.workspace_manager_buf, ns, match_highlight, best_row - 1, 0, -1)
+      pcall(
+        vim.api.nvim_buf_add_highlight,
+        self.state.workspace_manager_buf,
+        ns,
+        match_highlight,
+        highlight_row - 1,
+        0,
+        -1
+      )
     end
   end
   if self.state.workspace_manager_focus_match and self.is_valid_win(self.state.workspace_manager_win) then
@@ -518,6 +528,28 @@ function M:focus_workspace_list()
   self.state.workspace_manager_focus_match = false
   self.set_window_cursor(self.state.workspace_manager_win, { self:workspace_list_focus_row(), 0 })
   return self.set_current_win(self.state.workspace_manager_win)
+end
+
+function M:move_workspace_selection(delta)
+  if not self.is_valid_win(self.state.workspace_manager_win) then
+    return false
+  end
+
+  local count = #self.state.workspace_manager_items
+  if count == 0 then
+    return false
+  end
+
+  local current_index = self.state.workspace_manager_selected_index
+    or self.state.workspace_manager_best_match_index
+    or self:workspace_list_focus_row() - 1
+  local next_index = math.max(1, math.min(count, (tonumber(current_index) or 1) + (tonumber(delta) or 0)))
+  self.state.workspace_manager_selected_index = next_index
+  self.state.workspace_manager_search_confirmed = true
+  self.state.workspace_manager_focus_match = false
+  self:render()
+  self.set_window_cursor(self.state.workspace_manager_win, { 2 + next_index - 1, 0 })
+  return true
 end
 
 function M:focus_search_input()
@@ -945,6 +977,16 @@ function M:bind_commands(target_bufnr)
   self.set_buffer_keymap(target_bufnr, "n", "h", function()
     return self.doctor()
   end, "Run Codux Doctor")
+  self.set_buffer_keymap(target_bufnr, "n", "j", function()
+    return self:move_workspace_selection(1)
+  end, "Next Codux Workspace", {
+    nowait = true,
+  })
+  self.set_buffer_keymap(target_bufnr, "n", "k", function()
+    return self:move_workspace_selection(-1)
+  end, "Previous Codux Workspace", {
+    nowait = true,
+  })
   self.set_buffer_keymap(target_bufnr, "n", "<CR>", function()
     return self:open_selected_workspace()
   end, "Open Codux Workspace")
