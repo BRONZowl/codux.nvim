@@ -1077,6 +1077,10 @@ function M.open_missions()
   return mission_controller:open_dashboard()
 end
 
+function M.open_mission_dashboard()
+  return M.open_missions()
+end
+
 function M.edit_mission_objective(name)
   return mission_controller:open_saved_objective_editor(name, workspace_manager_project_root())
 end
@@ -1332,6 +1336,10 @@ local function create_commands()
   vim.api.nvim_create_user_command("CoduxMissions", function()
     M.open_missions()
   end, { force = true, desc = "Show Codux missions" })
+
+  vim.api.nvim_create_user_command("CoduxMissionDashboard", function()
+    M.open_mission_dashboard()
+  end, { force = true, desc = "Show the Codux mission dashboard" })
 
   vim.api.nvim_create_user_command("CoduxMissionEdit", function(opts)
     M.edit_mission_objective(opts.args)

@@ -66,7 +66,9 @@ function M.new(opts)
     end,
     set_buffer_keymap = type(opts.set_buffer_keymap) == "function" and opts.set_buffer_keymap or ui.set_keymap,
     bind_close_keys = type(opts.bind_close_keys) == "function" and opts.bind_close_keys or ui.bind_close_keys,
-    namespace = opts.namespace or vim.api.nvim_create_namespace("codux.mission_control"),
+    namespace = opts.namespace
+      or (vim.api and vim.api.nvim_create_namespace and vim.api.nvim_create_namespace("codux.mission_control"))
+      or 0,
   }
 
   return setmetatable(controller, M)
@@ -131,7 +133,7 @@ function M:dashboard_config(line_count)
     border = "rounded",
     title = " codux mission dashboard ",
     title_pos = "center",
-    footer = " Enter open | e objective | d delete | r refresh | q close ",
+    footer = " Enter open | e objective | d delete | n new | r refresh | q close ",
     footer_pos = "center",
     width = width,
     height = height,
@@ -576,9 +578,15 @@ function M:open_dashboard()
     return self:open_dashboard()
   end
 
+  local function create_new_mission()
+    close_dashboard()
+    return self:open_prompt()
+  end
+
   self.set_buffer_keymap(bufnr, "n", "<CR>", open_selected, "Open Codux Mission Role")
   self.set_buffer_keymap(bufnr, "n", "e", edit_selected_mission, "Edit Codux Mission Objective")
   self.set_buffer_keymap(bufnr, "n", "d", delete_selected_mission, "Delete Codux Mission")
+  self.set_buffer_keymap(bufnr, "n", "n", create_new_mission, "Create Codux Mission")
   self.set_buffer_keymap(bufnr, "n", "r", refresh_dashboard, "Refresh Codux Missions")
   self.bind_close_keys(bufnr, close_dashboard, "Close Codux Missions", "n", { escape = true, q = true })
   return true
