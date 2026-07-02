@@ -2667,6 +2667,112 @@ end
 do
   with_workspace_prepare_env(function()
     local commands = {}
+    local windows = {}
+    local next_window_id = 1
+    local store = workspace_store({
+      instruction_file_path = function(_, root, safe_name)
+        return root .. "/.agents/codux/" .. safe_name .. ".md"
+      end,
+    })
+    local runtime = workspace_prepare_runtime({
+      store = store.store,
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          local lines = {}
+          for name, id in pairs(windows) do
+            table.insert(lines, id .. "\t" .. name)
+          end
+          table.sort(lines)
+          return table.concat(lines, "\n") .. (#lines > 0 and "\n" or ""), 0
+        end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-architect" then
+          return "", 1
+        end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-builder" then
+          return "", 1
+        end
+        if command == "git -C /repo worktree add -b dev/mission-architect /codux-worktrees/mission-architect main" then
+          return "", 0
+        end
+        if command == "git -C /repo worktree add -b dev/mission-builder /codux-worktrees/mission-builder main" then
+          return "", 0
+        end
+        if command:find("tmux new%-window", 1, false) == 1 then
+          local name = command:find("mission%-architect") and "mission-architect" or "mission-builder"
+          windows[name] = "@" .. tostring(next_window_id)
+          next_window_id = next_window_id + 1
+          return "", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        if command == "tmux list-panes -t @2 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local mission, error_message = mission_mod.plan("Mission", "Build it", {
+      roles = {
+        { name = "Architect", safe_name = "architect", focus = "Design it" },
+        { name = "Builder", safe_name = "builder", focus = "Build it" },
+      },
+    })
+    assert_nil(error_message)
+    assert_true(runtime:create_mission(mission))
+
+    local architect =
+      store.state_data().projects["/codux-worktrees/mission-architect"].workspaces["mission-architect"]
+    local builder = store.state_data().projects["/codux-worktrees/mission-builder"].workspaces["mission-builder"]
+    assert_equal(architect.permission_profile, "auto")
+    assert_equal(builder.permission_profile, "auto")
+    assert_equal(architect.mission_id, "mission:mission")
+    assert_equal(builder.mission_id, "mission:mission")
+    assert_equal(architect.mission_role, "Architect")
+    assert_equal(builder.mission_role, "Builder")
+    assert_equal(architect.mission_objective, "Build it")
+    assert_equal(builder.mission_objective, "Build it")
+    assert_contains(table.concat(commands, "\n"), "git -C /repo status --porcelain")
+    assert_contains(table.concat(commands, "\n"), "Start your Mission Control role now.")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local runtime = workspace_prepare_runtime({
+      store = workspace_store().store,
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local ok, error_message = runtime:preflight_mission({
+      roles = {
+        { workspace_name = "mission-role!" },
+        { workspace_name = "mission-role@" },
+      },
+    })
+    assert_false(ok)
+    assert_equal(error_message, "Duplicate mission workspace: mission-role")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
     local created = false
     local store = workspace_store()
     local runtime = workspace_prepare_runtime({
