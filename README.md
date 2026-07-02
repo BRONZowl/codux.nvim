@@ -115,6 +115,7 @@
   The create flow prompts for a name, opens the Vim-like instruction editor, then previews the instruction before launch.
   Workspace instructions are mirrored to <code>.agents/codux/&lt;workspace&gt;.md</code>, stored in Codux workspace state, and passed to Codex as session guidance; Codux does not create or edit <code>AGENTS.md</code>.
   New Codux workspaces are Git worktrees: Codux requires the current checkout to be clean, creates <code>../codux-worktrees/&lt;workspace&gt;</code> on branch <code>dev/&lt;workspace&gt;</code> from the current ref, and launches the workspace there.
+  If a branch named <code>dev</code> already exists, Codux uses the next available namespace such as <code>dev1/&lt;workspace&gt;</code>.
 </p>
 
 <p>
@@ -140,7 +141,7 @@
   Codux opens a <code>Codux workspace:</code> search field above the dashboard; type a fuzzy workspace name to filter the dashboard and preview the closest match.
   Press <code>&lt;Tab&gt;</code> to switch between the search field and workspace list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>j</code>/<code>k</code> to move, <code>&lt;CR&gt;</code> to open, <code>h</code> to run Doctor, and <code>m</code> to open the selected-workspace menu.
   The workspace menu exposes rename workspace, edit instructions, close workspace, close all workspaces, and delete workspace.
-  Deleting a workspace closes its tmux window, removes saved state and matching <code>.agents/codux/&lt;workspace&gt;.md</code> instruction file, removes the worktree, and deletes the <code>dev/&lt;workspace&gt;</code> branch.
+  Deleting a workspace closes its tmux window, removes saved state and matching <code>.agents/codux/&lt;workspace&gt;.md</code> instruction file, removes the worktree, and deletes the workspace branch.
   Press <code>&lt;Tab&gt;</code> from the dashboard to search again, or <code>&lt;C-q&gt;</code> to close the dashboard and search field.
   Statuses show <code>active</code> when Codex is working, <code>question</code> when plan mode is waiting on your answer, <code>idle</code> when the workspace is open, or <code>inactive</code> when it is not open.
   The mode column shows <code>exec</code>, <code>plan</code>, or <code>--</code> when the workspace mode is unknown or inactive.

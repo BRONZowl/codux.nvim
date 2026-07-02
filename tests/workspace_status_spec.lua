@@ -385,6 +385,9 @@ local function workspace_prepare_runtime(opts)
       if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
         return "/repo/.git\n", 0
       end
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev" then
+        return "", 1
+      end
       if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/review" then
         return "", 1
       end
@@ -907,6 +910,103 @@ do
   local matches = workspace_ui.fuzzy_workspace_filter(entries, "cod")
   assert_equal(#matches, 1)
   assert_equal(matches[1].name, "Code Review")
+end
+
+do
+  local runtime = runtime_mod.new({
+    get_config = default_workspace_config,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev" then
+        return "", 1
+      end
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/review" then
+        return "", 1
+      end
+      return "", 1
+    end,
+  })
+
+  local branch, error_message = runtime:resolve_worktree_branch("/repo", "review")
+  assert_nil(error_message)
+  assert_equal(branch, "dev/review")
+end
+
+do
+  local runtime = runtime_mod.new({
+    get_config = default_workspace_config,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev" then
+        return "", 0
+      end
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev1" then
+        return "", 1
+      end
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev1/review" then
+        return "", 1
+      end
+      return "", 1
+    end,
+  })
+
+  local branch, error_message = runtime:resolve_worktree_branch("/repo", "review")
+  assert_nil(error_message)
+  assert_equal(branch, "dev1/review")
+end
+
+do
+  local runtime = runtime_mod.new({
+    get_config = default_workspace_config,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev" then
+        return "", 0
+      end
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev1" then
+        return "", 0
+      end
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev2" then
+        return "", 1
+      end
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev2/review" then
+        return "", 1
+      end
+      return "", 1
+    end,
+  })
+
+  local branch, error_message = runtime:resolve_worktree_branch("/repo", "review")
+  assert_nil(error_message)
+  assert_equal(branch, "dev2/review")
+end
+
+do
+  local runtime = runtime_mod.new({
+    get_config = default_workspace_config,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev" then
+        return "", 1
+      end
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/review" then
+        return "", 0
+      end
+      return "", 1
+    end,
+  })
+
+  local branch, error_message = runtime:resolve_worktree_branch("/repo", "review")
+  assert_nil(branch)
+  assert_equal(error_message, "branch already exists: dev/review")
+end
+
+do
+  local runtime = runtime_mod.new({
+    get_config = default_workspace_config,
+  })
+
+  assert_equal(runtime:renamed_worktree_branch({ worktree_branch = "dev1/review" }, "search"), "dev1/search")
 end
 
 do
@@ -1994,6 +2094,58 @@ do
     assert_contains(table.concat(commands, "\n"), "git -C /repo status --porcelain")
     assert_contains(table.concat(commands, "\n"), "git -C /repo worktree add -b dev/review /codux-worktrees/review main")
     assert_equal(store.state_data().projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev/review")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local created = false
+    local store = workspace_store()
+    local runtime = workspace_prepare_runtime({
+      store = store.store,
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev" then
+          return "", 0
+        end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev1" then
+          return "", 1
+        end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev1/review" then
+          return "", 1
+        end
+        if command == "git -C /repo worktree add -b dev1/review /codux-worktrees/review main" then
+          return "", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          if created then
+            return "@1\treview\n", 0
+          end
+          return "", 0
+        end
+        if command:find("tmux new%-window", 1, false) == 1 then
+          created = true
+          return "", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local workspace, error_message = runtime:prepare_workspace("review", {
+      resolved_instruction = "review the backend",
+    })
+    assert_nil(error_message)
+    assert_equal(workspace.worktree_branch, "dev1/review")
+    assert_contains(table.concat(commands, "\n"), "git -C /repo worktree add -b dev1/review /codux-worktrees/review main")
+    assert_equal(store.state_data().projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev1/review")
   end)
 end
 

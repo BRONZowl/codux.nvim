@@ -355,6 +355,31 @@ function M:git_branch_exists(root, branch)
   return code == 0
 end
 
+function M:resolve_worktree_branch(root, safe_name)
+  local prefix = self:worktree_config().branch_prefix
+  local prefix_namespace = prefix:match("^(.-)/+$")
+  if not prefix_namespace or prefix_namespace == "" then
+    local branch = prefix .. tostring(safe_name or "")
+    if self:git_branch_exists(root, branch) then
+      return nil, "branch already exists: " .. branch
+    end
+    return branch, nil
+  end
+
+  for index = 0, 99 do
+    local namespace = index == 0 and prefix_namespace or (prefix_namespace .. tostring(index))
+    if not self:git_branch_exists(root, namespace) then
+      local branch = namespace .. "/" .. tostring(safe_name or "")
+      if self:git_branch_exists(root, branch) then
+        return nil, "branch already exists: " .. branch
+      end
+      return branch, nil
+    end
+  end
+
+  return nil, "no available branch namespace for " .. prefix_namespace .. "/"
+end
+
 function M:worktree_path(base_root, safe_name)
   local config = self:worktree_config()
   local directory = config.directory
@@ -366,6 +391,18 @@ end
 
 function M:worktree_branch(safe_name)
   return self:worktree_config().branch_prefix .. tostring(safe_name or "")
+end
+
+function M:renamed_worktree_branch(existing, safe_name)
+  existing = type(existing) == "table" and existing or {}
+  local branch = existing.worktree_branch
+  if type(branch) == "string" then
+    local namespace = branch:match("^(.*)/[^/]+$")
+    if namespace and namespace ~= "" then
+      return namespace .. "/" .. tostring(safe_name or "")
+    end
+  end
+  return self:worktree_branch(safe_name)
 end
 
 function M:target_in_worktree(path, target_type, base_root, worktree_root)
@@ -390,9 +427,14 @@ function M:target_in_worktree(path, target_type, base_root, worktree_root)
 end
 
 function M:create_git_worktree(base_root, worktree_path, branch, base_ref)
-  local _, code = self.system({ "git", "-C", base_root, "worktree", "add", "-b", branch, worktree_path, base_ref })
+  local output, code = self.system({ "git", "-C", base_root, "worktree", "add", "-b", branch, worktree_path, base_ref })
   if code ~= 0 then
-    return false, "Failed to create Git worktree " .. tostring(worktree_path)
+    local detail = trim(output)
+    local message = "Failed to create Git worktree " .. tostring(worktree_path)
+    if detail ~= "" then
+      message = message .. ": " .. detail
+    end
+    return false, message
   end
   return true, nil
 end
@@ -1501,7 +1543,7 @@ function M:rename_saved_workspace(entry, new_name)
   local new_branch = nil
   if existing.workspace_kind == "worktree" then
     new_worktree_path = normalize_absolute_path(normalize_absolute_path(old_worktree_path, ".."), safe_name_or_error)
-    new_branch = self:worktree_branch(safe_name_or_error)
+    new_branch = self:renamed_worktree_branch(existing, safe_name_or_error)
     if M.target_path_exists(new_worktree_path) then
       self.notify("worktree path already exists", vim.log.levels.ERROR)
       return false
@@ -1958,7 +2000,11 @@ function M:prepare_workspace(name, opts)
       return nil, clean_error
     end
 
-    created_worktree_branch = self:worktree_branch(safe_name_or_error)
+    local branch_error = nil
+    created_worktree_branch, branch_error = self:resolve_worktree_branch(base_root, safe_name_or_error)
+    if not created_worktree_branch then
+      return nil, branch_error
+    end
     created_worktree_path = self:worktree_path(base_root, safe_name_or_error)
     worktree_base = self:git_current_ref(base_root)
     git_common_dir = self:git_common_dir(base_root)
@@ -1968,10 +2014,6 @@ function M:prepare_workspace(name, opts)
     if M.target_path_exists(created_worktree_path) then
       return nil, "worktree path already exists"
     end
-    if self:git_branch_exists(base_root, created_worktree_branch) then
-      return nil, "branch already exists: " .. created_worktree_branch
-    end
-
     local worktree_ok, worktree_error =
       self:create_git_worktree(base_root, created_worktree_path, created_worktree_branch, worktree_base)
     if not worktree_ok then
