@@ -287,6 +287,12 @@ local function default_state_record(_, workspace)
     tmux_window = workspace.window_name,
     status = workspace.status,
     codex_status = workspace.codex_status,
+    git_branch = workspace.git_branch,
+    workspace_kind = workspace.workspace_kind,
+    git_common_dir = workspace.git_common_dir,
+    worktree_path = workspace.worktree_path,
+    worktree_branch = workspace.worktree_branch,
+    worktree_base = workspace.worktree_base,
   }
 end
 
@@ -323,7 +329,7 @@ local function with_workspace_prepare_env(callback)
     return path == "/repo" and 1 or 0
   end
   vim.fn.filereadable = function(path)
-    return path == "/repo/file.lua" and 1 or 0
+    return (path == "/repo/file.lua" or path == "/codux-worktrees/review/file.lua") and 1 or 0
   end
   vim.fn.getcwd = function()
     return "/repo"
@@ -346,6 +352,7 @@ end
 
 local function workspace_prepare_runtime(opts)
   opts = opts or {}
+  local custom_system = opts.system
   return runtime_mod.new({
     state = opts.state or {},
     get_config = opts.get_config or default_workspace_config,
@@ -361,7 +368,38 @@ local function workspace_prepare_runtime(opts)
     git_branch_for = opts.git_branch_for or function()
       return "main"
     end,
-    system = opts.system or function()
+    system = function(args)
+      local command = table.concat(args, " ")
+      if custom_system then
+        local output, code = custom_system(args)
+        if code == 0 or output ~= "" or command:find("^tmux") then
+          return output, code
+        end
+      end
+      if command == "git -C /repo status --porcelain" then
+        return "", 0
+      end
+      if command == "git -C /repo branch --show-current" then
+        return "main\n", 0
+      end
+      if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
+        return "/repo/.git\n", 0
+      end
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/review" then
+        return "", 1
+      end
+      if command == "git -C /repo worktree add -b dev/review /codux-worktrees/review main" then
+        return "", 0
+      end
+      if command == "git -C /repo worktree remove --force /codux-worktrees/review" then
+        return "", 0
+      end
+      if command == "git -C /repo branch -D dev/review" then
+        return "", 0
+      end
+      if command == "git -C /codux-worktrees/review merge-base --is-ancestor dev/review main" then
+        return "", 1
+      end
       return "", 1
     end,
     store = opts.store or {},
@@ -847,6 +885,15 @@ do
 end
 
 do
+  local header = workspace_ui.manager_header_line(120)
+  assert_contains(header, "workspace")
+  assert_contains(header, "status")
+  assert_contains(header, "profile")
+  assert_contains(header, "age")
+  assert_equal(header:find("branch", 1, true), nil)
+end
+
+do
   local entries = workspace_ui.sort_entries({
     { name = "Backend Debug", status = "active", last_activity_at = "2026-06-30T12:00:00Z" },
     { name = "Code Review", status = "question", last_activity_at = "2026-06-29T12:00:00Z" },
@@ -860,6 +907,150 @@ do
   local matches = workspace_ui.fuzzy_workspace_filter(entries, "cod")
   assert_equal(#matches, 1)
   assert_equal(matches[1].name, "Code Review")
+end
+
+do
+  local state_data = {
+    projects = {
+      ["/repo"] = {
+        workspaces = {
+          docs = {
+            name = "docs",
+            safe_name = "docs",
+            project_root = "/repo",
+            tmux_window = "docs",
+          },
+        },
+      },
+      ["/codux-worktrees/review"] = {
+        workspaces = {
+          review = {
+            name = "review",
+            safe_name = "review",
+            project_root = "/codux-worktrees/review",
+            tmux_window = "review",
+            workspace_kind = "worktree",
+            git_common_dir = "/repo/.git",
+            worktree_path = "/codux-worktrees/review",
+            worktree_branch = "dev/review",
+            worktree_base = "main",
+          },
+        },
+      },
+    },
+  }
+  local runtime = runtime_mod.new({
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      instruction_file_records = function()
+        return {}
+      end,
+    },
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
+        return "/repo/.git\n", 0
+      end
+      return "", 1
+    end,
+  })
+
+  local entries = runtime:entries_for_project("/repo")
+  local by_name = {}
+  for _, entry in ipairs(entries) do
+    by_name[entry.name] = entry
+  end
+  assert_equal(by_name.docs.project_root, "/repo")
+  assert_equal(by_name.review.project_root, "/codux-worktrees/review")
+  assert_equal(by_name.review.worktree_branch, "dev/review")
+end
+
+do
+  local old_filereadable = vim.fn.filereadable
+  local old_confirm = vim.fn.confirm
+  vim.fn.filereadable = function()
+    return 1
+  end
+  vim.fn.confirm = function()
+    return 1
+  end
+  local state_data = workspace_state({}, {})
+  state_data.projects = {
+    ["/codux-worktrees/review"] = {
+      workspaces = {
+        review = review_workspace_record({
+          project_root = "/codux-worktrees/review",
+          workspace_kind = "worktree",
+          git_common_dir = "/repo/.git",
+          worktree_path = "/codux-worktrees/review",
+          worktree_branch = "dev/review",
+          worktree_base = "main",
+        }),
+      },
+    },
+  }
+  local removed_worktree = false
+  local deleted_branch = false
+  local runtime = runtime_mod.new({
+    state = {},
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+      project_state = project_state,
+      instruction_file_records = function()
+        return {}
+      end,
+      instruction_file_path = function()
+        return "/codux-worktrees/review/.agents/codux/review.md"
+      end,
+      delete_instruction_file = function()
+        return true, nil
+      end,
+    },
+    notify = function() end,
+    render_workspace_manager = function() end,
+    close_workspace_manager = function() end,
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
+        return "/repo/.git\n", 0
+      end
+      if command == "git -C /codux-worktrees/review merge-base --is-ancestor dev/review main" then
+        return "", 0
+      end
+      if command == "git -C /codux-worktrees/review worktree remove --force /codux-worktrees/review" then
+        removed_worktree = true
+        return "", 0
+      end
+      if command == "git -C /codux-worktrees/review branch -D dev/review" then
+        deleted_branch = true
+        return "", 0
+      end
+      return "", 1
+    end,
+  })
+
+  local ok, err = pcall(function()
+    assert_true(runtime:prompt_merged_workspaces("/repo"))
+    assert_true(removed_worktree)
+    assert_true(deleted_branch)
+    assert_nil(state_data.projects["/codux-worktrees/review"].workspaces.review)
+  end)
+  vim.fn.filereadable = old_filereadable
+  vim.fn.confirm = old_confirm
+  if not ok then
+    error(err, 0)
+  end
 end
 
 do
@@ -1762,6 +1953,79 @@ end
 
 do
   with_workspace_prepare_env(function()
+    local commands = {}
+    local created = false
+    local store = workspace_store()
+    local runtime = workspace_prepare_runtime({
+      store = store.store,
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          if created then
+            return "@1\treview\n", 0
+          end
+          return "", 0
+        end
+        if command:find("tmux new%-window", 1, false) == 1 then
+          created = true
+          return "", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local workspace, error_message = runtime:prepare_workspace("review", {
+      resolved_instruction = "review the backend",
+    })
+    assert_nil(error_message)
+    assert_equal(workspace.project_root, "/codux-worktrees/review")
+    assert_equal(workspace.workspace_kind, "worktree")
+    assert_equal(workspace.worktree_branch, "dev/review")
+    assert_equal(workspace.worktree_base, "main")
+    assert_equal(workspace.git_common_dir, "/repo/.git")
+    assert_equal(workspace.target_path, "/codux-worktrees/review/file.lua")
+    assert_contains(table.concat(commands, "\n"), "git -C /repo status --porcelain")
+    assert_contains(table.concat(commands, "\n"), "git -C /repo worktree add -b dev/review /codux-worktrees/review main")
+    assert_equal(store.state_data().projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev/review")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local runtime = workspace_prepare_runtime({
+      store = workspace_store().store,
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "git -C /repo status --porcelain" then
+          return " M file.lua\n", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local workspace, error_message = runtime:prepare_workspace("review", {
+      resolved_instruction = "review the backend",
+    })
+    assert_nil(workspace)
+    assert_equal(error_message, "current branch must be clean before creating a Codux workspace")
+    assert_equal(table.concat(commands, "\n"):find("worktree add", 1, true), nil)
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
     local wrote_instruction = false
     local store = workspace_store({
       read_instruction_file = function()
@@ -1803,6 +2067,8 @@ do
     local created = false
     local killed = false
     local deleted_instruction = false
+    local removed_worktree = false
+    local deleted_branch = false
     local store = workspace_store({
       write_state = function()
         return false, "state write failed"
@@ -1839,6 +2105,14 @@ do
           killed = true
           return "", 0
         end
+        if command == "git -C /repo worktree remove --force /codux-worktrees/review" then
+          removed_worktree = true
+          return "", 0
+        end
+        if command == "git -C /repo branch -D dev/review" then
+          deleted_branch = true
+          return "", 0
+        end
         return "", 1
       end,
     })
@@ -1850,6 +2124,8 @@ do
     assert_equal(error_message, "state write failed")
     assert_true(killed, "new tmux window should be cleaned up when state write fails")
     assert_true(deleted_instruction, "new instruction file should be cleaned up when state write fails")
+    assert_true(removed_worktree, "new git worktree should be cleaned up when state write fails")
+    assert_true(deleted_branch, "new git branch should be cleaned up when state write fails")
   end)
 end
 

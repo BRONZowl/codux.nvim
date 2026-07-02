@@ -114,7 +114,7 @@
   Use <code>:CoduxWorkspaceCreate</code> or <code>&lt;leader&gt;zw</code> inside tmux to create a guided Codex workspace.
   The create flow prompts for a name, opens the Vim-like instruction editor, then previews the instruction before launch.
   Workspace instructions are mirrored to <code>.agents/codux/&lt;workspace&gt;.md</code>, stored in Codux workspace state, and passed to Codex as session guidance; Codux does not create or edit <code>AGENTS.md</code>.
-  New workspace windows launch in the current file or explorer target's project root, so the workspace follows the same worktree and branch as the code you are working on.
+  New Codux workspaces are Git worktrees: Codux requires the current checkout to be clean, creates <code>../codux-worktrees/&lt;workspace&gt;</code> on branch <code>dev/&lt;workspace&gt;</code> from the current ref, and launches the workspace there.
 </p>
 
 <p>
@@ -122,6 +122,7 @@
   Reopened saved workspaces keep their stored profile.
   Reopened saved workspaces resume the stored Codex session id when available, so the workspace returns to the same Codex conversation instead of starting a new one.
   Workspace windows use the requested workspace name for the tmux window.
+  The workspace name is the worktree name.
   New guided workspaces open the Codux popup with the workspace guidance loaded and wait for your first task.
 </p>
 
@@ -131,6 +132,7 @@
   Codux warns when <code>.agents/codux/</code> is not ignored by Git in the current project; run <code>:CoduxWorkspaceIgnore</code> once to add the ignore rule to that project's <code>.gitignore</code>.
   If workspace state is missing but an instruction file remains, the workspace dashboard can recover that workspace entry from the file.
   Creating a workspace with an existing name shows <code>workspace already exists</code>.
+  When a workspace branch has been merged into its recorded base ref, the dashboard prompts to delete the workspace, worktree, instruction file, saved state, and branch.
 </p>
 
 <p>
@@ -138,11 +140,11 @@
   Codux opens a <code>Codux workspace:</code> search field above the dashboard; type a fuzzy workspace name to filter the dashboard and preview the closest match.
   Press <code>&lt;Tab&gt;</code> to switch between the search field and workspace list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>j</code>/<code>k</code> to move, <code>&lt;CR&gt;</code> to open, <code>h</code> to run Doctor, and <code>m</code> to open the selected-workspace menu.
   The workspace menu exposes rename workspace, edit instructions, close workspace, close all workspaces, and delete workspace.
-  Deleting a workspace removes its saved state and matching <code>.agents/codux/&lt;workspace&gt;.md</code> instruction file.
+  Deleting a workspace closes its tmux window, removes saved state and matching <code>.agents/codux/&lt;workspace&gt;.md</code> instruction file, removes the worktree, and deletes the <code>dev/&lt;workspace&gt;</code> branch.
   Press <code>&lt;Tab&gt;</code> from the dashboard to search again, or <code>&lt;C-q&gt;</code> to close the dashboard and search field.
   Statuses show <code>active</code> when Codex is working, <code>question</code> when plan mode is waiting on your answer, <code>idle</code> when the workspace is open, or <code>inactive</code> when it is not open.
   The mode column shows <code>exec</code>, <code>plan</code>, or <code>--</code> when the workspace mode is unknown or inactive.
-  The dashboard uses question/active/idle/inactive status order, then recent activity, and shows each workspace profile, branch, session age, and target.
+  The dashboard uses question/active/idle/inactive status order, then recent activity, and shows each workspace profile, session age, and target.
   The target column updates as each workspace moves between files or supported file explorer targets.
 </p>
 

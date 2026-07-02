@@ -7,7 +7,9 @@ Workspace dashboard ergonomics.
 codux.nvim v0.7.0 turns the workspace dashboard into the central control surface for persistent Codex workspaces inside Neovim.
 
 - Simplified the workspace dashboard around fuzzy search with one fixed question/active/idle/inactive, recent-activity order.
-- Added workspace profile, branch, session age, and target columns to the dashboard.
+- Made new Codux workspaces Git worktrees on `dev/<workspace>` branches under `../codux-worktrees/`, created only when the current checkout is clean.
+- Added merged-workspace cleanup prompts that remove the saved workspace, worktree, instruction file, and branch after confirmation.
+- Added workspace profile, session age, and target columns to the dashboard.
 - Added an `m` dashboard workspace menu for rename workspace, edit instructions, close workspace, close all workspaces, and delete workspace, with `h` running Doctor directly from the dashboard.
 - Added `j`/`k` movement for the selected dashboard workspace after confirming a fuzzy-search result.
 - Warn when project-local workspace instruction files are not ignored by Git, and added `:CoduxWorkspaceIgnore` to add the ignore rule explicitly.

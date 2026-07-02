@@ -17,6 +17,40 @@ local function strip_trailing_slashes(value)
   return value
 end
 
+local function path_join(...)
+  local parts = {}
+  for _, value in ipairs({ ... }) do
+    value = tostring(value or "")
+    if value ~= "" then
+      table.insert(parts, value)
+    end
+  end
+  return table.concat(parts, "/"):gsub("/+", "/")
+end
+
+local function normalize_absolute_path(base, path)
+  path = tostring(path or "")
+  if path == "" then
+    return nil
+  end
+  if path:sub(1, 1) ~= "/" then
+    path = path_join(base, path)
+  end
+
+  local stack = {}
+  for part in path:gmatch("[^/]+") do
+    if part == ".." then
+      if #stack > 0 then
+        table.remove(stack)
+      end
+    elseif part ~= "." and part ~= "" then
+      table.insert(stack, part)
+    end
+  end
+
+  return "/" .. table.concat(stack, "/")
+end
+
 local function normalize_relative_directory(value)
   value = trim(value)
   value = value:gsub("^%./+", "")
@@ -219,6 +253,28 @@ function M:workspaces_enabled()
   return self:workspace_config().enabled ~= false
 end
 
+function M:worktree_config()
+  local config = self:workspace_config().worktree
+  local defaults = (self.defaults.workspaces or {}).worktree or {}
+  if type(config) ~= "table" then
+    config = defaults
+  end
+
+  local directory = type(config.directory) == "string" and trim(config.directory) or ""
+  if directory == "" then
+    directory = defaults.directory or "../codux-worktrees"
+  end
+  local branch_prefix = type(config.branch_prefix) == "string" and trim(config.branch_prefix) or ""
+  if branch_prefix == "" then
+    branch_prefix = defaults.branch_prefix or "dev/"
+  end
+
+  return {
+    directory = directory,
+    branch_prefix = branch_prefix,
+  }
+end
+
 function M:tmux_cmd()
   local value = self:workspace_config().tmux_cmd
   if type(value) == "string" and trim(value) ~= "" then
@@ -241,6 +297,176 @@ end
 
 function M:tmux_system(args)
   return self.system(prepend_command(self:tmux_cmd(), args))
+end
+
+function M:git_output(root, ...)
+  local args = { "git", "-C", root }
+  for _, arg in ipairs({ ... }) do
+    table.insert(args, arg)
+  end
+  local output, code = self.system(args)
+  if code ~= 0 then
+    return nil, code
+  end
+  return trim(output), code
+end
+
+function M:git_common_dir(root)
+  local output = self:git_output(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+  if output and output ~= "" then
+    return strip_trailing_slashes(output)
+  end
+
+  output = self:git_output(root, "rev-parse", "--git-common-dir")
+  if output and output ~= "" then
+    return strip_trailing_slashes(normalize_absolute_path(root, output))
+  end
+
+  return nil
+end
+
+function M:git_current_ref(root)
+  local branch = self:git_output(root, "branch", "--show-current")
+  if branch and branch ~= "" then
+    return branch
+  end
+
+  local head = self:git_output(root, "rev-parse", "--short", "HEAD")
+  if head and head ~= "" then
+    return head
+  end
+
+  return "HEAD"
+end
+
+function M:git_checkout_clean(root)
+  local output, code = self.system({ "git", "-C", root, "status", "--porcelain" })
+  if code ~= 0 then
+    return false, "not inside a Git repository"
+  end
+  if trim(output) ~= "" then
+    return false, "current branch must be clean before creating a Codux workspace"
+  end
+  return true, nil
+end
+
+function M:git_branch_exists(root, branch)
+  local _, code = self.system({ "git", "-C", root, "show-ref", "--verify", "--quiet", "refs/heads/" .. tostring(branch or "") })
+  return code == 0
+end
+
+function M:worktree_path(base_root, safe_name)
+  local config = self:worktree_config()
+  local directory = config.directory
+  if directory:sub(1, 1) ~= "/" then
+    directory = normalize_absolute_path(base_root, directory)
+  end
+  return normalize_absolute_path(directory, safe_name)
+end
+
+function M:worktree_branch(safe_name)
+  return self:worktree_config().branch_prefix .. tostring(safe_name or "")
+end
+
+function M:target_in_worktree(path, target_type, base_root, worktree_root)
+  if type(path) ~= "string" or path == "" then
+    return worktree_root, "directory"
+  end
+
+  local normalized_base = strip_trailing_slashes(base_root)
+  local normalized_path = strip_trailing_slashes(path)
+  if starts_with_path(normalized_path, normalized_base) then
+    local suffix = normalized_path:sub(#normalized_base + 1)
+    if suffix:sub(1, 1) == "/" then
+      suffix = suffix:sub(2)
+    end
+    if suffix == "" then
+      return worktree_root, "directory"
+    end
+    return normalize_absolute_path(worktree_root, suffix), target_type == "directory" and "directory" or "file"
+  end
+
+  return worktree_root, "directory"
+end
+
+function M:create_git_worktree(base_root, worktree_path, branch, base_ref)
+  local _, code = self.system({ "git", "-C", base_root, "worktree", "add", "-b", branch, worktree_path, base_ref })
+  if code ~= 0 then
+    return false, "Failed to create Git worktree " .. tostring(worktree_path)
+  end
+  return true, nil
+end
+
+function M:remove_git_worktree(base_root, worktree_path)
+  local _, code = self.system({ "git", "-C", base_root, "worktree", "remove", "--force", worktree_path })
+  return code == 0
+end
+
+function M:delete_git_branch(base_root, branch)
+  local _, code = self.system({ "git", "-C", base_root, "branch", "-D", branch })
+  return code == 0
+end
+
+function M:move_git_worktree(base_root, old_path, new_path)
+  local _, code = self.system({ "git", "-C", base_root, "worktree", "move", old_path, new_path })
+  return code == 0
+end
+
+function M:rename_git_branch(base_root, old_branch, new_branch)
+  local _, code = self.system({ "git", "-C", base_root, "branch", "-m", old_branch, new_branch })
+  return code == 0
+end
+
+function M:workspace_branch_merged(entry)
+  entry = type(entry) == "table" and entry or {}
+  if entry.workspace_kind ~= "worktree" then
+    return false
+  end
+  local branch = entry.worktree_branch
+  local base = entry.worktree_base
+  local root = entry.project_root or entry.worktree_path
+  if type(branch) ~= "string" or branch == "" or type(base) ~= "string" or base == "" or type(root) ~= "string" then
+    return false
+  end
+  local _, code = self.system({ "git", "-C", root, "merge-base", "--is-ancestor", branch, base })
+  return code == 0
+end
+
+function M:prompt_merged_workspaces(root)
+  local entries, error_message = self:entries_for_project(root)
+  if error_message then
+    return false
+  end
+
+  self.state.merged_workspace_cleanup_declined = type(self.state.merged_workspace_cleanup_declined) == "table"
+      and self.state.merged_workspace_cleanup_declined
+    or {}
+
+  for _, entry in ipairs(entries) do
+    local key = tostring(entry.project_root or "") .. "\0" .. tostring(entry.safe_name or "")
+    if not self.state.merged_workspace_cleanup_declined[key] and self:workspace_branch_merged(entry) then
+      local choice = vim.fn.confirm(
+        "Codux workspace " .. tostring(entry.name or entry.safe_name) .. " has been merged. Delete workspace/worktree?",
+        "&Yes\n&No",
+        2
+      )
+      if choice == 1 then
+        return self:delete_saved_workspace(entry)
+      end
+      self.state.merged_workspace_cleanup_declined[key] = true
+    end
+  end
+
+  return true
+end
+
+function M:cleanup_created_worktree(base_root, worktree_path, branch)
+  if type(worktree_path) == "string" and worktree_path ~= "" then
+    self:remove_git_worktree(base_root, worktree_path)
+  end
+  if type(branch) == "string" and branch ~= "" then
+    self:delete_git_branch(base_root, branch)
+  end
 end
 
 function M:workspace_instruction_relative_dir(root)
@@ -933,41 +1159,60 @@ function M:entries_for_project(root)
     return {}, state_error
   end
 
-  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
-  local workspaces = type(project) == "table" and project.workspaces or nil
+  local current_common_dir = self:git_common_dir(root)
   local session = self:current_tmux_session()
   local entries = {}
   local seen = {}
 
-  if type(workspaces) == "table" then
-    for safe_name, record in pairs(workspaces) do
-      if type(record) == "table" then
-        local window_name = record.tmux_window or record.window_name or safe_name
-        local window_id = session and self:tmux_window_id(session, window_name) or nil
-        local status = self:dashboard_workspace_status(record, window_id)
-        local codex_mode = not inactive_like_status(status) and self:normalize_codex_mode(record.codex_mode) or nil
-        seen[record.safe_name or safe_name] = true
-        table.insert(entries, {
-          name = record.name or safe_name,
-          safe_name = record.safe_name or safe_name,
-          project_root = record.project_root or root,
-          target_path = record.target_path,
-          target_type = record.target_type,
-          git_branch = record.git_branch or "",
-          window_name = window_name,
-          tmux_target = M.tmux_target(session, window_name) or record.tmux_target,
-          codex_status = record.codex_status or "idle",
-          codex_mode = codex_mode,
-          permission_profile = record.permission_profile or "default",
-          codex_session_captured_at = record.codex_session_captured_at,
-          created_at = record.created_at,
-          last_opened_at = record.last_opened_at,
-          last_activity_at = record.last_activity_at,
-          last_target_at = record.last_target_at,
-          last_reconciled_at = record.last_reconciled_at,
-          window_id = window_id,
-          status = status,
-        })
+  if type(state_data.projects) == "table" then
+    for project_root, project in pairs(state_data.projects) do
+      local workspaces = type(project) == "table" and project.workspaces or nil
+      if type(workspaces) == "table" then
+        for safe_name, record in pairs(workspaces) do
+          if type(record) == "table" then
+            local record_root = record.project_root or project_root
+            local include = record_root == root
+              or (
+                current_common_dir ~= nil
+                and record.workspace_kind == "worktree"
+                and record.git_common_dir == current_common_dir
+              )
+            if include then
+              local entry_safe_name = record.safe_name or safe_name
+              local window_name = record.tmux_window or record.window_name or entry_safe_name
+              local window_id = session and self:tmux_window_id(session, window_name) or nil
+              local status = self:dashboard_workspace_status(record, window_id)
+              local codex_mode = not inactive_like_status(status) and self:normalize_codex_mode(record.codex_mode) or nil
+              seen[tostring(record_root) .. "\0" .. tostring(entry_safe_name)] = true
+              table.insert(entries, {
+                name = record.name or entry_safe_name,
+                safe_name = entry_safe_name,
+                project_root = record_root,
+                target_path = record.target_path,
+                target_type = record.target_type,
+                git_branch = record.git_branch or "",
+                workspace_kind = record.workspace_kind,
+                git_common_dir = record.git_common_dir,
+                worktree_path = record.worktree_path,
+                worktree_branch = record.worktree_branch,
+                worktree_base = record.worktree_base,
+                window_name = window_name,
+                tmux_target = M.tmux_target(session, window_name) or record.tmux_target,
+                codex_status = record.codex_status or "idle",
+                codex_mode = codex_mode,
+                permission_profile = record.permission_profile or "default",
+                codex_session_captured_at = record.codex_session_captured_at,
+                created_at = record.created_at,
+                last_opened_at = record.last_opened_at,
+                last_activity_at = record.last_activity_at,
+                last_target_at = record.last_target_at,
+                last_reconciled_at = record.last_reconciled_at,
+                window_id = window_id,
+                status = status,
+              })
+            end
+          end
+        end
       end
     end
   end
@@ -975,7 +1220,7 @@ function M:entries_for_project(root)
   for safe_name, record in pairs(self:instruction_file_records(root)) do
     if type(record) == "table" then
       local entry_safe_name = record.safe_name or safe_name
-      if not seen[entry_safe_name] then
+      if not seen[tostring(root) .. "\0" .. tostring(entry_safe_name)] then
         local window_name = M.workspace_window_name(entry_safe_name)
         local window_id = session and self:tmux_window_id(session, window_name) or nil
         local status = self:dashboard_workspace_status({ status = "inactive", codex_status = "idle" }, window_id)
@@ -1107,28 +1352,14 @@ function M:entry_for_name(root, name)
 end
 
 function M:names_for_project(root)
-  local state_data, state_error = self:read_state()
-  if state_error then
+  local entries, error_message = self:entries_for_project(root)
+  if error_message then
     return {}
   end
 
-  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
-  local workspaces = type(project) == "table" and project.workspaces or nil
   local names = {}
-  local seen = {}
-
-  if type(workspaces) == "table" then
-    for safe_name, record in pairs(workspaces) do
-      if type(record) == "table" then
-        seen[record.safe_name or safe_name] = true
-        table.insert(names, record.name or safe_name)
-      end
-    end
-  end
-  for safe_name, record in pairs(self:instruction_file_records(root)) do
-    if type(record) == "table" and not seen[record.safe_name or safe_name] then
-      table.insert(names, record.name or safe_name)
-    end
+  for _, entry in ipairs(entries) do
+    table.insert(names, entry.name or entry.safe_name)
   end
   table.sort(names, function(left, right)
     return tostring(left):lower() < tostring(right):lower()
@@ -1243,7 +1474,7 @@ function M:rename_saved_workspace(entry, new_name)
     return false
   end
 
-  local root = self.state.workspace_manager_project_root or entry.project_root
+  local root = entry.project_root or self.state.workspace_manager_project_root
   local state_data, state_error = self:read_state()
   if state_error then
     self.notify(state_error, vim.log.levels.ERROR)
@@ -1262,7 +1493,46 @@ function M:rename_saved_workspace(entry, new_name)
   end
 
   local new_window_name = M.workspace_window_name(safe_name_or_error)
+  local worktree_renamed = false
+  local branch_renamed = false
+  local old_worktree_path = existing.worktree_path or existing.project_root or root
+  local new_worktree_path = nil
+  local old_branch = existing.worktree_branch
+  local new_branch = nil
+  if existing.workspace_kind == "worktree" then
+    new_worktree_path = normalize_absolute_path(normalize_absolute_path(old_worktree_path, ".."), safe_name_or_error)
+    new_branch = self:worktree_branch(safe_name_or_error)
+    if M.target_path_exists(new_worktree_path) then
+      self.notify("worktree path already exists", vim.log.levels.ERROR)
+      return false
+    end
+    if old_branch ~= new_branch and self:git_branch_exists(root, new_branch) then
+      self.notify("branch already exists: " .. new_branch, vim.log.levels.ERROR)
+      return false
+    end
+    if not self:move_git_worktree(root, old_worktree_path, new_worktree_path) then
+      self.notify("Failed to move Git worktree " .. tostring(old_worktree_path), vim.log.levels.ERROR)
+      return false
+    end
+    worktree_renamed = true
+    if old_branch ~= new_branch then
+      if not self:rename_git_branch(new_worktree_path, old_branch, new_branch) then
+        self:move_git_worktree(new_worktree_path, new_worktree_path, old_worktree_path)
+        self.notify("Failed to rename Git branch " .. tostring(old_branch), vim.log.levels.ERROR)
+        return false
+      end
+      branch_renamed = true
+    end
+  end
   if not self:rename_tmux_window(entry.window_id, new_window_name) then
+    if existing.workspace_kind == "worktree" then
+      if branch_renamed then
+        self:rename_git_branch(new_worktree_path, new_branch, old_branch)
+      end
+      if worktree_renamed then
+        self:move_git_worktree(new_worktree_path or root, new_worktree_path, old_worktree_path)
+      end
+    end
     self.notify("Failed to rename tmux window " .. tostring(entry.window_name), vim.log.levels.ERROR)
     return false
   end
@@ -1270,11 +1540,29 @@ function M:rename_saved_workspace(entry, new_name)
   project.workspaces[entry.safe_name] = nil
   existing.name = display_name
   existing.safe_name = safe_name_or_error
+  if existing.workspace_kind == "worktree" then
+    existing.project_root = new_worktree_path
+    existing.worktree_path = new_worktree_path
+    existing.worktree_branch = new_branch
+    existing.git_branch = new_branch
+    if type(existing.target_path) == "string" and starts_with_path(existing.target_path, old_worktree_path) then
+      existing.target_path = normalize_absolute_path(new_worktree_path, existing.target_path:sub(#strip_trailing_slashes(old_worktree_path) + 2))
+    end
+  end
   existing.tmux_window = new_window_name
   existing.tmux_target = entry.window_id and M.tmux_target(self:current_tmux_session(), new_window_name) or nil
   existing.status = self:dashboard_workspace_status(existing, entry.window_id)
   existing.last_opened_at = self:timestamp()
-  project.workspaces[safe_name_or_error] = existing
+  if existing.workspace_kind == "worktree" then
+    if next(project.workspaces) == nil and vim.empty_dict then
+      project.workspaces = vim.empty_dict()
+    end
+    local next_project = self:project_state(state_data, new_worktree_path)
+    next_project.workspaces[safe_name_or_error] = existing
+    next_project.updated_at = self:timestamp()
+  else
+    project.workspaces[safe_name_or_error] = existing
+  end
   project.updated_at = self:timestamp()
 
   local write_ok, write_error = self:write_state(state_data)
@@ -1283,8 +1571,9 @@ function M:rename_saved_workspace(entry, new_name)
     return false
   end
 
-  local old_instruction_path = self:instruction_file_path(root, entry.safe_name)
-  local new_instruction_path = self:instruction_file_path(root, safe_name_or_error)
+  local instruction_root = existing.workspace_kind == "worktree" and new_worktree_path or root
+  local old_instruction_path = self:instruction_file_path(instruction_root, entry.safe_name)
+  local new_instruction_path = self:instruction_file_path(existing.workspace_kind == "worktree" and new_worktree_path or root, safe_name_or_error)
   if
     old_instruction_path
     and new_instruction_path
@@ -1320,6 +1609,48 @@ function M:delete_saved_workspace(entry)
     self.notify("workspace not found", vim.log.levels.ERROR)
     self.render_workspace_manager()
     return false
+  end
+
+  if type(existing) == "table" and existing.workspace_kind == "worktree" then
+    local worktree_path = existing.worktree_path or existing.project_root or root
+    local worktree_branch = existing.worktree_branch
+    if entry.window_id and not self:kill_tmux_window(entry.window_id) then
+      self.notify("Failed to close tmux window " .. tostring(entry.window_name), vim.log.levels.ERROR)
+      return false
+    end
+
+    local delete_instruction_ok, delete_instruction_error = self:delete_instruction_file(root, entry.safe_name)
+    if not delete_instruction_ok then
+      self.notify(delete_instruction_error, vim.log.levels.ERROR)
+      self.render_workspace_manager()
+      return false
+    end
+
+    if not self:remove_git_worktree(root, worktree_path) then
+      self.notify("Failed to remove Git worktree " .. tostring(worktree_path), vim.log.levels.ERROR)
+      self.render_workspace_manager()
+      return false
+    end
+    if type(worktree_branch) == "string" and worktree_branch ~= "" and not self:delete_git_branch(root, worktree_branch) then
+      self.notify("Failed to delete Git branch " .. tostring(worktree_branch), vim.log.levels.ERROR)
+      self.render_workspace_manager()
+      return false
+    end
+
+    project.workspaces[entry.safe_name] = nil
+    if next(project.workspaces) == nil and vim.empty_dict then
+      project.workspaces = vim.empty_dict()
+    end
+    project.updated_at = self:timestamp()
+    local write_ok, write_error = self:write_state(state_data)
+    if not write_ok then
+      self.notify(write_error, vim.log.levels.ERROR)
+      return false
+    end
+
+    self.notify("Deleted Codux workspace " .. tostring(entry.name or entry.safe_name))
+    self.close_workspace_manager()
+    return true
   end
 
   local previous_project = vim.deepcopy(project)
@@ -1496,6 +1827,11 @@ function M:bootstrap_lua(workspace)
   local name = workspace.name or workspace.safe_name or ""
   local safe_name = workspace.safe_name or ""
   local branch = workspace.git_branch or ""
+  local workspace_kind = workspace.workspace_kind or ""
+  local git_common_dir = workspace.git_common_dir or ""
+  local worktree_path = workspace.worktree_path or ""
+  local worktree_branch = workspace.worktree_branch or ""
+  local worktree_base = workspace.worktree_base or ""
   local window_name = workspace.window_name or ""
   local custom_instruction = workspace.custom_instruction or ""
   local resolved_instruction = workspace.resolved_instruction or ""
@@ -1515,7 +1851,7 @@ function M:bootstrap_lua(workspace)
     "local profile=" .. self:lua_string(profile),
     "local prompt=" .. self:lua_string(initial_prompt),
     "local show_codux=" .. tostring(show_codux),
-    "local workspace={name=" .. self:lua_string(name) .. ",safe_name=" .. self:lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. self:lua_string(branch) .. ",window_name=" .. self:lua_string(window_name) .. ",custom_instruction=" .. self:lua_string(custom_instruction) .. ",resolved_instruction=" .. self:lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. self:lua_string(codex_status) .. ",status=" .. self:lua_string(status) .. ",codex_session_id=" .. self:lua_string(codex_session_id) .. ",codex_session_path=" .. self:lua_string(codex_session_path) .. ",codex_session_captured_at=" .. self:lua_string(codex_session_captured_at) .. ",open_visible=" .. tostring(open_visible) .. "}",
+    "local workspace={name=" .. self:lua_string(name) .. ",safe_name=" .. self:lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. self:lua_string(branch) .. ",workspace_kind=" .. self:lua_string(workspace_kind) .. ",git_common_dir=" .. self:lua_string(git_common_dir) .. ",worktree_path=" .. self:lua_string(worktree_path) .. ",worktree_branch=" .. self:lua_string(worktree_branch) .. ",worktree_base=" .. self:lua_string(worktree_base) .. ",window_name=" .. self:lua_string(window_name) .. ",custom_instruction=" .. self:lua_string(custom_instruction) .. ",resolved_instruction=" .. self:lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. self:lua_string(codex_status) .. ",status=" .. self:lua_string(status) .. ",codex_session_id=" .. self:lua_string(codex_session_id) .. ",codex_session_path=" .. self:lua_string(codex_session_path) .. ",codex_session_captured_at=" .. self:lua_string(codex_session_captured_at) .. ",open_visible=" .. tostring(open_visible) .. "}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
@@ -1608,7 +1944,43 @@ function M:prepare_workspace(name, opts)
   end
 
   local context = self:target_context()
-  local root = opts.project_root or context.root
+  local base_root = context.root
+  local root = opts.project_root or base_root
+  local creating_worktree = not opts.allow_existing and not opts.require_existing
+  local created_worktree_path = nil
+  local created_worktree_branch = nil
+  local worktree_base = nil
+  local git_common_dir = nil
+
+  if creating_worktree then
+    local clean, clean_error = self:git_checkout_clean(base_root)
+    if not clean then
+      return nil, clean_error
+    end
+
+    created_worktree_branch = self:worktree_branch(safe_name_or_error)
+    created_worktree_path = self:worktree_path(base_root, safe_name_or_error)
+    worktree_base = self:git_current_ref(base_root)
+    git_common_dir = self:git_common_dir(base_root)
+    if not git_common_dir then
+      return nil, "not inside a Git repository"
+    end
+    if M.target_path_exists(created_worktree_path) then
+      return nil, "worktree path already exists"
+    end
+    if self:git_branch_exists(base_root, created_worktree_branch) then
+      return nil, "branch already exists: " .. created_worktree_branch
+    end
+
+    local worktree_ok, worktree_error =
+      self:create_git_worktree(base_root, created_worktree_path, created_worktree_branch, worktree_base)
+    if not worktree_ok then
+      return nil, worktree_error
+    end
+
+    root = created_worktree_path
+  end
+
   self:warn_workspace_instruction_ignore(root)
   local custom_instruction = type(opts.custom_instruction) == "string" and trim(opts.custom_instruction) or nil
   if custom_instruction == "" then
@@ -1628,25 +2000,46 @@ function M:prepare_workspace(name, opts)
   local existing = project.workspaces[safe_name_or_error]
   local file_instruction = self:read_instruction_file(root, safe_name_or_error)
   if type(existing) == "table" and not opts.allow_existing then
+    if creating_worktree then
+      self:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+    end
     return nil, "workspace already exists"
   end
   if type(existing) == "table" and existing.name ~= display_name and not opts.allow_existing then
+    if creating_worktree then
+      self:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+    end
     return nil, "workspace already exists"
   end
   if type(existing) ~= "table" and file_instruction and not opts.allow_existing then
+    if creating_worktree then
+      self:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+    end
     return nil, "workspace already exists"
   end
   if opts.require_existing and type(existing) ~= "table" and not file_instruction then
     return nil, "workspace not found"
   end
 
+  local fallback_target_path = context.path
+  local fallback_target_type = context.target and context.target.type or nil
+  if creating_worktree then
+    fallback_target_path, fallback_target_type =
+      self:target_in_worktree(context.path, fallback_target_type, base_root, root)
+  end
+
   local fallback = {
     name = display_name,
     safe_name = safe_name_or_error,
     project_root = root,
-    target_path = context.path,
-    target_type = context.target and context.target.type or nil,
-    git_branch = context.branch,
+    target_path = fallback_target_path,
+    target_type = fallback_target_type,
+    git_branch = creating_worktree and created_worktree_branch or context.branch,
+    workspace_kind = creating_worktree and "worktree" or nil,
+    git_common_dir = git_common_dir,
+    worktree_path = created_worktree_path,
+    worktree_branch = created_worktree_branch,
+    worktree_base = worktree_base,
     window_name = M.workspace_window_name(safe_name_or_error),
     custom_instruction = custom_instruction,
     resolved_instruction = resolved_instruction,
@@ -1684,6 +2077,9 @@ function M:prepare_workspace(name, opts)
   local window_id, created =
     self:ensure_tmux_window(session, workspace.project_root, workspace.window_name, self:nvim_command(workspace))
   if not window_id then
+    if creating_worktree then
+      self:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+    end
     return nil, "Failed to create tmux window " .. workspace.window_name
   end
 
@@ -1695,6 +2091,9 @@ function M:prepare_workspace(name, opts)
   if not instruction_ok then
     if created then
       self:kill_tmux_window(window_id)
+    end
+    if creating_worktree then
+      self:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
     end
     return nil, instruction_error
   end
@@ -1728,6 +2127,9 @@ function M:prepare_workspace(name, opts)
     end
     if wrote_new_instruction_file then
       self:delete_instruction_file(workspace.project_root, workspace.safe_name)
+    end
+    if creating_worktree then
+      self:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
     end
     return nil, write_error
   end

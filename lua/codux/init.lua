@@ -37,6 +37,10 @@ local defaults = {
     enabled = true,
     tmux_cmd = vim.env.TMUX_CMD or "tmux",
     state_file = nil,
+    worktree = {
+      directory = "../codux-worktrees",
+      branch_prefix = "dev/",
+    },
     instruction_files = {
       enabled = true,
       directory = ".agents/codux",
@@ -785,6 +789,9 @@ workspace_manager_controller = workspace_manager_mod.new({
   workspaces_enabled = workspaces_enabled,
   restore_workspaces = function(opts)
     return M.restore_workspaces(opts)
+  end,
+  prompt_merged_workspaces = function(root)
+    return workspace_runtime:prompt_merged_workspaces(root)
   end,
   open_saved_workspace = function(name, project_root)
     return M.open_saved_workspace(name, project_root)

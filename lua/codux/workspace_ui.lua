@@ -4,7 +4,6 @@ M.MANAGER_NAME_WIDTH = 28
 M.MANAGER_STATUS_WIDTH = 8
 M.MANAGER_MODE_WIDTH = 4
 M.MANAGER_PROFILE_WIDTH = 7
-M.MANAGER_BRANCH_WIDTH = 12
 M.MANAGER_AGE_WIDTH = 4
 M.MANAGER_GAP = "  "
 
@@ -65,9 +64,8 @@ function M.manager_column_widths(width)
   local fixed_width = M.MANAGER_STATUS_WIDTH
     + M.MANAGER_MODE_WIDTH
     + M.MANAGER_PROFILE_WIDTH
-    + M.MANAGER_BRANCH_WIDTH
     + M.MANAGER_AGE_WIDTH
-    + (gap_width * 6)
+    + (gap_width * 5)
   local available = math.max(1, width - fixed_width)
   local name_width = math.min(M.MANAGER_NAME_WIDTH, math.max(12, available - 10))
   local target_width = math.max(0, available - name_width)
@@ -195,7 +193,6 @@ function M.manager_line(entry, width)
   local status = entry.status or "inactive"
   local mode = M.manager_mode_label(entry)
   local profile = entry.permission_profile or "default"
-  local branch = entry.git_branch or ""
   local age = M.relative_age_label(M.session_timestamp(entry))
   local target = type(entry.target_path) == "string" and entry.target_path ~= "" and vim.fn.fnamemodify(entry.target_path, ":t") or ""
   local name_width, target_width = M.manager_column_widths(width)
@@ -208,8 +205,6 @@ function M.manager_line(entry, width)
     M.pad_display_right(mode, M.MANAGER_MODE_WIDTH),
     M.MANAGER_GAP,
     M.pad_display_right(profile, M.MANAGER_PROFILE_WIDTH),
-    M.MANAGER_GAP,
-    M.pad_display_right(branch, M.MANAGER_BRANCH_WIDTH),
     M.MANAGER_GAP,
     M.pad_display_right(age, M.MANAGER_AGE_WIDTH),
     M.MANAGER_GAP,
@@ -228,8 +223,6 @@ function M.manager_header_line(width)
     M.pad_display_right("mode", M.MANAGER_MODE_WIDTH),
     M.MANAGER_GAP,
     M.pad_display_right("profile", M.MANAGER_PROFILE_WIDTH),
-    M.MANAGER_GAP,
-    M.pad_display_right("branch", M.MANAGER_BRANCH_WIDTH),
     M.MANAGER_GAP,
     M.pad_display_right("age", M.MANAGER_AGE_WIDTH),
     M.MANAGER_GAP,

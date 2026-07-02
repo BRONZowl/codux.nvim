@@ -74,6 +74,7 @@ function M.new(opts)
       return true
     end,
     restore_workspaces = type(opts.restore_workspaces) == "function" and opts.restore_workspaces or noop,
+    prompt_merged_workspaces = type(opts.prompt_merged_workspaces) == "function" and opts.prompt_merged_workspaces or noop,
     open_saved_workspace = type(opts.open_saved_workspace) == "function" and opts.open_saved_workspace or noop,
     rename_saved_workspace = type(opts.rename_saved_workspace) == "function" and opts.rename_saved_workspace or noop,
     edit_saved_workspace_instruction = type(opts.edit_saved_workspace_instruction) == "function"
@@ -901,7 +902,7 @@ function M:open_selected_workspace(item)
   if not item then
     return false
   end
-  local root = self.state.workspace_manager_project_root
+  local root = item.project_root or self.state.workspace_manager_project_root
   self:close()
   return self.open_saved_workspace(item.name, root)
 end
@@ -1082,6 +1083,7 @@ function M:open()
   vim.schedule(function()
     if self.is_valid_win(self.state.workspace_manager_win) and self.is_loaded_buf(self.state.workspace_manager_buf) then
       self:open_search_input()
+      self.prompt_merged_workspaces(self.state.workspace_manager_project_root)
     end
   end)
   return true
