@@ -1150,6 +1150,9 @@ mission_controller = mission_control_mod.new({
   mission_dirty_roles = function(name, root)
     return workspace_runtime:mission_dirty_roles(name, { project_root = root })
   end,
+  workspace_branch_state = function(entry)
+    return workspace_runtime:workspace_branch_state(entry)
+  end,
   close_mission = function(name, root)
     return M.close_mission(name, { project_root = root })
   end,

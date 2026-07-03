@@ -246,6 +246,13 @@ do
           codex_mode = "execute",
           permission_profile = "auto",
           target_path = "/repo/lua/codux/init.lua",
+          workspace_kind = "worktree",
+          worktree_branch = "dev/alpha-builder",
+          worktree_base = "main",
+          worktree_base_commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          window_id = "@1",
+          created_at = "2026-07-03T12:00:00Z",
+          last_activity_at = "2026-07-03T12:29:00Z",
         },
         {
           name = "alpha-reviewer",
@@ -255,8 +262,30 @@ do
           mission_role = "Reviewer",
           mission_objective = "Build the dashboard\nKeep it sharp",
           status = "question",
+          workspace_kind = "worktree",
+          worktree_branch = "dev/alpha-reviewer",
+          worktree_base = "main",
+          worktree_base_commit = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          created_at = "2026-07-03T11:30:00Z",
+          last_activity_at = "2026-07-03T11:00:00Z",
         },
       }, nil
+    end,
+    mission_dirty_roles = function(name, root)
+      assert_equal(name, "Alpha")
+      assert_equal(root, "/repo")
+      return {
+        { name = "alpha-builder", reason = "dirty" },
+      }
+    end,
+    workspace_branch_state = function(entry)
+      return {
+        worktree = entry.workspace_kind == "worktree",
+        branch = entry.worktree_branch,
+        base = entry.worktree_base,
+        ahead_count = entry.safe_name == "alpha-reviewer" and 1 or 0,
+        merged = entry.safe_name == "alpha-reviewer",
+      }
     end,
     workspace_terminal_snapshot = function(entry, opts)
       assert_equal(opts.max_lines, 8)
@@ -269,39 +298,61 @@ do
       return "", "missing output"
     end,
   })
-  local lines, items = controller:dashboard_lines("/repo")
+  local now = workspace_ui.parse_timestamp("2026-07-03T12:30:00Z")
+  local lines, items = controller:dashboard_lines("/repo", { now = now, dashboard_width = 180 })
   assert_contains(lines[1], "1 mission | 2 roles | active 1 | question 1 | idle 0")
   assert_true(lines[1]:find("^%s+1 mission") ~= nil)
   assert_contains(table.concat(lines, "\n"), "2 roles")
   assert_contains(table.concat(lines, "\n"), "Alpha")
+  assert_equal(lines[6]:find("attn", 1, true), nil)
+  assert_equal(lines[6]:find("wt", 1, true), nil)
+  assert_equal(lines[6]:find("br", 1, true), nil)
+  assert_equal(lines[6]:find("merged", 1, true), nil)
   assert_equal(table.concat(lines, "\n"):find("Mission Control", 1, true), nil)
   assert_contains(table.concat(lines, "\n"), "Output  Builder")
   assert_contains(table.concat(lines, "\n"), "builder output")
   assert_equal(table.concat(lines, "\n"):find("Build the dashboard", 1, true), nil)
   assert_equal(table.concat(lines, "\n"):find("objective", 1, true), nil)
   assert_contains(table.concat(lines, "\n"), "role            status")
-  assert_contains(table.concat(lines, "\n"), "profile")
+  assert_contains(table.concat(lines, "\n"), "permission profile")
+  assert_contains(table.concat(lines, "\n"), "last activity")
+  assert_contains(table.concat(lines, "\n"), "needs review")
+  assert_contains(table.concat(lines, "\n"), "worktree status")
+  assert_contains(table.concat(lines, "\n"), "window status")
+  assert_contains(table.concat(lines, "\n"), "cleanup status")
   assert_contains(table.concat(lines, "\n"), "target")
-  assert_contains(table.concat(lines, "\n"), "auto")
+  assert_contains(table.concat(lines, "\n"), "Autopilot")
+  assert_contains(table.concat(lines, "\n"), "execute")
+  assert_contains(table.concat(lines, "\n"), "1m")
+  assert_contains(table.concat(lines, "\n"), "yes")
+  assert_contains(table.concat(lines, "\n"), "dirty")
+  assert_contains(table.concat(lines, "\n"), "open")
+  assert_contains(table.concat(lines, "\n"), "dev/alpha-builder")
+  assert_contains(table.concat(lines, "\n"), "not ready")
+  assert_contains(table.concat(lines, "\n"), "missing")
+  assert_contains(table.concat(lines, "\n"), "merged")
   assert_contains(table.concat(lines, "\n"), "init.lua")
   assert_equal(items[6].kind, "mission")
   assert_equal(items[8].kind, "role")
   assert_equal(items[8].entry.safe_name, "alpha-builder")
 
   local filtered_lines, filtered_items, filtered_rows, best_match_row =
-    controller:dashboard_lines("/repo", { query = "rev" })
+    controller:dashboard_lines("/repo", { query = "rev", now = now, dashboard_width = 180 })
   assert_contains(table.concat(filtered_lines, "\n"), "Alpha")
   assert_equal(filtered_items[9].kind, "role")
   assert_equal(filtered_items[9].entry.safe_name, "alpha-reviewer")
   assert_equal(best_match_row, 9)
   assert_equal(table.concat(filtered_rows, ","), "6,8,9")
 
-  local mission_lines, mission_items, _, mission_best_row = controller:dashboard_lines("/repo", { query = "alp" })
+  local mission_lines, mission_items, _, mission_best_row =
+    controller:dashboard_lines("/repo", { query = "alp", now = now, dashboard_width = 180 })
   assert_contains(table.concat(mission_lines, "\n"), "Alpha")
   assert_equal(mission_items[6].kind, "mission")
   assert_equal(mission_best_row, 6)
 
   local reviewer_lines = controller:dashboard_lines("/repo", {
+    now = now,
+    dashboard_width = 180,
     selected_item = {
       kind = "role",
       entry = {
@@ -318,6 +369,48 @@ do
   assert_contains(table.concat(no_match_lines, "\n"), "No matching Codux missions")
   assert_equal(#no_match_items, 0)
   assert_equal(#no_match_rows, 0)
+end
+
+do
+  local dirty_calls = 0
+  local branch_calls = 0
+  local controller = mission_control_mod.new({
+    workspace_entries_for_project = function()
+      return {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          mission_id = "mission:alpha",
+          mission_name = "Alpha",
+          mission_role = "Builder",
+          status = "active",
+          workspace_kind = "worktree",
+          worktree_branch = "dev/alpha-builder",
+          worktree_base = "main",
+          worktree_base_commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        },
+      }, nil
+    end,
+    mission_dirty_roles = function()
+      dirty_calls = dirty_calls + 1
+      return {}
+    end,
+    workspace_branch_state = function()
+      branch_calls = branch_calls + 1
+      return { worktree = true, merged = false, ahead_count = 0 }
+    end,
+    workspace_terminal_snapshot = function()
+      return "", "missing output"
+    end,
+  })
+
+  controller:dashboard_lines("/repo", { now = 100, dashboard_width = 104 })
+  controller:dashboard_lines("/repo", { now = 110, dashboard_width = 104 })
+  assert_equal(dirty_calls, 1)
+  assert_equal(branch_calls, 1)
+  controller:dashboard_lines("/repo", { now = 116, dashboard_width = 104 })
+  assert_equal(dirty_calls, 2)
+  assert_equal(branch_calls, 2)
 end
 
 do
@@ -442,6 +535,111 @@ do
 end
 
 do
+  local old_api = vim.api
+  local highlights = {}
+  vim.api = {
+    nvim_buf_clear_namespace = function() end,
+    nvim_buf_add_highlight = function(bufnr, namespace, group, row, start_col, end_col)
+      table.insert(highlights, {
+        bufnr = bufnr,
+        namespace = namespace,
+        group = group,
+        row = row,
+        start_col = start_col,
+        end_col = end_col,
+      })
+    end,
+  }
+
+  local rendered_lines
+  local controller = mission_control_mod.new({
+    namespace = 99,
+    state = {
+      mission_dashboard_action_buf = 12,
+      mission_dashboard_action_items = {
+        { key = "v", action = "view_objective", label = "View Objective" },
+      },
+    },
+    is_loaded_buf = function(bufnr)
+      return bufnr == 12
+    end,
+    get_window_width = function()
+      return 80
+    end,
+    ui = {
+      set_lines = function(_, lines)
+        rendered_lines = lines
+      end,
+    },
+  })
+
+  assert_true(controller:render_action_palette())
+  assert_equal(rendered_lines[1], "v  View Objective")
+  assert_equal(highlights[1].group, "WhichKey")
+  assert_equal(highlights[1].start_col, 0)
+  assert_equal(highlights[1].end_col, 1)
+  assert_equal(highlights[2].group, "Normal")
+  assert_equal(highlights[2].start_col, 1)
+  assert_equal(highlights[2].end_col, 3)
+  assert_equal(highlights[3].group, "Normal")
+  assert_equal(highlights[3].start_col, 3)
+  assert_equal(highlights[3].end_col, -1)
+  vim.api = old_api
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
+  local old_win_set_cursor = vim.api.nvim_win_set_cursor
+  local window_options
+  vim.api.nvim_open_win = function()
+    return 41
+  end
+  vim.api.nvim_win_set_cursor = function()
+    return true
+  end
+
+  local controller = mission_control_mod.new({
+    namespace = 99,
+    state = {
+      mission_dashboard_win = 10,
+    },
+    is_valid_win = function(win)
+      return win == 10
+    end,
+    is_loaded_buf = function()
+      return true
+    end,
+    get_window_config = function()
+      return { col = 0, row = 0 }
+    end,
+    get_window_width = function()
+      return 80
+    end,
+    get_window_height = function()
+      return 10
+    end,
+    ui = {
+      create_scratch_buffer = function()
+        return 31
+      end,
+      set_lines = function() end,
+      close_window = function() end,
+      delete_buffer = function() end,
+      set_window_options = function(_, opts)
+        window_options = opts
+      end,
+    },
+    bind_close_keys = function() end,
+    set_buffer_keymap = function() end,
+  })
+
+  assert_true(controller:open_action_palette_for({ name = "Alpha" }, "mission"))
+  assert_equal(window_options.winhighlight, "FloatBorder:WhichKey,FloatTitle:WhichKey")
+  vim.api.nvim_open_win = old_open_win
+  vim.api.nvim_win_set_cursor = old_win_set_cursor
+end
+
+do
   local bound = {}
   local controller = mission_control_mod.new({
     state = {},
@@ -521,6 +719,10 @@ do
     ran_action = "edit:" .. tostring(mission.name)
     return true
   end
+  function controller:view_mission_objective(mission)
+    ran_action = "view:" .. tostring(mission.name)
+    return true
+  end
 
   assert_true(controller:move_action_cursor(1))
   assert_equal(cursor_set[1], 2)
@@ -528,7 +730,7 @@ do
   assert_equal(cursor_set[1], 1)
 
   assert_true(controller:run_highlighted_action())
-  assert_equal(ran_action, "edit:Alpha")
+  assert_equal(ran_action, "view:Alpha")
   assert_true(closed)
   assert_nil(controller.state.mission_dashboard_action_win)
 end
@@ -720,7 +922,7 @@ if type(vim.api) == "table" then
   dashboard_config = controller:dashboard_config(20)
   assert_equal(objective_config.width, 96)
   assert_equal(preview_config.width, 92)
-  assert_equal(dashboard_config.width, 88)
+  assert_equal(dashboard_config.width, 128)
   vim.o.columns = old_columns
   vim.o.lines = old_lines
   vim.o.cmdheight = old_cmdheight
@@ -1600,6 +1802,114 @@ do
 end
 
 do
+  local old_api = vim.api
+  local highlights = {}
+  vim.api = {
+    nvim_buf_clear_namespace = function() end,
+    nvim_buf_add_highlight = function(bufnr, namespace, group, row, start_col, end_col)
+      table.insert(highlights, {
+        bufnr = bufnr,
+        namespace = namespace,
+        group = group,
+        row = row,
+        start_col = start_col,
+        end_col = end_col,
+      })
+    end,
+  }
+
+  local rendered_lines
+  local controller = manager_mod.new({
+    namespace = 77,
+    state = {
+      workspace_manager_action_buf = 14,
+      workspace_manager_action_items = {
+        { key = "r", action = "rename", label = "Rename Workspace" },
+      },
+    },
+    is_loaded_buf = function(bufnr)
+      return bufnr == 14
+    end,
+    get_window_width = function()
+      return 80
+    end,
+    ui = {
+      set_lines = function(_, lines)
+        rendered_lines = lines
+      end,
+    },
+  })
+
+  assert_true(controller:render_action_palette())
+  assert_equal(rendered_lines[1], "r  Rename Workspace")
+  assert_equal(highlights[1].group, "WhichKey")
+  assert_equal(highlights[1].start_col, 0)
+  assert_equal(highlights[1].end_col, 1)
+  assert_equal(highlights[2].group, "Normal")
+  assert_equal(highlights[2].start_col, 1)
+  assert_equal(highlights[2].end_col, 3)
+  assert_equal(highlights[3].group, "Normal")
+  assert_equal(highlights[3].start_col, 3)
+  assert_equal(highlights[3].end_col, -1)
+  vim.api = old_api
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
+  local old_win_set_cursor = vim.api.nvim_win_set_cursor
+  local window_options
+  vim.api.nvim_open_win = function()
+    return 42
+  end
+  vim.api.nvim_win_set_cursor = function()
+    return true
+  end
+
+  local controller = manager_mod.new({
+    namespace = 77,
+    state = {},
+    is_loaded_buf = function()
+      return true
+    end,
+    workspace_entries_for_project = function()
+      return {
+        { name = "review", safe_name = "review", project_root = "/repo" },
+      }, nil
+    end,
+    get_window_config = function()
+      return { col = 0, row = 0 }
+    end,
+    get_window_width = function()
+      return 80
+    end,
+    get_window_height = function()
+      return 10
+    end,
+    ui = {
+      create_scratch_buffer = function()
+        return 32
+      end,
+      set_lines = function() end,
+      close_window = function() end,
+      delete_buffer = function() end,
+      set_window_options = function(_, opts)
+        window_options = opts
+      end,
+    },
+    bind_close_keys = function() end,
+    set_buffer_keymap = function() end,
+  })
+  function controller:selected_or_notify()
+    return { name = "review", safe_name = "review", project_root = "/repo" }
+  end
+
+  assert_true(controller:open_action_palette())
+  assert_equal(window_options.winhighlight, "FloatBorder:WhichKey,FloatTitle:WhichKey")
+  vim.api.nvim_open_win = old_open_win
+  vim.api.nvim_win_set_cursor = old_win_set_cursor
+end
+
+do
   local controller = which_key_mod.new({
     get_mode = function()
       return "not running"
@@ -1643,11 +1953,14 @@ do
   end
 
   assert_equal(by_key.e, "edit_objective")
+  assert_equal(by_key.v, "view_objective")
   assert_equal(by_key.x, "close_mission")
   assert_equal(by_key.d, "delete_mission")
   assert_nil(by_key.n)
   assert_nil(by_key.r)
-  assert_contains(workspace_ui.mission_action_line(actions[1], 40), "Edit Objective")
+  assert_contains(workspace_ui.mission_action_line(actions[1], 40), "View Objective")
+  assert_contains(workspace_ui.mission_action_line(actions[2], 40), "Edit Objective")
+  assert_equal(labels_by_key.v, "View Objective")
   assert_equal(labels_by_key.x, "Close Mission")
 end
 
@@ -2110,6 +2423,40 @@ do
   assert_contains(confirmed_message, "mission-reviewer (status unknown)")
   assert_contains(confirmed_message, "nuke uncommitted and untracked work")
   vim.fn.confirm = old_confirm
+end
+
+do
+  local runtime = runtime_mod.new({
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /codux-worktrees/review rev-list --count aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa..dev/review" then
+        return "2\n", 0
+      end
+      if command == "git -C /codux-worktrees/review merge-base --is-ancestor dev/review main" then
+        return "", 0
+      end
+      return "", 1
+    end,
+  })
+
+  local state = runtime:workspace_branch_state({
+    project_root = "/codux-worktrees/review",
+    workspace_kind = "worktree",
+    worktree_branch = "dev/review",
+    worktree_base = "main",
+    worktree_base_commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  })
+  assert_true(state.worktree)
+  assert_equal(state.ahead_count, 2)
+  assert_true(state.merged)
+
+  local missing = runtime:workspace_branch_state({
+    workspace_kind = "worktree",
+    worktree_branch = "dev/review",
+    worktree_base = "main",
+  })
+  assert_true(missing.worktree)
+  assert_equal(missing.error, "missing base")
 end
 
 do

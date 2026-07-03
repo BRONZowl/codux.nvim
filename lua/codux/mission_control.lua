@@ -31,6 +31,22 @@ local function center_display_line(display, text, width)
   return string.rep(" ", padding) .. text
 end
 
+local function mission_cache_key(root, mission)
+  mission = type(mission) == "table" and mission or {}
+  return tostring(root or "") .. "\0" .. tostring(mission.mission_id or mission.name or "")
+end
+
+local function role_cache_key(entry)
+  entry = type(entry) == "table" and entry or {}
+  return table.concat({
+    tostring(entry.project_root or entry.worktree_path or ""),
+    tostring(entry.safe_name or entry.name or entry.mission_role or ""),
+    tostring(entry.worktree_branch or ""),
+    tostring(entry.worktree_base or ""),
+    tostring(entry.worktree_base_commit or ""),
+  }, "\0")
+end
+
 local function disable_completion(is_loaded_buf, bufnr)
   if type(is_loaded_buf) == "function" and not is_loaded_buf(bufnr) then
     return false
@@ -128,6 +144,16 @@ function M.new(opts)
       or noop,
     mission_dirty_roles = type(opts.mission_dirty_roles) == "function" and opts.mission_dirty_roles or function()
       return {}
+    end,
+    workspace_branch_state = type(opts.workspace_branch_state) == "function" and opts.workspace_branch_state or function(entry)
+      entry = type(entry) == "table" and entry or {}
+      return {
+        worktree = entry.workspace_kind == "worktree",
+        branch = entry.worktree_branch,
+        base = entry.worktree_base,
+        ahead_count = 0,
+        merged = false,
+      }
     end,
     close_mission = type(opts.close_mission) == "function" and opts.close_mission or noop,
     delete_mission = type(opts.delete_mission) == "function" and opts.delete_mission or noop,
@@ -290,7 +316,7 @@ function M:dashboard_config(line_count)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local max_width = available_dimension(total_width, 4)
   local max_height = available_dimension(total_height, 4)
-  local width = math.min(max_width, math.max(80, math.min(88, math.floor(total_width * 0.75))))
+  local width = math.min(max_width, math.max(80, math.min(160, math.floor(total_width * 0.92))))
   local height = math.min(max_height, math.max(8, line_count or 1))
 
   return {
@@ -482,6 +508,233 @@ function M:open_prompt()
   })
 end
 
+function M:dashboard_now(opts)
+  opts = type(opts) == "table" and opts or {}
+  return tonumber(opts.now) or os.time()
+end
+
+function M:cached_mission_dirty_roles(root, mission, now)
+  local cache = type(self.state.mission_dashboard_dirty_cache) == "table" and self.state.mission_dashboard_dirty_cache or {}
+  self.state.mission_dashboard_dirty_cache = cache
+  local key = mission_cache_key(root, mission)
+  local cached = cache[key]
+  if type(cached) == "table" and now - (tonumber(cached.checked_at) or 0) <= 15 then
+    return cached.roles, cached.error
+  end
+
+  local name = mission.name or mission.mission_id
+  local roles, error_message = self.mission_dirty_roles(name, root)
+  roles = type(roles) == "table" and roles or {}
+  cache[key] = {
+    checked_at = now,
+    roles = roles,
+    error = error_message,
+  }
+  return roles, error_message
+end
+
+function M:cached_workspace_branch_state(entry, now)
+  local cache = type(self.state.mission_dashboard_branch_cache) == "table" and self.state.mission_dashboard_branch_cache or {}
+  self.state.mission_dashboard_branch_cache = cache
+  local key = role_cache_key(entry)
+  local cached = cache[key]
+  if type(cached) == "table" and now - (tonumber(cached.checked_at) or 0) <= 15 then
+    return cached.state
+  end
+
+  local state = self.workspace_branch_state(entry)
+  state = type(state) == "table" and state or {}
+  cache[key] = {
+    checked_at = now,
+    state = state,
+  }
+  return state
+end
+
+function M:role_freshness(entry, now)
+  entry = type(entry) == "table" and entry or {}
+  if entry.status == "inactive" then
+    return "--"
+  end
+
+  local timestamp = self.workspace_ui.activity_timestamp(entry)
+  local seconds = self.workspace_ui.parse_timestamp(timestamp)
+  if not seconds then
+    return "stale"
+  end
+
+  local elapsed = math.max(0, now - seconds)
+  if elapsed < 300 then
+    return "live"
+  end
+  if elapsed < 1800 then
+    return "quiet"
+  end
+  return "stale"
+end
+
+function M:mission_dirty_status_by_role(root, mission, now)
+  local dirty_roles = self:cached_mission_dirty_roles(root, mission, now)
+  local dirty_by_role = {}
+  for _, role in ipairs(dirty_roles) do
+    local label = type(role) == "table" and (role.name or role.safe_name or role.label) or role
+    local reason = type(role) == "table" and role.reason or "dirty"
+    dirty_by_role[tostring(label or "")] = reason
+  end
+  return dirty_by_role
+end
+
+function M:mission_workspace_details(entry, dirty_by_role, now)
+  entry = type(entry) == "table" and entry or {}
+  dirty_by_role = type(dirty_by_role) == "table" and dirty_by_role or {}
+  local status = entry.status or "inactive"
+  local dirty_status = dirty_by_role[tostring(entry.name or "")]
+    or dirty_by_role[tostring(entry.safe_name or "")]
+    or dirty_by_role[tostring(entry.mission_role or "")]
+    or nil
+  local branch_state = self:cached_workspace_branch_state(entry, now)
+  local window_status = "not running"
+  if status ~= "inactive" then
+    window_status = type(entry.window_id) == "string" and entry.window_id ~= "" and "open" or "missing"
+  end
+
+  local worktree = "unknown"
+  local worktree_status = "unknown"
+  if entry.workspace_kind == "worktree" then
+    worktree = "yes"
+    worktree_status = dirty_status == "dirty" and "dirty" or dirty_status == "unknown" and "unknown" or "clean"
+  elseif type(entry.workspace_kind) == "string" and entry.workspace_kind ~= "" then
+    worktree = "no"
+    worktree_status = "not a worktree"
+  end
+
+  local freshness = self:role_freshness(entry, now)
+  local needs_review = status == "question"
+    or dirty_status == "dirty"
+    or dirty_status == "unknown"
+    or ((status == "active" or status == "idle") and freshness == "stale")
+    or (status ~= "inactive" and window_status == "missing")
+    or branch_state.merged == true
+
+  return {
+    last_activity = self.workspace_ui.relative_age_label(self.workspace_ui.activity_timestamp(entry), now):gsub("^%-%-$", "unknown"),
+    needs_review = needs_review and "yes" or "no",
+    worktree_status = worktree_status,
+    window_status = window_status,
+    worktree = worktree,
+    branch = entry.worktree_branch or entry.git_branch or "none",
+    cleanup_status = branch_state.merged and "merged" or "not ready",
+  }
+end
+
+function M:permission_profile_label(entry)
+  entry = type(entry) == "table" and entry or {}
+  local profile = entry.permission_profile or "default"
+  if profile == "default" then
+    return "Default"
+  end
+  if profile == "auto" then
+    return "Autopilot"
+  end
+  if profile == "danger" then
+    return "Full Access"
+  end
+  return tostring(profile)
+end
+
+function M:mission_mode_label(entry)
+  entry = type(entry) == "table" and entry or {}
+  if entry.status == "inactive" then
+    return "not set"
+  end
+  if entry.codex_mode == "execute" then
+    return "execute"
+  end
+  if entry.codex_mode == "plan" then
+    return "plan"
+  end
+  return "not set"
+end
+
+function M:mission_dashboard_line(mission, counts, status, dashboard_width)
+  local right = self.workspace_ui.pad_display_right(status, 8) .. "  " .. pluralize(counts.total, "role", "roles")
+  local name_width = math.min(34, math.max(16, dashboard_width - self.workspace_ui.display_width(right) - 1))
+  local mission_name = self.workspace_ui.pad_display_right(tostring(mission.name or mission.mission_id), name_width)
+  return mission_name .. " " .. right
+end
+
+function M:mission_role_header_line(dashboard_width)
+  local branch_width, target_width = self:mission_role_flexible_widths(dashboard_width)
+  return "  "
+    .. self.workspace_ui.pad_display_right("role", 14)
+    .. "  "
+    .. self.workspace_ui.pad_display_right("status", 8)
+    .. "  "
+    .. self.workspace_ui.pad_display_right("mode", 7)
+    .. "  "
+    .. self.workspace_ui.pad_display_right("permission profile", 18)
+    .. "  "
+    .. self.workspace_ui.pad_display_right("last activity", 13)
+    .. "  "
+    .. self.workspace_ui.pad_display_right("needs review", 12)
+    .. "  "
+    .. self.workspace_ui.pad_display_right("worktree status", 15)
+    .. "  "
+    .. self.workspace_ui.pad_display_right("window status", 13)
+    .. "  "
+    .. self.workspace_ui.pad_display_right("worktree", 8)
+    .. "  "
+    .. self.workspace_ui.pad_display_right("branch", branch_width)
+    .. "  "
+    .. self.workspace_ui.pad_display_right("cleanup status", 14)
+    .. "  "
+    .. self.workspace_ui.pad_display_right("target", target_width)
+end
+
+function M:mission_role_flexible_widths(dashboard_width)
+  local fixed_width = 14 + 8 + 7 + 18 + 13 + 12 + 15 + 13 + 8 + 14 + 2 + (11 * 2)
+  local available = math.max(20, dashboard_width - fixed_width)
+  local branch_width = math.max(18, math.min(32, math.floor(available * 0.65)))
+  local target_width = math.max(10, available - branch_width)
+  return branch_width, target_width
+end
+
+function M:mission_role_line(entry, dashboard_width, now, dirty_by_role)
+  local role = entry.mission_role or entry.name or entry.safe_name
+  local status = entry.status or "inactive"
+  local mode = self:mission_mode_label(entry)
+  local profile = self:permission_profile_label(entry)
+  local details = self:mission_workspace_details(entry, dirty_by_role, now)
+  local branch_width, target_width = self:mission_role_flexible_widths(dashboard_width)
+  local target = type(entry.target_path) == "string" and entry.target_path ~= ""
+      and vim.fn.fnamemodify(entry.target_path, ":t")
+    or "none"
+  return "  "
+    .. self.workspace_ui.pad_display_right(role, 14)
+    .. "  "
+    .. self.workspace_ui.pad_display_right(status, 8)
+    .. "  "
+    .. self.workspace_ui.pad_display_right(mode, 7)
+    .. "  "
+    .. self.workspace_ui.pad_display_right(profile, 18)
+    .. "  "
+    .. self.workspace_ui.pad_display_right(details.last_activity, 13)
+    .. "  "
+    .. self.workspace_ui.pad_display_right(details.needs_review, 12)
+    .. "  "
+    .. self.workspace_ui.pad_display_right(details.worktree_status, 15)
+    .. "  "
+    .. self.workspace_ui.pad_display_right(details.window_status, 13)
+    .. "  "
+    .. self.workspace_ui.pad_display_right(details.worktree, 8)
+    .. "  "
+    .. self.workspace_ui.pad_display_right(details.branch, branch_width)
+    .. "  "
+    .. self.workspace_ui.pad_display_right(details.cleanup_status, 14)
+    .. "  "
+    .. self.workspace_ui.truncate_display_tail(target, target_width)
+end
+
 function M:dashboard_lines(root, opts)
   opts = type(opts) == "table" and opts or {}
   local entries, error_message = self.workspace_entries_for_project(root)
@@ -493,6 +746,7 @@ function M:dashboard_lines(root, opts)
   local query = tostring(opts.query or "")
   local missions = self:filter_missions(all_missions, query)
   local dashboard_width = tonumber(opts.dashboard_width) or self:window_width() or self:dashboard_config(1).width
+  local now = self:dashboard_now(opts)
   local lines = {}
   local items = {}
   local selectable_rows = {}
@@ -544,36 +798,16 @@ function M:dashboard_lines(root, opts)
     table.insert(lines, "")
     local counts = self.mission.status_counts(mission)
     local status = self.mission.status_label(mission)
-    local mission_name = self.workspace_ui.pad_display_right(tostring(mission.name or mission.mission_id), 34)
-    local mission_status = self.workspace_ui.pad_display_right(status, 8)
-    table.insert(lines, string.format("%s %s %s", mission_name, mission_status, pluralize(counts.total, "role", "roles")))
+    table.insert(lines, self:mission_dashboard_line(mission, counts, status, dashboard_width))
     items[#lines] = { kind = "mission", mission = mission }
     table.insert(selectable_rows, #lines)
     if query ~= "" and not best_match_row and mission._codux_match_kind == "mission" then
       best_match_row = #lines
     end
-    table.insert(lines, "  role            status    mode  profile  age   target")
+    table.insert(lines, self:mission_role_header_line(dashboard_width))
+    local dirty_by_role = self:mission_dirty_status_by_role(root, mission, now)
     for _, entry in ipairs(mission.roles) do
-      local role = entry.mission_role or entry.name or entry.safe_name
-      local status = entry.status or "inactive"
-      local mode = self.workspace_ui.manager_mode_label(entry)
-      local profile = entry.permission_profile or "default"
-      local age = self.workspace_ui.relative_age_label(self.workspace_ui.session_timestamp(entry))
-      local target = type(entry.target_path) == "string" and entry.target_path ~= ""
-          and vim.fn.fnamemodify(entry.target_path, ":t")
-        or "--"
-      local line = "  "
-        .. self.workspace_ui.pad_display_right(role, 14)
-        .. "  "
-        .. self.workspace_ui.pad_display_right(status, 8)
-        .. "  "
-        .. self.workspace_ui.pad_display_right(mode, 4)
-        .. "  "
-        .. self.workspace_ui.pad_display_right(profile, 7)
-        .. "  "
-        .. self.workspace_ui.pad_display_right(age, 4)
-        .. "  "
-        .. self.workspace_ui.truncate_display_tail(target, 34)
+      local line = self:mission_role_line(entry, dashboard_width, now, dirty_by_role)
       table.insert(lines, line)
       items[#lines] = { kind = "role", mission = mission, entry = entry }
       table.insert(selectable_rows, #lines)
@@ -677,6 +911,74 @@ function M:open_saved_objective_editor(name, root)
       return self.update_mission_objective(mission.name, objective, root)
     end,
   })
+end
+
+function M:objective_preview_config(line_count)
+  local total_width = math.max(1, vim.o.columns)
+  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local max_width = available_dimension(total_width, 4)
+  local max_height = available_dimension(total_height, 4)
+  local width = math.min(max_width, math.min(92, math.max(56, math.floor(total_width * 0.68))))
+  local height = math.min(max_height, math.max(8, (line_count or 1) + 2))
+
+  return {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = " Codux Mission Objective ",
+    title_pos = "center",
+    footer = " q close ",
+    footer_pos = "center",
+    width = width,
+    height = height,
+    col = math.max(0, math.floor((total_width - width) / 2)),
+    row = math.max(0, math.floor((total_height - height) / 2)),
+    zindex = 80,
+  }
+end
+
+function M:view_mission_objective(mission)
+  mission = type(mission) == "table" and mission or self:selected_mission()
+  if not mission then
+    self.notify("No Codux mission selected", vim.log.levels.WARN)
+    return false
+  end
+
+  local bufnr = self.ui.create_scratch_buffer({
+    bufhidden = "wipe",
+    filetype = "codux-mission-objective-preview",
+    modifiable = true,
+  })
+  if not bufnr then
+    self.notify("Failed to create Codux mission objective preview", vim.log.levels.ERROR)
+    return false
+  end
+
+  local lines = vim.split(tostring(mission.objective or "No objective"), "\n", { plain = true })
+  if #lines == 0 then
+    lines = { "No objective" }
+  end
+  self.ui.set_lines(bufnr, lines)
+  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
+
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:objective_preview_config(#lines))
+  if not win_ok then
+    self.ui.delete_buffer(bufnr)
+    self.notify("Failed to open Codux mission objective preview", vim.log.levels.ERROR)
+    return false
+  end
+
+  self.ui.set_window_options(win, {
+    wrap = true,
+    linebreak = true,
+    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
+  })
+  local function close_preview()
+    self.ui.close_window(win)
+    self.ui.delete_buffer(bufnr)
+  end
+  self.bind_close_keys(bufnr, close_preview, "Close Codux Mission Objective", "n", { escape = true, q = true })
+  return true
 end
 
 function M:delete_saved_mission(name, root, opts)
@@ -1322,6 +1624,7 @@ function M:render_action_palette()
   for index, item in ipairs(self.state.mission_dashboard_action_items or {}) do
     local key = tostring(item.key or "")
     if key ~= "" then
+      local label_start = #key + 2
       pcall(
         vim.api.nvim_buf_add_highlight,
         self.state.mission_dashboard_action_buf,
@@ -1335,9 +1638,18 @@ function M:render_action_palette()
         vim.api.nvim_buf_add_highlight,
         self.state.mission_dashboard_action_buf,
         self.namespace,
-        "WhichKeySeparator",
+        "Normal",
         index - 1,
         #key,
+        label_start
+      )
+      pcall(
+        vim.api.nvim_buf_add_highlight,
+        self.state.mission_dashboard_action_buf,
+        self.namespace,
+        "Normal",
+        index - 1,
+        label_start,
         -1
       )
     end
@@ -1444,6 +1756,10 @@ function M:run_action(action, target)
   if action == "edit_objective" then
     self:close_action_palette()
     return self:edit_selected_mission(mission)
+  end
+  if action == "view_objective" then
+    self:close_action_palette()
+    return self:view_mission_objective(mission)
   end
   if action == "close_mission" then
     self:close_action_palette()

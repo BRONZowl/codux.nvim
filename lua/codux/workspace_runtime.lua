@@ -568,6 +568,54 @@ function M:workspace_branch_merged(entry)
   return code == 0
 end
 
+function M:workspace_branch_state(entry)
+  entry = type(entry) == "table" and entry or {}
+  local state = {
+    worktree = entry.workspace_kind == "worktree",
+    branch = entry.worktree_branch,
+    base = entry.worktree_base,
+    ahead_count = 0,
+    merged = false,
+  }
+  if not state.worktree then
+    return state
+  end
+
+  local branch = entry.worktree_branch
+  local base = entry.worktree_base
+  local base_commit = entry.worktree_base_commit
+  local root = entry.project_root or entry.worktree_path
+  if
+    type(branch) ~= "string"
+    or branch == ""
+    or type(base) ~= "string"
+    or base == ""
+    or type(base_commit) ~= "string"
+    or base_commit == ""
+    or type(root) ~= "string"
+    or root == ""
+  then
+    state.error = "missing base"
+    return state
+  end
+
+  local count_output, count_code = self.system({ "git", "-C", root, "rev-list", "--count", base_commit .. ".." .. branch })
+  local ahead = tonumber(trim(count_output))
+  if count_code ~= 0 or ahead == nil then
+    state.error = "ahead unknown"
+    return state
+  end
+
+  state.ahead_count = ahead
+  if ahead <= 0 then
+    return state
+  end
+
+  local _, code = self.system({ "git", "-C", root, "merge-base", "--is-ancestor", branch, base })
+  state.merged = code == 0
+  return state
+end
+
 function M:backfill_workspace_base_commit(entry)
   entry = type(entry) == "table" and entry or {}
   if entry.workspace_kind ~= "worktree" or (type(entry.worktree_base_commit) == "string" and entry.worktree_base_commit ~= "") then

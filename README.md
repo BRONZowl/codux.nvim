@@ -130,11 +130,11 @@
 <p>
   Use <code>:CoduxMissionCreate</code> to launch Mission Control.
   Codux prompts for one mission objective, previews a default crew of architect, builder, and reviewer roles, then creates a clean Git worktree workspace for each role and starts each agent in plan mode with workspace-auto permissions.
-  Mission role workspaces keep their mission metadata in Codux workspace state, and <code>:CoduxMissions</code> or <code>&lt;leader&gt;zM</code> opens a mission dashboard with mission status, objective preview, role status, and workspace jump actions.
+  Mission role workspaces keep their mission metadata in Codux workspace state, and <code>:CoduxMissions</code> or <code>&lt;leader&gt;zM</code> opens a mission dashboard with full-word workspace detail columns for status, permission profile, last activity, needs review, worktree status, window status, branch, cleanup status, and target.
   Codux opens a <code>Codux mission:</code> search field above the mission dashboard; type a fuzzy mission, role, or workspace name to filter the dashboard while keeping each matching mission block visible.
   Press <code>&lt;Tab&gt;</code> to switch between mission search and the dashboard list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted mission or role, then use <code>j</code>/<code>k</code> to move through selectable mission and role rows.
   The dashboard shows a live output panel near the top; it follows the highlighted role, or the first role in the highlighted mission.
-  From the mission dashboard, press <code>p</code> to send a prompt or command to the highlighted role workspace when it is open, <code>m</code> to open a mission menu when a mission row is highlighted or a workspace menu when a role row is highlighted, <code>o</code> from a role workspace menu to open that workspace, <code>e</code> to edit the mission objective across all role instructions, <code>x</code> to close all role windows, <code>d</code> to delete the whole mission after a destructive confirmation, <code>n</code> to create another mission, or <code>w</code> to create a Codux workspace.
+  From the mission dashboard, press <code>p</code> to send a prompt or command to the highlighted role workspace when it is open, <code>m</code> to open a mission menu when a mission row is highlighted or a workspace menu when a role row is highlighted, <code>v</code> from a mission menu to view the objective, <code>o</code> from a role workspace menu to open that workspace, <code>e</code> to edit the mission objective across all role instructions, <code>x</code> to close all role windows, <code>d</code> to delete the whole mission after a destructive confirmation, <code>n</code> to create another mission, or <code>w</code> to create a Codux workspace.
   Command equivalents are <code>:CoduxMissionEdit &lt;mission&gt;</code>, <code>:CoduxMissionClose &lt;mission&gt;</code>, and <code>:CoduxMissionDelete &lt;mission&gt;</code>.
 </p>
 
@@ -155,8 +155,8 @@
   Deleting a workspace closes its tmux window, removes saved state and matching <code>.agents/codux/&lt;workspace&gt;.md</code> instruction file, removes the worktree, and deletes the workspace branch.
   Press <code>&lt;Tab&gt;</code> from the dashboard to search again, or <code>&lt;C-q&gt;</code> to close the dashboard and search field.
   Statuses show <code>active</code> when Codex is working, <code>question</code> when plan mode is waiting on your answer, <code>idle</code> when the workspace is open, or <code>inactive</code> when it is not open.
-  The mode column shows <code>exec</code>, <code>plan</code>, or <code>--</code> when the workspace mode is unknown or inactive.
-  The dashboard uses question/active/idle/inactive status order, then recent activity, and shows each workspace profile, session age, and target.
+  The mode column shows <code>execute</code>, <code>plan</code>, or <code>not set</code> when the workspace mode is unknown or inactive.
+  The dashboard uses question/active/idle/inactive status order, then recent activity, and shows each workspace permission profile, last activity, needs review, worktree status, window status, branch, cleanup status, and target.
   The target column updates as each workspace moves between files or supported file explorer targets.
 </p>
 

@@ -756,6 +756,41 @@ function M:render_action_palette()
   end
 
   self.ui.set_lines(self.state.workspace_manager_action_buf, lines, { modifiable = true })
+  local ns = self:ns()
+  pcall(vim.api.nvim_buf_clear_namespace, self.state.workspace_manager_action_buf, ns, 0, -1)
+  for index, item in ipairs(self.state.workspace_manager_action_items or {}) do
+    local key = tostring(item.key or "")
+    if key ~= "" then
+      local label_start = #key + 2
+      pcall(
+        vim.api.nvim_buf_add_highlight,
+        self.state.workspace_manager_action_buf,
+        ns,
+        "WhichKey",
+        index - 1,
+        0,
+        #key
+      )
+      pcall(
+        vim.api.nvim_buf_add_highlight,
+        self.state.workspace_manager_action_buf,
+        ns,
+        "Normal",
+        index - 1,
+        #key,
+        label_start
+      )
+      pcall(
+        vim.api.nvim_buf_add_highlight,
+        self.state.workspace_manager_action_buf,
+        ns,
+        "Normal",
+        index - 1,
+        label_start,
+        -1
+      )
+    end
+  end
   return true
 end
 
