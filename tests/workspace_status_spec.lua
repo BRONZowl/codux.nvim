@@ -604,6 +604,207 @@ end
 
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
+  local old_create_augroup = vim.api.nvim_create_augroup
+  local old_create_autocmd = vim.api.nvim_create_autocmd
+  local enter_rhs
+  local focused_win
+  vim.api.nvim_open_win = function()
+    return 20
+  end
+  vim.api.nvim_create_augroup = function()
+    return 91
+  end
+  vim.api.nvim_create_autocmd = function() end
+
+  local controller = mission_control_mod.new({
+    namespace = 99,
+    state = {
+      mission_dashboard_win = 10,
+      mission_dashboard_command_win = 30,
+      mission_dashboard_best_match_row = 7,
+    },
+    is_valid_win = function(win)
+      return win == 10 or win == 20 or win == 30
+    end,
+    is_loaded_buf = function()
+      return true
+    end,
+    get_window_config = function()
+      return { col = 0, row = 0 }
+    end,
+    get_window_width = function()
+      return 80
+    end,
+    ui = {
+      create_scratch_buffer = function()
+        return 31
+      end,
+      printable_prompt_keys = function()
+        return {}
+      end,
+      set_lines = function() end,
+      close_window = function() end,
+      delete_buffer = function() end,
+      set_window_options = function() end,
+    },
+    bind_close_keys = function() end,
+    set_buffer_keymap = function(_, _, lhs, rhs)
+      if lhs == "<CR>" then
+        enter_rhs = rhs
+      end
+    end,
+    set_current_win = function(win)
+      focused_win = win
+      return true
+    end,
+  })
+  function controller:render_dashboard()
+    return true
+  end
+
+  assert_true(controller:open_search_input())
+  assert_true(enter_rhs())
+  assert_equal(controller.state.mission_dashboard_selected_row, 7)
+  assert_equal(focused_win, 10)
+
+  vim.api.nvim_open_win = old_open_win
+  vim.api.nvim_create_augroup = old_create_augroup
+  vim.api.nvim_create_autocmd = old_create_autocmd
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
+  local window_config
+  vim.api.nvim_open_win = function(_, _, config)
+    window_config = config
+    return 40
+  end
+
+  local controller = mission_control_mod.new({
+    state = {},
+    is_loaded_buf = function()
+      return true
+    end,
+    ui = {
+      create_scratch_buffer = function()
+        return 31
+      end,
+      close_window = function() end,
+      delete_buffer = function() end,
+      set_window_options = function() end,
+    },
+    bind_close_keys = function() end,
+    set_buffer_keymap = function() end,
+  })
+
+  assert_true(controller:open_command_sink())
+  assert_equal(window_config.focusable, false)
+  vim.api.nvim_open_win = old_open_win
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
+  local old_create_augroup = vim.api.nvim_create_augroup
+  local old_create_autocmd = vim.api.nvim_create_autocmd
+  local old_win_get_config = vim.api.nvim_win_get_config
+  local enter_rhs
+  local focused_win
+  vim.api.nvim_open_win = function()
+    return 20
+  end
+  vim.api.nvim_win_get_config = function()
+    return { col = 0, row = 0 }
+  end
+  vim.api.nvim_create_augroup = function()
+    return 92
+  end
+  vim.api.nvim_create_autocmd = function() end
+
+  local controller = manager_mod.new({
+    state = {
+      workspace_manager_win = 10,
+      workspace_manager_command_win = 30,
+      workspace_manager_best_match_index = 2,
+    },
+    is_valid_win = function(win)
+      return win == 10 or win == 20 or win == 30
+    end,
+    is_loaded_buf = function()
+      return true
+    end,
+    get_window_config = function()
+      return { col = 0, row = 0 }
+    end,
+    get_window_width = function()
+      return 80
+    end,
+    ui = {
+      create_scratch_buffer = function()
+        return 32
+      end,
+      printable_prompt_keys = function()
+        return {}
+      end,
+      set_lines = function() end,
+      close_window = function() end,
+      delete_buffer = function() end,
+      set_window_options = function() end,
+    },
+    bind_close_keys = function() end,
+    set_buffer_keymap = function(_, _, lhs, rhs)
+      if lhs == "<CR>" then
+        enter_rhs = rhs
+      end
+    end,
+    set_current_win = function(win)
+      focused_win = win
+      return true
+    end,
+  })
+  function controller:render()
+    return true
+  end
+
+  assert_true(controller:open_search_input())
+  assert_true(enter_rhs())
+  assert_equal(controller.state.workspace_manager_selected_index, 2)
+  assert_equal(focused_win, 10)
+
+  vim.api.nvim_open_win = old_open_win
+  vim.api.nvim_create_augroup = old_create_augroup
+  vim.api.nvim_create_autocmd = old_create_autocmd
+  vim.api.nvim_win_get_config = old_win_get_config
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
+  local window_config
+  vim.api.nvim_open_win = function(_, _, config)
+    window_config = config
+    return 41
+  end
+
+  local controller = manager_mod.new({
+    state = {},
+    ui = {
+      create_scratch_buffer = function()
+        return 32
+      end,
+      close_window = function() end,
+      delete_buffer = function() end,
+      set_window_options = function() end,
+    },
+    bind_close_keys = function() end,
+    set_buffer_keymap = function() end,
+  })
+
+  assert_true(controller:open_command_sink())
+  assert_equal(window_config.focusable, false)
+  vim.api.nvim_open_win = old_open_win
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
   local old_win_set_cursor = vim.api.nvim_win_set_cursor
   local window_options
   vim.api.nvim_open_win = function()

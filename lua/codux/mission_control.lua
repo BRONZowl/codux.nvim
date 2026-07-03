@@ -1385,9 +1385,7 @@ function M:open_search_input(opts)
     self.state.mission_dashboard_selected_row = self.state.mission_dashboard_best_match_row
     self.state.mission_dashboard_focus_match = false
     self:render_dashboard()
-    if self.is_valid_win(self.state.mission_dashboard_command_win) then
-      self.set_current_win(self.state.mission_dashboard_command_win)
-    elseif self.is_valid_win(self.state.mission_dashboard_win) then
+    if self.is_valid_win(self.state.mission_dashboard_win) then
       self.set_current_win(self.state.mission_dashboard_win)
     end
     return true
@@ -1521,6 +1519,7 @@ function M:open_command_sink()
     height = 1,
     col = vim.o.columns + 1,
     row = vim.o.lines + 1,
+    focusable = false,
     zindex = 1,
   })
   if not win_ok then
