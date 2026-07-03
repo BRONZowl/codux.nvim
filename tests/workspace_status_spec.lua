@@ -1311,23 +1311,90 @@ if type(vim.api) == "table" then
   controller.get_window_width = function()
     return reserved_dashboard_config.width
   end
-  reserved_command_config = controller:dashboard_command_config(3)
+  reserved_command_config = controller:dashboard_command_config(#controller:dashboard_command_lines(reserved_dashboard_config.width))
   local reserved_output_config = controller:dashboard_output_config(2)
-  assert_equal(reserved_dashboard_config.height, 5)
-  assert_equal(reserved_output_config.height, 8)
+  assert_equal(reserved_dashboard_config.height, 12)
+  assert_equal(reserved_output_config.height, 1)
   assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
   assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+
+  reserved_dashboard_config = controller:dashboard_config(18, {
+    reserve_command_bar = true,
+    reserve_output_panel = true,
+    selected_item = { kind = "mission", mission = { name = "Alpha" } },
+  })
+  reserved_command_config = controller:dashboard_command_config(#controller:dashboard_command_lines(reserved_dashboard_config.width))
+  reserved_output_config = controller:dashboard_output_config(2, {
+    selected_item = { kind = "mission", mission = { name = "Alpha" } },
+  })
+  assert_equal(reserved_dashboard_config.height, 12)
+  assert_equal(reserved_output_config.height, 1)
+  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
+  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+
+  assert_equal(controller:dashboard_preview_mode({ kind = "role", entry = { status = "inactive" } }), "compact")
+  assert_equal(controller:dashboard_preview_mode({ kind = "role", entry = {} }), "compact")
+  assert_equal(controller:dashboard_preview_mode({ kind = "role", entry = { status = "active" } }), "workspace")
+  assert_equal(controller:dashboard_preview_mode({ kind = "role", entry = { status = "idle" } }), "workspace")
+  assert_equal(controller:dashboard_preview_mode({ kind = "role", entry = { status = "question" } }), "workspace")
+
+  reserved_dashboard_config = controller:dashboard_config(18, {
+    reserve_command_bar = true,
+    reserve_output_panel = true,
+    selected_item = { kind = "role", entry = { safe_name = "alpha-builder" } },
+  })
+  reserved_command_config = controller:dashboard_command_config(#controller:dashboard_command_lines(reserved_dashboard_config.width))
+  reserved_output_config = controller:dashboard_output_config(2, {
+    selected_item = { kind = "role", entry = { safe_name = "alpha-builder" } },
+  })
+  assert_equal(reserved_dashboard_config.height, 12)
+  assert_equal(reserved_output_config.height, 1)
+  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
+  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+
+  reserved_dashboard_config = controller:dashboard_config(18, {
+    reserve_command_bar = true,
+    reserve_output_panel = true,
+    selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
+  })
+  reserved_command_config = controller:dashboard_command_config(#controller:dashboard_command_lines(reserved_dashboard_config.width))
+  reserved_output_config = controller:dashboard_output_config(2, {
+    selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
+  })
+  assert_equal(reserved_dashboard_config.height, 1)
+  assert_equal(reserved_output_config.height, 12)
+  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
+  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+
+  for _, status in ipairs({ "idle", "question" }) do
+    reserved_dashboard_config = controller:dashboard_config(18, {
+      reserve_command_bar = true,
+      reserve_output_panel = true,
+      selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = status } },
+    })
+    reserved_command_config = controller:dashboard_command_config(#controller:dashboard_command_lines(reserved_dashboard_config.width))
+    reserved_output_config = controller:dashboard_output_config(2, {
+      selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = status } },
+    })
+    assert_equal(reserved_dashboard_config.height, 1)
+    assert_equal(reserved_output_config.height, 12)
+    assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
+    assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+  end
 
   vim.o.columns = 140
   vim.o.lines = 40
   reserved_dashboard_config = controller:dashboard_config(20, {
     reserve_command_bar = true,
     reserve_output_panel = true,
+    selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
   })
-  reserved_command_config = controller:dashboard_command_config(3)
-  reserved_output_config = controller:dashboard_output_config(2)
-  assert_equal(reserved_output_config.height, 13)
-  assert_true(reserved_dashboard_config.height >= 5)
+  reserved_command_config = controller:dashboard_command_config(#controller:dashboard_command_lines(reserved_dashboard_config.width))
+  reserved_output_config = controller:dashboard_output_config(2, {
+    selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
+  })
+  assert_equal(reserved_output_config.height, 28)
+  assert_true(reserved_dashboard_config.height >= 1)
   assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
   assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
 
@@ -1336,9 +1403,12 @@ if type(vim.api) == "table" then
   reserved_dashboard_config = controller:dashboard_config(20, {
     reserve_command_bar = true,
     reserve_output_panel = true,
+    selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
   })
-  reserved_command_config = controller:dashboard_command_config(3)
-  reserved_output_config = controller:dashboard_output_config(2)
+  reserved_command_config = controller:dashboard_command_config(#controller:dashboard_command_lines(reserved_dashboard_config.width))
+  reserved_output_config = controller:dashboard_output_config(2, {
+    selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
+  })
   assert_equal(reserved_output_config.height, 1)
   assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
   assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
@@ -1381,15 +1451,103 @@ if type(vim.api) == "table" then
 
     vim.o.columns = 120
     vim.o.lines = 24
-    assert_true(resize_controller:resize_dashboard_stack(18))
+    assert_true(resize_controller:resize_dashboard_stack(18, {
+      selected_item = { kind = "mission", mission = { name = "Alpha" } },
+    }))
     assert_equal(table.concat(calls, ","), "91,92,93")
-    assert_equal(configs[91].height, 5)
+    assert_equal(configs[91].height, 12)
     assert_equal(configs[92].height, 4)
-    assert_equal(configs[93].height, 8)
+    assert_equal(configs[93].height, 1)
     assert_equal(configs[92].row, configs[91].row + configs[91].height + 1)
     assert_equal(configs[93].row, configs[92].row + configs[92].height + 1)
     assert_equal(configs[92].width, configs[91].width)
     assert_equal(configs[93].width, configs[91].width)
+
+    calls = {}
+    assert_true(resize_controller:resize_dashboard_stack(18, {
+      selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
+    }))
+    assert_equal(table.concat(calls, ","), "91,92,93")
+    assert_equal(configs[91].height, 1)
+    assert_equal(configs[92].height, 4)
+    assert_equal(configs[93].height, 12)
+    assert_equal(configs[92].row, configs[91].row + configs[91].height + 1)
+    assert_equal(configs[93].row, configs[92].row + configs[92].height + 1)
+    assert_equal(configs[92].width, configs[91].width)
+    assert_equal(configs[93].width, configs[91].width)
+  end
+
+  do
+    local configs = {
+      [91] = { relative = "editor", row = 0, col = 0, width = 80, height = 8 },
+      [92] = { relative = "editor", row = 0, col = 0, width = 80, height = 4 },
+      [93] = { relative = "editor", row = 0, col = 0, width = 80, height = 6 },
+    }
+    local items = {
+      [4] = { kind = "mission", mission = { name = "Alpha" } },
+      [7] = { kind = "role", mission = { name = "Alpha" }, entry = { safe_name = "alpha-builder", status = "active" } },
+    }
+    local controller = mission_control_mod.new({
+      state = {
+        mission_dashboard_buf = 90,
+        mission_dashboard_win = 91,
+        mission_dashboard_command_bar_win = 92,
+        mission_dashboard_output_win = 93,
+        mission_dashboard_items = items,
+        mission_dashboard_selectable_rows = { 4, 7 },
+        mission_dashboard_search_confirmed = true,
+        mission_dashboard_selected_row = 4,
+      },
+      is_loaded_buf = function(bufnr)
+        return bufnr == 90
+      end,
+      is_valid_win = function(win)
+        return win == 91 or win == 92 or win == 93
+      end,
+      get_window_config = function(win)
+        return configs[win] or {}
+      end,
+      get_window_height = function(win)
+        return configs[win] and configs[win].height or nil
+      end,
+      get_window_width = function(win)
+        return configs[win] and configs[win].width or nil
+      end,
+      set_window_config = function(win, config)
+        configs[win] = config
+        return true
+      end,
+      set_window_cursor = function()
+        return true
+      end,
+      ui = {
+        set_lines = function()
+          return true
+        end,
+      },
+    })
+    function controller:dashboard_lines()
+      return { "Mission", "  Builder" }, items, { 4, 7 }, nil
+    end
+    function controller:highlight_dashboard()
+      return true
+    end
+    function controller:render_command_bar()
+      return true
+    end
+    function controller:render_output_panel()
+      return true
+    end
+
+    vim.o.columns = 120
+    vim.o.lines = 24
+    assert_true(controller:render_dashboard())
+    local compact_dashboard_height = configs[91].height
+    assert_equal(configs[93].height, 1)
+    assert_true(controller:move_mission_selection(1))
+    assert_equal(controller.state.mission_dashboard_selected_row, 7)
+    assert_true(configs[91].height < compact_dashboard_height)
+    assert_true(configs[93].height > 1)
   end
 
   local codux = require("codux")
@@ -3168,10 +3326,12 @@ if type(vim.api) == "table" then
     status = "inactive",
   }))
   assert_false(preview_called)
-  assert_contains(table.concat(rendered_lines, "\n"), "Codex  Reviewer")
-  assert_contains(table.concat(rendered_lines, "\n"), "workspace is not active")
-  assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-o workspace")
-  assert_equal(table.concat(rendered_lines, "\n"):find("Ctrl-q", 1, true), nil)
+  local rendered_text = table.concat(rendered_lines, "\n")
+  assert_contains(rendered_text, "workspace inactive...")
+  assert_equal(rendered_text:find("Codex  Reviewer", 1, true), nil)
+  assert_equal(rendered_text:find("alpha-reviewer", 1, true), nil)
+  assert_equal(rendered_text:find("Ctrl-o workspace", 1, true), nil)
+  assert_equal(rendered_text:find("Ctrl-q", 1, true), nil)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 

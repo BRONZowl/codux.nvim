@@ -370,14 +370,34 @@ function M:preview_config(line_count)
   }
 end
 
-function M:dashboard_preview_height(total_height, command_height)
+function M:dashboard_workspace_preview_active(entry)
+  if type(entry) ~= "table" then
+    return false
+  end
+  local status = entry.status
+  return status == "active" or status == "idle" or status == "question"
+end
+
+function M:dashboard_preview_mode(item)
+  if type(item) == "table" and item.kind == "role" and self:dashboard_workspace_preview_active(item.entry) then
+    return "workspace"
+  end
+  return "compact"
+end
+
+function M:dashboard_preview_height(total_height, command_height, mode)
   total_height = math.max(1, tonumber(total_height) or (vim.o.lines - vim.o.cmdheight))
   command_height = math.max(0, tonumber(command_height) or 0)
+  mode = mode == "workspace" and "workspace" or "compact"
 
-  local target = math.min(18, math.max(8, math.floor(total_height * 0.35)))
+  if mode == "compact" then
+    return 1
+  end
+
+  local target = math.min(40, math.max(14, math.floor(total_height * 0.80)))
   local reserved_gaps = (command_height > 0 and 1 or 0) + 1
   local content_capacity = available_dimension(total_height, 4)
-  local preferred_dashboard_height = 5
+  local preferred_dashboard_height = 1
   local preferred_available = content_capacity - command_height - reserved_gaps - preferred_dashboard_height
   if preferred_available >= 1 then
     return math.min(target, preferred_available)
@@ -395,7 +415,9 @@ function M:dashboard_config(line_count, opts)
   local width = math.min(max_width, math.max(80, math.min(160, math.floor(total_width * 0.92))))
   local command_height = opts.reserve_command_bar and #self:dashboard_command_lines(width) or 0
   local command_reserve = command_height > 0 and (command_height + 1) or 0
-  local preview_height = opts.reserve_output_panel and self:dashboard_preview_height(total_height, command_height) or 0
+  local preview_mode = opts.preview_mode or self:dashboard_preview_mode(opts.selected_item)
+  local preview_height = opts.reserve_output_panel and self:dashboard_preview_height(total_height, command_height, preview_mode)
+    or 0
   local output_reserve = preview_height > 0 and (preview_height + 1 + command_reserve) or command_reserve
   local max_height = math.max(1, available_dimension(total_height, 4) - output_reserve)
   local height = math.min(max_height, math.max(8, line_count or 1))
@@ -442,7 +464,8 @@ function M:dashboard_command_config(line_count)
   }
 end
 
-function M:dashboard_output_config(line_count)
+function M:dashboard_output_config(line_count, opts)
+  opts = type(opts) == "table" and opts or {}
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local dashboard_config = self.is_valid_win(self.state.mission_dashboard_win)
       and self.get_window_config(self.state.mission_dashboard_win)
@@ -464,7 +487,8 @@ function M:dashboard_output_config(line_count)
       and (command_config.row + command_height + 1)
     or (dashboard_row + dashboard_height + 1)
   local available_below = total_height - row
-  local desired_height = self:dashboard_preview_height(total_height, command_height)
+  local preview_mode = opts.preview_mode or self:dashboard_preview_mode(opts.selected_item)
+  local desired_height = self:dashboard_preview_height(total_height, command_height, preview_mode)
   local height = math.min(desired_height, math.max(1, available_below))
 
   return {
@@ -483,7 +507,8 @@ function M:dashboard_output_config(line_count)
   }
 end
 
-function M:resize_dashboard_stack(line_count)
+function M:resize_dashboard_stack(line_count, opts)
+  opts = type(opts) == "table" and opts or {}
   if not self.is_valid_win(self.state.mission_dashboard_win) then
     return false
   end
@@ -491,6 +516,8 @@ function M:resize_dashboard_stack(line_count)
   local dashboard_config = self:dashboard_config(line_count, {
     reserve_command_bar = true,
     reserve_output_panel = true,
+    selected_item = opts.selected_item,
+    preview_mode = opts.preview_mode,
   })
   local ok = self.set_window_config(self.state.mission_dashboard_win, dashboard_config)
   if not ok then
@@ -503,7 +530,13 @@ function M:resize_dashboard_stack(line_count)
       and ok
   end
   if self.is_valid_win(self.state.mission_dashboard_output_win) then
-    ok = self.set_window_config(self.state.mission_dashboard_output_win, self:dashboard_output_config(line_count)) and ok
+    ok = self.set_window_config(
+      self.state.mission_dashboard_output_win,
+      self:dashboard_output_config(line_count, {
+        selected_item = opts.selected_item,
+        preview_mode = opts.preview_mode,
+      })
+    ) and ok
   end
   return ok
 end
@@ -1370,6 +1403,11 @@ function M:output_panel_lines(entry, message)
     return lines
   end
 
+  if entry.status == "inactive" then
+    table.insert(lines, "workspace inactive...")
+    return lines
+  end
+
   local role = entry.mission_role or entry.name or entry.safe_name or "workspace"
   table.insert(lines, "Codex  " .. tostring(role))
   table.insert(lines, "  " .. tostring(message or "opening workspace session preview..."))
@@ -1560,7 +1598,9 @@ function M:open_output_panel(entry)
 
   local initial_lines = self:output_panel_lines(entry, "opening workspace session preview...")
   self.ui.set_lines(bufnr, initial_lines, { modifiable = true })
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, self:dashboard_output_config(#initial_lines))
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, self:dashboard_output_config(#initial_lines, {
+    preview_mode = self:dashboard_preview_mode({ kind = "role", entry = entry }),
+  }))
   if not win_ok then
     self.ui.delete_buffer(bufnr)
     self.notify("Failed to open Codux mission output", vim.log.levels.ERROR)
@@ -1630,11 +1670,12 @@ function M:render_dashboard()
   self.state.mission_dashboard_selectable_rows = selectable_rows
   self.state.mission_dashboard_best_match_row = best_match_row
 
-  self:resize_dashboard_stack(#lines)
+  local selected_item = self:selected_item()
+  self:resize_dashboard_stack(#lines, { selected_item = selected_item })
   self.ui.set_lines(self.state.mission_dashboard_buf, lines, { modifiable = true })
   self:highlight_dashboard(self.state.mission_dashboard_buf, lines, items)
   self:render_command_bar()
-  self:render_output_panel(self:selected_output_entry())
+  self:render_output_panel(self:dashboard_output_entry(selected_item))
   if self.state.mission_dashboard_focus_match and self.is_valid_win(self.state.mission_dashboard_win) then
     local row = best_match_row or selectable_rows[1] or 1
     self.set_window_cursor(self.state.mission_dashboard_win, { row, 0 })
@@ -2653,6 +2694,7 @@ function M:open_dashboard(root)
   self:close_dashboard()
   root = root or self.project_root()
   local lines, items, selectable_rows, best_match_row = self:dashboard_lines(root)
+  local initial_selected_item = items[selectable_rows[1]]
   local bufnr = self.ui.create_scratch_buffer({
     bufhidden = "wipe",
     filetype = "codux-missions",
@@ -2669,6 +2711,7 @@ function M:open_dashboard(root)
   local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:dashboard_config(#lines, {
     reserve_command_bar = true,
     reserve_output_panel = true,
+    selected_item = initial_selected_item,
   }))
   if not win_ok then
     self.ui.delete_buffer(bufnr)
