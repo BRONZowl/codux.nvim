@@ -89,6 +89,7 @@ function M.new(opts)
     end,
     notify = type(opts.notify) == "function" and opts.notify or noop,
     create_mission = type(opts.create_mission) == "function" and opts.create_mission or noop,
+    create_workspace_prompt = type(opts.create_workspace_prompt) == "function" and opts.create_workspace_prompt or noop,
     workspace_entries_for_project = type(opts.workspace_entries_for_project) == "function"
         and opts.workspace_entries_for_project
       or function()
@@ -286,7 +287,7 @@ function M:dashboard_config(line_count)
     border = "rounded",
     title = " codux mission dashboard ",
     title_pos = "center",
-    footer = " m menu | p prompt | n new ",
+    footer = " Tab search | m menu | p prompt | n mission | w workspace ",
     footer_pos = "center",
     width = width,
     height = height,
@@ -538,20 +539,24 @@ function M:dashboard_lines(root, opts)
       table.insert(lines, "  objective  " .. self.workspace_ui.truncate_display_tail(objective, 76))
       items[#lines] = { kind = "mission", mission = mission }
     end
-    table.insert(lines, "  role           status    mode  age   workspace")
+    table.insert(lines, "  role           status    mode  profile age   target")
     for _, entry in ipairs(mission.roles) do
       local role = entry.mission_role or entry.name or entry.safe_name
       local status = entry.status or "inactive"
       local mode = self.workspace_ui.manager_mode_label(entry)
+      local profile = entry.permission_profile or "default"
       local age = self.workspace_ui.relative_age_label(self.workspace_ui.session_timestamp(entry))
-      local workspace = entry.name or entry.safe_name or ""
+      local target = type(entry.target_path) == "string" and entry.target_path ~= ""
+          and vim.fn.fnamemodify(entry.target_path, ":t")
+        or "--"
       local line = string.format(
-        "  %-14s %-8s %-4s %-4s %s",
+        "  %-14s %-8s %-4s %-7s %-4s %s",
         self.workspace_ui.truncate_display_tail(role, 14),
         status,
         mode,
+        self.workspace_ui.truncate_display_tail(profile, 7),
         age,
-        self.workspace_ui.truncate_display_tail(workspace, 34)
+        self.workspace_ui.truncate_display_tail(target, 34)
       )
       table.insert(lines, line)
       items[#lines] = { kind = "role", mission = mission, entry = entry }
@@ -954,13 +959,18 @@ function M:move_mission_selection(delta)
   return true
 end
 
-function M:open_search_input()
+function M:open_search_input(opts)
+  opts = type(opts) == "table" and opts or {}
+  local focus = opts.focus ~= false
   if not self.is_valid_win(self.state.mission_dashboard_win) then
     return false
   end
 
   if self.is_valid_win(self.state.mission_dashboard_search_win) then
-    return self.set_current_win(self.state.mission_dashboard_search_win)
+    if focus then
+      return self.set_current_win(self.state.mission_dashboard_search_win)
+    end
+    return true
   end
 
   local bufnr = self.ui.create_scratch_buffer({
@@ -980,7 +990,7 @@ function M:open_search_input()
   local col = type(dashboard_config.col) == "number" and dashboard_config.col or 0
   local row = math.max(0, (type(dashboard_config.row) == "number" and dashboard_config.row or 0) - 3)
 
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, {
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, focus, {
     relative = "editor",
     style = "minimal",
     border = "rounded",
@@ -1628,6 +1638,11 @@ function M:create_new_mission()
   return self:open_prompt()
 end
 
+function M:create_new_workspace()
+  self:close_dashboard()
+  return self.create_workspace_prompt()
+end
+
 function M:bind_dashboard_commands(bufnr)
   self.bind_close_keys(bufnr, function()
     return self:close_dashboard()
@@ -1665,6 +1680,9 @@ function M:bind_dashboard_commands(bufnr)
   self.set_buffer_keymap(bufnr, "n", "n", function()
     return self:create_new_mission()
   end, "Create Codux Mission")
+  self.set_buffer_keymap(bufnr, "n", "w", function()
+    return self:create_new_workspace()
+  end, "Create Codux Workspace")
 end
 
 function M:open_dashboard()
@@ -1712,7 +1730,7 @@ function M:open_dashboard()
   end
   vim.schedule(function()
     if self.is_valid_win(self.state.mission_dashboard_win) and self.is_loaded_buf(self.state.mission_dashboard_buf) then
-      self:open_search_input()
+      self:open_search_input({ focus = false })
     end
   end)
   return true

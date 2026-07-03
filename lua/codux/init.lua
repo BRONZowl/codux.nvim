@@ -56,8 +56,6 @@ local defaults = {
     review_selection = "<leader>zs",
     diagnostics = "<leader>zd",
     diff = "<leader>zg",
-    workspace = "<leader>zw",
-    workspaces = "<leader>zW",
     missions = "<leader>zM",
     mode = "<leader>zp",
   },
@@ -1086,6 +1084,9 @@ mission_controller = mission_control_mod.new({
   notify = notify,
   create_mission = function(mission)
     return M.create_mission(mission)
+  end,
+  create_workspace_prompt = function()
+    return M.open_workspace_prompt()
   end,
   update_mission_objective = function(name, objective, root)
     return M.update_mission_objective(name, objective, { project_root = root })

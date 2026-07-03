@@ -244,6 +244,7 @@ do
           mission_objective = "Build the dashboard\nKeep it sharp",
           status = "active",
           codex_mode = "execute",
+          permission_profile = "auto",
           target_path = "/repo/lua/codux/init.lua",
         },
         {
@@ -275,6 +276,10 @@ do
   assert_contains(table.concat(lines, "\n"), "Output: Builder")
   assert_contains(table.concat(lines, "\n"), "builder output")
   assert_contains(table.concat(lines, "\n"), "objective  Build the dashboard")
+  assert_contains(table.concat(lines, "\n"), "profile")
+  assert_contains(table.concat(lines, "\n"), "target")
+  assert_contains(table.concat(lines, "\n"), "auto")
+  assert_contains(table.concat(lines, "\n"), "init.lua")
   assert_equal(items[7].kind, "mission")
   assert_equal(items[10].kind, "role")
   assert_equal(items[10].entry.safe_name, "alpha-builder")
@@ -372,6 +377,28 @@ do
 end
 
 do
+  local current_win = nil
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_win = 10,
+      mission_dashboard_search_win = 20,
+    },
+    is_valid_win = function(win)
+      return win == 10 or win == 20
+    end,
+    set_current_win = function(win)
+      current_win = win
+      return true
+    end,
+  })
+
+  assert_true(controller:open_search_input({ focus = false }))
+  assert_nil(current_win)
+  assert_true(controller:open_search_input())
+  assert_equal(current_win, 20)
+end
+
+do
   local opened_kind
   local opened_target
   local notifications = {}
@@ -430,10 +457,30 @@ do
   assert_nil(bound["<CR>"])
   assert_equal(bound["<Tab>"], "Search/List Codux Missions")
   assert_equal(bound.p, "Prompt Codux Mission Role")
+  assert_equal(bound.n, "Create Codux Mission")
+  assert_equal(bound.w, "Create Codux Workspace")
   assert_equal(bound.e, "Edit Codux Mission Objective")
   assert_equal(bound.x, "Close Codux Mission")
   assert_equal(bound.d, "Delete Codux Mission")
   assert_nil(bound.r)
+end
+
+do
+  local closed = false
+  local opened = false
+  local controller = mission_control_mod.new({
+    create_workspace_prompt = function()
+      opened = true
+      return true
+    end,
+  })
+  function controller:close_dashboard()
+    closed = true
+  end
+
+  assert_true(controller:create_new_workspace())
+  assert_true(closed)
+  assert_true(opened)
 end
 
 do
@@ -558,11 +605,13 @@ if type(vim.api) == "table" then
   local objective_config = controller:objective_editor_config(20)
   local preview_config = controller:preview_config(20)
   local dashboard_config = controller:dashboard_config(20)
+  assert_contains(dashboard_config.footer, "Tab search")
   assert_contains(dashboard_config.footer, "m menu")
   assert_equal(dashboard_config.footer:find("Enter open", 1, true), nil)
   assert_equal(dashboard_config.footer:find("j/k role", 1, true), nil)
   assert_contains(dashboard_config.footer, "p prompt")
-  assert_contains(dashboard_config.footer, "n new")
+  assert_contains(dashboard_config.footer, "n mission")
+  assert_contains(dashboard_config.footer, "w workspace")
   assert_equal(dashboard_config.footer:find("output above", 1, true), nil)
   assert_equal(dashboard_config.footer:find("e/x/d mission", 1, true), nil)
   assert_equal(dashboard_config.footer:find("r refresh", 1, true), nil)
@@ -578,6 +627,10 @@ if type(vim.api) == "table" then
   codux.setup({ token_monitor = false })
   local mission_map = vim.fn.maparg("<leader>zm", "n", false, true)
   assert_true(vim.tbl_isempty(mission_map))
+  local workspace_create_map = vim.fn.maparg("<leader>zw", "n", false, true)
+  assert_true(vim.tbl_isempty(workspace_create_map))
+  local workspaces_map = vim.fn.maparg("<leader>zW", "n", false, true)
+  assert_true(vim.tbl_isempty(workspaces_map))
   local missions_map = vim.fn.maparg("<leader>zM", "n", false, true)
   assert_equal(missions_map.desc, "mission control")
   vim.o.columns = 140
@@ -1487,7 +1540,11 @@ do
   end
 
   assert_nil(by_desc["create codux mission"])
+  assert_nil(by_desc["create codux workspace"])
+  assert_nil(by_desc["current codux workspaces"])
   assert_nil(by_lhs["<leader>zm"])
+  assert_nil(by_lhs["<leader>zw"])
+  assert_nil(by_lhs["<leader>zW"])
   assert_equal(by_lhs["<leader>zM"], "mission control")
 end
 

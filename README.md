@@ -111,7 +111,7 @@
 </p>
 
 <p>
-  Use <code>:CoduxWorkspaceCreate</code> or <code>&lt;leader&gt;zw</code> inside tmux to create a guided Codex workspace.
+  Use <code>:CoduxWorkspaceCreate</code> inside tmux to create a guided Codex workspace.
   The create flow prompts for a name, opens the Vim-like instruction editor, then previews the instruction before launch.
   Workspace instructions are mirrored to <code>.agents/codux/&lt;workspace&gt;.md</code>, stored in Codux workspace state, and passed to Codex as session guidance; Codux does not create or edit <code>AGENTS.md</code>.
   New Codux workspaces are Git worktrees: Codux requires the current checkout to be clean, creates <code>../codux-worktrees/&lt;workspace&gt;</code> on branch <code>dev/&lt;workspace&gt;</code> from the current ref, and launches the workspace there.
@@ -134,7 +134,7 @@
   Codux opens a <code>Codux mission:</code> search field above the mission dashboard; type a fuzzy mission, role, or workspace name to filter the dashboard while keeping each matching mission block visible.
   Press <code>&lt;Tab&gt;</code> to switch between mission search and the dashboard list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted mission or role, then use <code>j</code>/<code>k</code> to move through selectable mission and role rows.
   The dashboard shows a live output panel near the top; it follows the highlighted role, or the first role in the highlighted mission.
-  From the mission dashboard, press <code>p</code> to send a prompt or command to the highlighted role workspace when it is open, <code>m</code> to open a mission menu when a mission row is highlighted or a workspace menu when a role row is highlighted, <code>o</code> from a role workspace menu to open that workspace, <code>e</code> to edit the mission objective across all role instructions, <code>x</code> to close all role windows, <code>d</code> to delete the whole mission after a destructive confirmation, or <code>n</code> to create another mission.
+  From the mission dashboard, press <code>p</code> to send a prompt or command to the highlighted role workspace when it is open, <code>m</code> to open a mission menu when a mission row is highlighted or a workspace menu when a role row is highlighted, <code>o</code> from a role workspace menu to open that workspace, <code>e</code> to edit the mission objective across all role instructions, <code>x</code> to close all role windows, <code>d</code> to delete the whole mission after a destructive confirmation, <code>n</code> to create another mission, or <code>w</code> to create a Codux workspace.
   Command equivalents are <code>:CoduxMissionEdit &lt;mission&gt;</code>, <code>:CoduxMissionClose &lt;mission&gt;</code>, and <code>:CoduxMissionDelete &lt;mission&gt;</code>.
 </p>
 
@@ -148,7 +148,7 @@
 </p>
 
 <p>
-  Use <code>:CoduxWorkspaces</code> or <code>&lt;leader&gt;zW</code> to open <code>current codux workspaces</code>.
+  Use <code>:CoduxWorkspaces</code> to open <code>current codux workspaces</code>.
   Codux opens a <code>Codux workspace:</code> search field above the dashboard; type a fuzzy workspace name to filter the dashboard and preview the closest match.
   Press <code>&lt;Tab&gt;</code> to switch between the search field and workspace list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>j</code>/<code>k</code> to move, <code>&lt;CR&gt;</code> to open, <code>h</code> to run Doctor, and <code>m</code> to open the selected-workspace menu.
   The workspace menu exposes rename workspace, edit instructions, close workspace, close all workspaces, and delete workspace.
@@ -284,12 +284,12 @@ Codux sends requested files, selections, diagnostics, and health output through 
 </tr>
 <tr>
 <td>Create a guided tmux workspace</td>
-<td><code>&lt;leader&gt;zw</code></td>
+<td>-</td>
 <td><code>:CoduxWorkspaceCreate</code></td>
 </tr>
 <tr>
 <td>Manage current Codux workspaces</td>
-<td><code>&lt;leader&gt;zW</code></td>
+<td>-</td>
 <td><code>:CoduxWorkspaces</code></td>
 </tr>
 <tr>
