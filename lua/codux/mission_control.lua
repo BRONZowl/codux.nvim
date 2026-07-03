@@ -452,7 +452,7 @@ function M:dashboard_output_config(line_count)
     border = "rounded",
     title = " Mission Preview ",
     title_pos = "center",
-    footer = " Ctrl-q dashboard | Ctrl-o workspace ",
+    footer = " Ctrl-o workspace ",
     footer_pos = "center",
     width = dashboard_width,
     height = height,
@@ -864,7 +864,7 @@ function M:dashboard_command_lines(dashboard_width)
   local command_lines = {
     "Commands",
     "  Tab search    j/k move      m menu        p prompt",
-    "  O preview     e edit        x close       d delete",
+    "  O focus preview  e edit     x close       d delete",
     "  n mission     w workspace   q close",
   }
   local width = math.max(40, tonumber(dashboard_width) or 80)
@@ -961,21 +961,10 @@ function M:dashboard_lines(root, opts)
   return lines, items, selectable_rows, best_match_row
 end
 
-function M:dashboard_output_entry(item, missions)
+function M:dashboard_output_entry(item)
   if type(item) == "table" then
     if item.kind == "role" and type(item.entry) == "table" then
       return item.entry
-    end
-    if item.kind == "mission" and type(item.mission) == "table" and type(item.mission.roles) == "table" then
-      return item.mission.roles[1]
-    end
-  end
-
-  if type(missions) == "table" then
-    for _, mission in ipairs(missions) do
-      if type(mission) == "table" and type(mission.roles) == "table" and type(mission.roles[1]) == "table" then
-        return mission.roles[1]
-      end
     end
   end
   return nil
@@ -988,7 +977,7 @@ function M:output_lines(entry, opts)
     table.insert(lines, "")
   end
   if type(entry) ~= "table" then
-    table.insert(lines, "Output  select a mission or role to view workspace output")
+    table.insert(lines, "Output  select a workspace row to view workspace output")
     return lines
   end
 
@@ -1331,24 +1320,19 @@ end
 function M:output_panel_lines(entry, message)
   local lines = {}
   if type(entry) ~= "table" then
-    table.insert(lines, "Codex  select a mission or role to preview its workspace session")
+    table.insert(lines, "Codex  select a workspace row to preview its Codex session")
     return lines
   end
 
   local role = entry.mission_role or entry.name or entry.safe_name or "workspace"
   table.insert(lines, "Codex  " .. tostring(role))
   table.insert(lines, "  " .. tostring(message or "opening workspace session preview..."))
-  table.insert(lines, "  Ctrl-q dashboard | Ctrl-o workspace")
+  table.insert(lines, "  Ctrl-o workspace")
   return lines
 end
 
 function M:selected_output_entry()
   local item = self:selected_item()
-  if type(item) ~= "table" then
-    local rows = self.state.mission_dashboard_selectable_rows or {}
-    local first_row = rows[1]
-    item = first_row and self.state.mission_dashboard_items and self.state.mission_dashboard_items[first_row] or nil
-  end
   return self:dashboard_output_entry(item)
 end
 
@@ -1399,6 +1383,7 @@ function M:start_output_preview(entry)
   self:close_output_preview()
   self.state.mission_dashboard_output_entry = entry
   self.state.mission_dashboard_output_key = self:output_entry_key(entry)
+  self.state.mission_dashboard_output_blocked_key = nil
   if type(entry) ~= "table" then
     return self:render_output_status(entry, "select a workspace to preview")
   end
@@ -1409,12 +1394,14 @@ function M:start_output_preview(entry)
   self:render_output_status(entry, "opening workspace session preview...")
   local preview, error_message = self.workspace_interactive_preview(entry)
   if not preview then
+    self.state.mission_dashboard_output_blocked_key = self.state.mission_dashboard_output_key
     return self:render_output_status(entry, error_message or "workspace session preview unavailable")
   end
 
   local command = preview.command
   if type(command) ~= "table" and type(command) ~= "string" then
     self.close_workspace_interactive_preview(preview)
+    self.state.mission_dashboard_output_blocked_key = self.state.mission_dashboard_output_key
     return self:render_output_status(entry, "workspace session preview command unavailable")
   end
 
@@ -1424,11 +1411,13 @@ function M:start_output_preview(entry)
         if self.state.mission_dashboard_output_job == exited_job_id then
           self.state.mission_dashboard_output_job = nil
           local active_entry = self.state.mission_dashboard_output_entry
+          local active_key = self.state.mission_dashboard_output_key
           local active_preview = self.state.mission_dashboard_output_preview
           self.state.mission_dashboard_output_preview = nil
           if active_preview then
             pcall(self.close_workspace_interactive_preview, active_preview)
           end
+          self.state.mission_dashboard_output_blocked_key = active_key
           self:render_output_status(active_entry, "workspace preview exited with code " .. tostring(code))
         end
       end,
@@ -1437,6 +1426,7 @@ function M:start_output_preview(entry)
   if not term_ok or type(term_error) ~= "number" or term_error <= 0 then
     self.close_workspace_interactive_preview(preview)
     local detail = term_ok and ("invalid job id " .. tostring(term_error)) or term_error
+    self.state.mission_dashboard_output_blocked_key = self.state.mission_dashboard_output_key
     return self:render_output_status(entry, preview_attach_error(command, detail))
   end
 
@@ -1458,6 +1448,9 @@ function M:render_output_panel(entry)
   if self:output_preview_running() then
     return true
   end
+  if key ~= "" and key == self.state.mission_dashboard_output_blocked_key then
+    return true
+  end
   return self:start_output_preview(entry)
 end
 
@@ -1474,8 +1467,8 @@ end
 
 function M:bind_output_panel_commands(bufnr)
   self.set_buffer_keymap(bufnr, { "n", "t" }, "<C-q>", function()
-    return self:focus_mission_list()
-  end, "Focus Codux Mission List", {
+    return self:close_dashboard()
+  end, "Close Codux Missions", {
     nowait = true,
   })
   self.set_buffer_keymap(bufnr, { "n", "t" }, "<C-o>", function()
@@ -1541,6 +1534,7 @@ function M:open_output_panel(entry)
         self.state.mission_dashboard_output_win = nil
         self.state.mission_dashboard_output_entry = nil
         self.state.mission_dashboard_output_key = nil
+        self.state.mission_dashboard_output_blocked_key = nil
       end
       pcall(vim.api.nvim_del_augroup_by_id, group)
     end,
@@ -1557,6 +1551,7 @@ function M:close_output_panel()
   self.state.mission_dashboard_output_buf = nil
   self.state.mission_dashboard_output_entry = nil
   self.state.mission_dashboard_output_key = nil
+  self.state.mission_dashboard_output_blocked_key = nil
   return true
 end
 
@@ -1919,6 +1914,7 @@ function M:close_dashboard()
   self.state.mission_dashboard_output_win = nil
   self.state.mission_dashboard_output_entry = nil
   self.state.mission_dashboard_output_key = nil
+  self.state.mission_dashboard_output_blocked_key = nil
   self.state.mission_dashboard_output_job = nil
   self.state.mission_dashboard_output_preview = nil
   self.state.mission_dashboard_action_buf = nil

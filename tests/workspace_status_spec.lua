@@ -397,7 +397,7 @@ do
   assert_contains(command_text, "j/k move")
   assert_contains(command_text, "m menu")
   assert_contains(command_text, "p prompt")
-  assert_contains(command_text, "O preview")
+  assert_contains(command_text, "O focus preview")
   assert_contains(command_text, "e edit")
   assert_contains(command_text, "x close")
   assert_contains(command_text, "d delete")
@@ -776,7 +776,7 @@ if type(vim.api) == "table" then
   assert_equal(controller.state.mission_dashboard_command_bar_win, 42)
   local command_text = table.concat(rendered_lines, "\n")
   assert_contains(command_text, "Tab search")
-  assert_contains(command_text, "O preview")
+  assert_contains(command_text, "O focus preview")
   assert_contains(command_text, "q close")
 
   vim.api.nvim_open_win = old_open_win
@@ -1272,8 +1272,8 @@ if type(vim.api) == "table" then
   assert_equal(command_config.title, " Commands ")
   assert_equal(command_config.focusable, false)
   assert_equal(output_config.title, " Mission Preview ")
-  assert_contains(output_config.footer, "Ctrl-q dashboard")
   assert_contains(output_config.footer, "Ctrl-o workspace")
+  assert_equal(output_config.footer:find("Ctrl-q", 1, true), nil)
   assert_equal(output_config.footer:find("Tab list", 1, true), nil)
   assert_equal(output_config.footer:find("r refresh", 1, true), nil)
   assert_equal(output_config.footer:find("p prompt", 1, true), nil)
@@ -2801,8 +2801,51 @@ if type(vim.api) == "table" then
   assert_equal(controller.state.mission_dashboard_output_job, 77)
   assert_false(snapshot_called)
   assert_contains(table.concat(rendered_lines, "\n"), "Codex  Reviewer")
-  assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-q dashboard")
   assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-o workspace")
+  assert_equal(table.concat(rendered_lines, "\n"):find("Ctrl-q", 1, true), nil)
+  vim.api.nvim_buf_delete(bufnr, { force = true })
+end
+
+if type(vim.api) == "table" then
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  local rendered_lines
+  local preview_called = false
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_buf = 10,
+      mission_dashboard_win = 11,
+      mission_dashboard_output_buf = bufnr,
+      mission_dashboard_output_win = 13,
+      mission_dashboard_items = {
+        [3] = { kind = "mission", mission = { roles = { { safe_name = "alpha-builder", mission_role = "Builder" } } } },
+      },
+      mission_dashboard_selectable_rows = { 3 },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 3,
+    },
+    is_loaded_buf = function(target)
+      return target == 10 or (target == bufnr and vim.api.nvim_buf_is_loaded(target))
+    end,
+    is_valid_win = function(win)
+      return win == 11 or win == 13
+    end,
+    ui = {
+      set_lines = function(_, lines)
+        rendered_lines = lines
+      end,
+    },
+    workspace_interactive_preview = function()
+      preview_called = true
+      return nil, "should not be called"
+    end,
+  })
+
+  assert_nil(controller:selected_output_entry())
+  assert_true(controller:render_output_panel())
+  assert_false(preview_called)
+  assert_contains(table.concat(rendered_lines, "\n"), "select a workspace row to preview its Codex session")
+  assert_nil(controller.state.mission_dashboard_output_entry)
+  assert_nil(controller.state.mission_dashboard_output_job)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 
@@ -2810,6 +2853,7 @@ if type(vim.api) == "table" then
   local bufnr = vim.api.nvim_create_buf(false, true)
   local rendered_lines
   local closed_preview
+  local termopen_calls = 0
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_output_buf = bufnr,
@@ -2834,6 +2878,7 @@ if type(vim.api) == "table" then
       return true
     end,
     termopen = function()
+      termopen_calls = termopen_calls + 1
       error("permission denied")
     end,
   })
@@ -2850,6 +2895,13 @@ if type(vim.api) == "table" then
   assert_equal(closed_preview.preview_session, "codux-preview-test")
   assert_nil(controller.state.mission_dashboard_output_job)
   assert_nil(controller.state.mission_dashboard_output_preview)
+  assert_equal(termopen_calls, 1)
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "idle",
+  }))
+  assert_equal(termopen_calls, 1)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 
@@ -2857,6 +2909,7 @@ if type(vim.api) == "table" then
   local bufnr = vim.api.nvim_create_buf(false, true)
   local rendered_lines
   local closed_preview
+  local termopen_calls = 0
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_output_buf = bufnr,
@@ -2881,6 +2934,7 @@ if type(vim.api) == "table" then
       return true
     end,
     termopen = function()
+      termopen_calls = termopen_calls + 1
       return 0
     end,
   })
@@ -2896,6 +2950,13 @@ if type(vim.api) == "table" then
   assert_equal(closed_preview.preview_session, "codux-preview-test")
   assert_nil(controller.state.mission_dashboard_output_job)
   assert_nil(controller.state.mission_dashboard_output_preview)
+  assert_equal(termopen_calls, 1)
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "idle",
+  }))
+  assert_equal(termopen_calls, 1)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 
@@ -2904,6 +2965,7 @@ if type(vim.api) == "table" then
   local rendered_lines
   local closed_preview
   local on_exit
+  local termopen_calls = 0
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_output_buf = bufnr,
@@ -2928,6 +2990,7 @@ if type(vim.api) == "table" then
       return true
     end,
     termopen = function(_, opts)
+      termopen_calls = termopen_calls + 1
       on_exit = opts.on_exit
       return 77
     end,
@@ -2944,6 +3007,13 @@ if type(vim.api) == "table" then
   assert_equal(closed_preview.preview_session, "codux-preview-test")
   assert_nil(controller.state.mission_dashboard_output_job)
   assert_nil(controller.state.mission_dashboard_output_preview)
+  assert_equal(termopen_calls, 1)
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "idle",
+  }))
+  assert_equal(termopen_calls, 1)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 
@@ -2978,15 +3048,15 @@ if type(vim.api) == "table" then
   assert_false(preview_called)
   assert_contains(table.concat(rendered_lines, "\n"), "Codex  Reviewer")
   assert_contains(table.concat(rendered_lines, "\n"), "workspace is not active")
-  assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-q dashboard")
   assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-o workspace")
+  assert_equal(table.concat(rendered_lines, "\n"):find("Ctrl-q", 1, true), nil)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 
 do
   local bound = {}
   local opened
-  local focused = false
+  local closed = false
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_output_entry = { safe_name = "alpha-builder", mission_role = "Builder", status = "idle" },
@@ -2998,8 +3068,8 @@ do
       end
     end,
   })
-  function controller:focus_mission_list()
-    focused = true
+  function controller:close_dashboard()
+    closed = true
     return true
   end
   function controller:render_output_panel()
@@ -3011,7 +3081,7 @@ do
   end
 
   controller:bind_output_panel_commands(12)
-  assert_equal(bound["<C-q>"].desc, "Focus Codux Mission List")
+  assert_equal(bound["<C-q>"].desc, "Close Codux Missions")
   assert_equal(bound["<C-o>"].desc, "Open Codux Mission Workspace")
   assert_nil(bound.r)
   assert_nil(bound.o)
@@ -3022,7 +3092,7 @@ do
   assert_nil(bound.n)
   assert_nil(bound.w)
   assert_true(bound["<C-q>"].rhs())
-  assert_true(focused)
+  assert_true(closed)
   assert_true(bound["<C-o>"].rhs())
   assert_equal(opened.safe_name, "alpha-builder")
 end
