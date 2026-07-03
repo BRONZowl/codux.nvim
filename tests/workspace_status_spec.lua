@@ -2744,6 +2744,7 @@ if type(vim.api) == "table" then
   local rendered_lines
   local preview_entry
   local term_command
+  local modified_at_termopen
   local snapshot_called = false
   local controller = mission_control_mod.new({
     namespace = vim.api.nvim_create_namespace("codux.mission_output.test"),
@@ -2790,6 +2791,7 @@ if type(vim.api) == "table" then
     end,
     termopen = function(command)
       term_command = command
+      modified_at_termopen = vim.api.nvim_get_option_value("modified", { buf = bufnr })
       return 77
     end,
   })
@@ -2798,11 +2800,59 @@ if type(vim.api) == "table" then
   assert_true(controller:render_output_panel())
   assert_equal(preview_entry.safe_name, "alpha-reviewer")
   assert_equal(table.concat(term_command, " "), "env -u TMUX tmux attach-session -t codux-preview-test")
+  assert_false(modified_at_termopen)
   assert_equal(controller.state.mission_dashboard_output_job, 77)
   assert_false(snapshot_called)
   assert_contains(table.concat(rendered_lines, "\n"), "Codex  Reviewer")
   assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-o workspace")
   assert_equal(table.concat(rendered_lines, "\n"):find("Ctrl-q", 1, true), nil)
+  vim.api.nvim_buf_delete(bufnr, { force = true })
+end
+
+if type(vim.api) == "table" then
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  local modified_at_termopen
+  local controller = mission_control_mod.new({
+    namespace = vim.api.nvim_create_namespace("codux.mission_output.modified.test"),
+    state = {
+      mission_dashboard_output_buf = bufnr,
+      mission_dashboard_output_win = 13,
+    },
+    is_loaded_buf = function(target)
+      return target == bufnr and vim.api.nvim_buf_is_loaded(target)
+    end,
+    ui = {
+      set_lines = function(target, lines, opts)
+        opts = type(opts) == "table" and opts or {}
+        if opts.modifiable then
+          vim.api.nvim_set_option_value("modifiable", true, { buf = target })
+        end
+        vim.api.nvim_buf_set_lines(target, 0, -1, false, lines)
+        if opts.modifiable then
+          vim.api.nvim_set_option_value("modifiable", false, { buf = target })
+        end
+        return true
+      end,
+    },
+    workspace_interactive_preview = function()
+      return {
+        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
+        preview_session = "codux-preview-test",
+      }, nil
+    end,
+    termopen = function()
+      modified_at_termopen = vim.api.nvim_get_option_value("modified", { buf = bufnr })
+      return 77
+    end,
+  })
+
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "idle",
+  }))
+  assert_false(modified_at_termopen)
+  assert_equal(controller.state.mission_dashboard_output_job, 77)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 
@@ -3055,11 +3105,18 @@ end
 
 do
   local bound = {}
-  local opened
   local closed = false
+  local opened_name
+  local opened_root
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_output_entry = { safe_name = "alpha-builder", mission_role = "Builder", status = "idle" },
+      mission_dashboard_output_entry = {
+        name = "Builder",
+        safe_name = "alpha-builder",
+        project_root = "/repo",
+        mission_role = "Builder",
+        status = "idle",
+      },
     },
     set_buffer_keymap = function(_, mode, lhs, rhs, desc)
       local modes = type(mode) == "table" and table.concat(mode, ",") or mode
@@ -3075,8 +3132,9 @@ do
   function controller:render_output_panel()
     return true
   end
-  function controller:open_role_workspace(entry)
-    opened = entry
+  controller.open_saved_workspace = function(name, root)
+    opened_name = name
+    opened_root = root
     return true
   end
 
@@ -3094,7 +3152,88 @@ do
   assert_true(bound["<C-q>"].rhs())
   assert_true(closed)
   assert_true(bound["<C-o>"].rhs())
-  assert_equal(opened.safe_name, "alpha-builder")
+  assert_equal(opened_name, "alpha-builder")
+  assert_equal(opened_root, "/repo")
+end
+
+do
+  local closed = false
+  local opened_name
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_items = {
+        [5] = {
+          kind = "role",
+          entry = {
+            name = "Builder",
+            safe_name = "alpha-builder",
+            project_root = "/repo",
+            mission_role = "Builder",
+            status = "idle",
+          },
+        },
+      },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 5,
+      mission_dashboard_output_entry = {
+        name = "Stale",
+        safe_name = "stale-builder",
+        project_root = "/repo",
+      },
+    },
+    open_saved_workspace = function(name)
+      opened_name = name
+      return true
+    end,
+  })
+  function controller:close_dashboard()
+    closed = true
+    return true
+  end
+
+  assert_true(controller:open_output_workspace())
+  assert_equal(opened_name, "alpha-builder")
+  assert_true(closed)
+end
+
+do
+  local closed = false
+  local opened_name
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_entry = {
+        name = "Builder",
+        safe_name = "alpha-builder",
+        project_root = "/repo",
+      },
+    },
+    open_saved_workspace = function(name)
+      opened_name = name
+      return false
+    end,
+  })
+  function controller:close_dashboard()
+    closed = true
+    return true
+  end
+
+  assert_false(controller:open_output_workspace())
+  assert_equal(opened_name, "alpha-builder")
+  assert_false(closed)
+end
+
+do
+  local notifications = {}
+  local controller = mission_control_mod.new({
+    state = {},
+    notify = function(message, level)
+      table.insert(notifications, { message = message, level = level })
+    end,
+  })
+
+  assert_false(controller:open_output_workspace())
+  assert_equal(notifications[1].message, "No Codux workspace selected")
+  assert_equal(notifications[1].level, vim.log.levels.WARN)
 end
 
 do

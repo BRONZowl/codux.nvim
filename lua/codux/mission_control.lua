@@ -1359,6 +1359,18 @@ function M:render_output_status(entry, message)
   local lines = self:output_panel_lines(entry, message)
   self.ui.set_lines(self.state.mission_dashboard_output_buf, lines, { modifiable = true })
   self:highlight_output_panel(self.state.mission_dashboard_output_buf, lines)
+  pcall(vim.api.nvim_set_option_value, "modified", false, { buf = self.state.mission_dashboard_output_buf })
+  return true
+end
+
+function M:prepare_output_terminal_buffer()
+  local bufnr = self.state.mission_dashboard_output_buf
+  if not self.is_loaded_buf(bufnr) then
+    return false
+  end
+
+  pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = bufnr })
+  pcall(vim.api.nvim_set_option_value, "modified", false, { buf = bufnr })
   return true
 end
 
@@ -1405,6 +1417,7 @@ function M:start_output_preview(entry)
     return self:render_output_status(entry, "workspace session preview command unavailable")
   end
 
+  self:prepare_output_terminal_buffer()
   local term_ok, term_error = pcall(vim.api.nvim_buf_call, self.state.mission_dashboard_output_buf, function()
     return self.termopen(command, {
       on_exit = function(exited_job_id, code)
@@ -1472,7 +1485,7 @@ function M:bind_output_panel_commands(bufnr)
     nowait = true,
   })
   self.set_buffer_keymap(bufnr, { "n", "t" }, "<C-o>", function()
-    return self:open_role_workspace(self.state.mission_dashboard_output_entry)
+    return self:open_output_workspace()
   end, "Open Codux Mission Workspace", {
     nowait = true,
   })
@@ -2417,8 +2430,35 @@ function M:open_role_workspace(entry)
   if type(entry) ~= "table" then
     return false
   end
-  self:close_dashboard()
-  return self.open_saved_workspace(entry.name or entry.safe_name, entry.project_root)
+  local name = entry.safe_name or entry.name
+  if type(name) ~= "string" or name == "" then
+    return false
+  end
+
+  local ok = self.open_saved_workspace(name, entry.project_root)
+  if ok then
+    self:close_dashboard()
+  end
+  return ok
+end
+
+function M:open_output_workspace()
+  local entry = self:selected_output_entry()
+  if type(entry) ~= "table" then
+    entry = self.state.mission_dashboard_output_entry
+  end
+  if type(entry) ~= "table" then
+    self.notify("No Codux workspace selected", vim.log.levels.WARN)
+    return false
+  end
+
+  local name = entry.safe_name or entry.name
+  if type(name) ~= "string" or name == "" then
+    self.notify("No Codux workspace selected", vim.log.levels.WARN)
+    return false
+  end
+
+  return self:open_role_workspace(entry)
 end
 
 function M:open_workspace_prompt(entry)
