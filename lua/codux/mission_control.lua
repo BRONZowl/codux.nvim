@@ -986,10 +986,7 @@ end
 
 function M:dashboard_command_lines(dashboard_width)
   local command_lines = {
-    "Commands",
-    "  Tab search    j/k move      m menu        p prompt",
-    "  O focus preview  e edit     x close       d delete",
-    "  n mission     w workspace   q close",
+    "Tab search j/k move m menu p prompt O preview e edit x close d delete n mission w workspace q close",
   }
   local width = math.max(40, tonumber(dashboard_width) or 80)
   local lines = {}
