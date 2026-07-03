@@ -50,8 +50,6 @@ local defaults = {
   },
   mappings = {
     open = "<leader>zc",
-    open_auto = "<leader>za",
-    open_danger = "<leader>zA",
     review_file = "<leader>zf",
     review_selection = "<leader>zs",
     diagnostics = "<leader>zd",
@@ -203,6 +201,50 @@ end
 
 function M._v5.output_looks_like_question(lines, first_index)
   return terminal_mod.output_looks_like_question(lines, first_index)
+end
+
+function M._v5.permission_profile_choices()
+  return {
+    { label = "Default", profile = "default" },
+    { label = "Autopilot", profile = "auto" },
+    { label = "Full Access", profile = "danger" },
+  }
+end
+
+function M._v5.should_select_permission_profile(job_id)
+  return job_id == nil
+end
+
+function M._v5.select_permission_profile_open(opts)
+  opts = type(opts) == "table" and opts or {}
+  local selector = opts.selector or (vim.ui and vim.ui.select)
+  if type(selector) ~= "function" then
+    if type(opts.open_default) == "function" then
+      return opts.open_default(opts.initial_prompt)
+    end
+    return false
+  end
+
+  return selector(M._v5.permission_profile_choices(), {
+    prompt = "Codex permission profile:",
+    format_item = function(item)
+      return item.label
+    end,
+  }, function(choice)
+    if type(choice) ~= "table" then
+      return false
+    end
+    if choice.profile == "auto" and type(opts.open_auto) == "function" then
+      return opts.open_auto(opts.initial_prompt)
+    end
+    if choice.profile == "danger" and type(opts.open_danger) == "function" then
+      return opts.open_danger(opts.initial_prompt)
+    end
+    if type(opts.open_default) == "function" then
+      return opts.open_default(opts.initial_prompt)
+    end
+    return false
+  end)
 end
 
 local function system(args, input)
@@ -844,10 +886,6 @@ function M._v5.parse_create_args(args)
   return workspace_runtime_mod.parse_create_args(args)
 end
 
-function M.open(opts)
-  return terminal:open(opts)
-end
-
 local function restart_with_command(command, focus, permission_profile, initial_prompt)
   return terminal:restart_with_command(command, focus, permission_profile, initial_prompt)
 end
@@ -868,6 +906,24 @@ end
 function M.open_danger_full_access(initial_prompt)
   notify("Starting Codex with no approvals and no sandbox", vim.log.levels.WARN)
   return restart_with_command(config.danger_full_access_cmd, true, "danger", initial_prompt)
+end
+
+function M.open_default(initial_prompt)
+  return terminal:open({ initial_prompt = initial_prompt })
+end
+
+function M.open(opts)
+  opts = type(opts) == "table" and opts or {}
+  if not M._v5.should_select_permission_profile(state.job_id) then
+    return terminal:open(opts)
+  end
+
+  return M._v5.select_permission_profile_open({
+    initial_prompt = opts.initial_prompt,
+    open_default = M.open_default,
+    open_auto = M.open_workspace_auto,
+    open_danger = M.open_danger_full_access,
+  })
 end
 
 function M.open_workspace_session(workspace, initial_prompt, opts)
@@ -1548,8 +1604,6 @@ function M.setup(opts)
   local mappings = type(config.mappings) == "table" and config.mappings or {}
   refresh_which_key()
   set_mapping("n", mappings.open, M.open, "open codex")
-  set_mapping("n", mappings.open_auto, M.open_workspace_auto_hidden_with_notice, "codex autopilot")
-  set_mapping("n", mappings.open_danger, M.open_danger_full_access_hidden_with_notice, "codex danger zone")
   set_mapping("n", mappings.review_file, M.send_file_review, "send file/folder to codex")
   set_mapping("n", mappings.review_selection, M.send_selection, "send selection to codex")
   set_mapping("v", mappings.review_selection, M.send_selection, "send selection to codex")

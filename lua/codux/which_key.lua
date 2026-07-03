@@ -404,8 +404,6 @@ end
 function M:normal_entries(mappings)
   local candidates = {
     { lhs = mappings.open, desc = "open codex" },
-    { lhs = mappings.open_auto, desc = "codex autopilot" },
-    { lhs = mappings.open_danger, desc = "codex danger zone" },
     { lhs = mappings.review_file, desc = "send file/folder to codex" },
     { lhs = mappings.review_selection, desc = "send selection to codex" },
     { lhs = mappings.diagnostics, desc = "send diagnostics to codex" },

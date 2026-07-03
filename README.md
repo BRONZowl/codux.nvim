@@ -268,18 +268,18 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <th>Command</th>
 </tr>
 <tr>
-<td>Open or focus Codex</td>
+<td>Open or focus Codex; choose a permission profile when Codex is not running</td>
 <td><code>&lt;leader&gt;zc</code></td>
 <td><code>:Codux</code></td>
 </tr>
 <tr>
 <td>Open Codex autopilot with approve-for-me permissions</td>
-<td><code>&lt;leader&gt;za</code></td>
+<td>-</td>
 <td><code>:CoduxOpenAuto</code></td>
 </tr>
 <tr>
 <td>Open Codex danger zone with no sandbox</td>
-<td><code>&lt;leader&gt;zA</code></td>
+<td>-</td>
 <td><code>:CoduxOpenDanger</code></td>
 </tr>
 <tr>
