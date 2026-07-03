@@ -319,13 +319,13 @@ do
   assert_true(lines[1]:find("^%s+1 mission") ~= nil)
   assert_contains(table.concat(lines, "\n"), "2 roles")
   assert_contains(table.concat(lines, "\n"), "Alpha")
-  assert_equal(lines[6]:find("attn", 1, true), nil)
-  assert_equal(lines[6]:find("wt", 1, true), nil)
-  assert_equal(lines[6]:find("br", 1, true), nil)
-  assert_equal(lines[6]:find("merged", 1, true), nil)
+  assert_equal(lines[4]:find("attn", 1, true), nil)
+  assert_equal(lines[4]:find("wt", 1, true), nil)
+  assert_equal(lines[4]:find(" br ", 1, true), nil)
+  assert_equal(lines[4]:find("merged", 1, true), nil)
   assert_equal(table.concat(lines, "\n"):find("Mission Control", 1, true), nil)
-  assert_contains(table.concat(lines, "\n"), "Output  Builder")
-  assert_contains(table.concat(lines, "\n"), "builder output")
+  assert_equal(table.concat(lines, "\n"):find("Output  Builder", 1, true), nil)
+  assert_equal(table.concat(lines, "\n"):find("builder output", 1, true), nil)
   assert_equal(table.concat(lines, "\n"):find("Build the dashboard", 1, true), nil)
   assert_equal(table.concat(lines, "\n"):find("objective", 1, true), nil)
   assert_contains(table.concat(lines, "\n"), "role            status")
@@ -347,23 +347,23 @@ do
   assert_contains(table.concat(lines, "\n"), "missing")
   assert_contains(table.concat(lines, "\n"), "merged")
   assert_contains(table.concat(lines, "\n"), "init.lua")
-  assert_equal(items[6].kind, "mission")
-  assert_equal(items[8].kind, "role")
-  assert_equal(items[8].entry.safe_name, "alpha-builder")
+  assert_equal(items[3].kind, "mission")
+  assert_equal(items[5].kind, "role")
+  assert_equal(items[5].entry.safe_name, "alpha-builder")
 
   local filtered_lines, filtered_items, filtered_rows, best_match_row =
     controller:dashboard_lines("/repo", { query = "rev", now = now, dashboard_width = 180 })
   assert_contains(table.concat(filtered_lines, "\n"), "Alpha")
-  assert_equal(filtered_items[9].kind, "role")
-  assert_equal(filtered_items[9].entry.safe_name, "alpha-reviewer")
-  assert_equal(best_match_row, 9)
-  assert_equal(table.concat(filtered_rows, ","), "6,8,9")
+  assert_equal(filtered_items[6].kind, "role")
+  assert_equal(filtered_items[6].entry.safe_name, "alpha-reviewer")
+  assert_equal(best_match_row, 6)
+  assert_equal(table.concat(filtered_rows, ","), "3,5,6")
 
   local mission_lines, mission_items, _, mission_best_row =
     controller:dashboard_lines("/repo", { query = "alp", now = now, dashboard_width = 180 })
   assert_contains(table.concat(mission_lines, "\n"), "Alpha")
-  assert_equal(mission_items[6].kind, "mission")
-  assert_equal(mission_best_row, 6)
+  assert_equal(mission_items[3].kind, "mission")
+  assert_equal(mission_best_row, 3)
 
   local reviewer_lines = controller:dashboard_lines("/repo", {
     now = now,
@@ -377,8 +377,8 @@ do
       },
     },
   })
-  assert_contains(table.concat(reviewer_lines, "\n"), "Output  Reviewer")
-  assert_contains(table.concat(reviewer_lines, "\n"), "reviewer output")
+  assert_equal(table.concat(reviewer_lines, "\n"):find("Output  Reviewer", 1, true), nil)
+  assert_equal(table.concat(reviewer_lines, "\n"):find("reviewer output", 1, true), nil)
 
   local no_match_lines, no_match_items, no_match_rows = controller:dashboard_lines("/repo", { query = "zzz" })
   assert_contains(table.concat(no_match_lines, "\n"), "No matching Codux missions")
@@ -875,6 +875,7 @@ do
   assert_nil(bound["<CR>"])
   assert_equal(bound["<Tab>"], "Search/List Codux Missions")
   assert_equal(bound.p, "Prompt Codux Mission Role")
+  assert_equal(bound.O, "Focus Codux Mission Output")
   assert_equal(bound.n, "Create Codux Mission")
   assert_equal(bound.w, "Create Codux Workspace")
   assert_equal(bound.e, "Edit Codux Mission Objective")
@@ -2462,6 +2463,102 @@ do
     status = "inactive",
   })
   assert_contains(table.concat(inactive, "\n"), "workspace is not active")
+end
+
+if type(vim.api) == "table" then
+  local rendered_lines
+  local snapshot_entry
+  local controller = mission_control_mod.new({
+    namespace = vim.api.nvim_create_namespace("codux.mission_output.test"),
+    state = {
+      mission_dashboard_buf = 10,
+      mission_dashboard_win = 11,
+      mission_dashboard_output_buf = 12,
+      mission_dashboard_output_win = 13,
+      mission_dashboard_items = {
+        [3] = { kind = "mission", mission = { roles = { { safe_name = "alpha-builder", mission_role = "Builder" } } } },
+        [5] = { kind = "role", entry = { safe_name = "alpha-reviewer", mission_role = "Reviewer", status = "idle" } },
+      },
+      mission_dashboard_selectable_rows = { 3, 5 },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 5,
+    },
+    is_loaded_buf = function(bufnr)
+      return bufnr == 10 or bufnr == 12
+    end,
+    is_valid_win = function(win)
+      return win == 11 or win == 13
+    end,
+    get_window_width = function()
+      return 80
+    end,
+    get_window_height = function()
+      return 6
+    end,
+    ui = {
+      set_lines = function(_, lines)
+        rendered_lines = lines
+      end,
+    },
+    workspace_terminal_snapshot = function(entry, opts)
+      snapshot_entry = entry
+      assert_equal(opts.max_lines, 4)
+      return "old\nnew", nil
+    end,
+  })
+
+  assert_equal(controller:selected_output_entry().safe_name, "alpha-reviewer")
+  assert_true(controller:render_output_panel())
+  assert_equal(snapshot_entry.safe_name, "alpha-reviewer")
+  assert_contains(table.concat(rendered_lines, "\n"), "Output  Reviewer")
+  assert_contains(table.concat(rendered_lines, "\n"), "new")
+end
+
+do
+  local bound = {}
+  local prompted
+  local opened
+  local focused = false
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_entry = { safe_name = "alpha-builder", mission_role = "Builder", status = "idle" },
+    },
+    bind_close_keys = function(_, callback)
+      bound.q = callback
+    end,
+    set_buffer_keymap = function(_, mode, lhs, rhs, desc)
+      if mode == "n" then
+        bound[lhs] = { rhs = rhs, desc = desc }
+      end
+    end,
+  })
+  function controller:focus_mission_list()
+    focused = true
+    return true
+  end
+  function controller:render_output_panel()
+    return true
+  end
+  function controller:open_role_workspace(entry)
+    opened = entry
+    return true
+  end
+  function controller:open_workspace_prompt(entry)
+    prompted = entry
+    return true
+  end
+
+  controller:bind_output_panel_commands(12)
+  assert_equal(bound["<Tab>"].desc, "Focus Codux Mission List")
+  assert_equal(bound.r.desc, "Refresh Codux Mission Output")
+  assert_equal(bound.o.desc, "Open Codux Mission Workspace")
+  assert_equal(bound.p.desc, "Prompt Codux Mission Role")
+  assert_true(bound.q())
+  assert_true(focused)
+  assert_true(bound.o.rhs())
+  assert_equal(opened.safe_name, "alpha-builder")
+  assert_true(bound.p.rhs())
+  assert_equal(prompted.safe_name, "alpha-builder")
 end
 
 do

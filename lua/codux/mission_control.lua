@@ -79,6 +79,7 @@ local mission_control_filetypes = {
   ["codux-missions-search"] = true,
   ["codux-missions-command"] = true,
   ["codux-missions-actions"] = true,
+  ["codux-missions-output"] = true,
   ["codux-mission-preview"] = true,
   ["codux-mission-objective-preview"] = true,
   ["codux-mission-objective"] = true,
@@ -327,11 +328,15 @@ function M:preview_config(line_count)
   }
 end
 
-function M:dashboard_config(line_count)
+function M:dashboard_config(line_count, opts)
+  opts = type(opts) == "table" and opts or {}
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local max_width = available_dimension(total_width, 4)
-  local max_height = available_dimension(total_height, 4)
+  local output_reserve = opts.reserve_output_panel
+      and (math.min(12, math.max(6, math.floor(total_height * 0.25))) + 1)
+    or 0
+  local max_height = math.max(1, available_dimension(total_height, 4) - output_reserve)
   local width = math.min(max_width, math.max(80, math.min(160, math.floor(total_width * 0.92))))
   local height = math.min(max_height, math.max(8, line_count or 1))
 
@@ -347,6 +352,44 @@ function M:dashboard_config(line_count)
     height = height,
     col = math.max(0, math.floor((total_width - width) / 2)),
     row = math.max(0, math.floor((total_height - height) / 2)),
+  }
+end
+
+function M:dashboard_output_config(line_count)
+  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local dashboard_config = self.is_valid_win(self.state.mission_dashboard_win)
+      and self.get_window_config(self.state.mission_dashboard_win)
+    or {}
+  local dashboard_width = self:window_width() or self:dashboard_config(1).width
+  local dashboard_height = self:window_height() or 8
+  local dashboard_col = type(dashboard_config.col) == "number"
+      and dashboard_config.col
+    or math.max(0, math.floor((math.max(1, vim.o.columns) - dashboard_width) / 2))
+  local dashboard_row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
+  local desired_height = math.min(12, math.max(6, (line_count or 1) + 1))
+  local row = dashboard_row + dashboard_height + 1
+  local available_below = total_height - row
+  local height = desired_height
+  if available_below < math.min(6, desired_height) then
+    height = math.min(desired_height, math.max(4, dashboard_height))
+    row = math.max(0, dashboard_row + dashboard_height - height)
+  else
+    height = math.min(desired_height, math.max(1, available_below))
+  end
+
+  return {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = " Mission Output ",
+    title_pos = "center",
+    footer = " Tab list | r refresh | p prompt | o open ",
+    footer_pos = "center",
+    width = dashboard_width,
+    height = height,
+    col = math.max(0, dashboard_col),
+    row = math.max(0, row),
+    zindex = 55,
   }
 end
 
@@ -799,14 +842,6 @@ function M:dashboard_lines(root, opts)
     )
   )
 
-  local output_entry = opts.output_entry
-  if type(output_entry) ~= "table" then
-    output_entry = self:dashboard_output_entry(opts.selected_item, missions)
-  end
-  for _, line in ipairs(self:output_lines(output_entry)) do
-    table.insert(lines, line)
-  end
-
   for mission_index, mission in ipairs(missions) do
     table.insert(lines, "")
     local counts = self.mission.status_counts(mission)
@@ -862,10 +897,12 @@ function M:dashboard_output_entry(item, missions)
   return nil
 end
 
-function M:output_lines(entry)
-  local lines = {
-    "",
-  }
+function M:output_lines(entry, opts)
+  opts = type(opts) == "table" and opts or {}
+  local lines = {}
+  if opts.leading_blank ~= false then
+    table.insert(lines, "")
+  end
   if type(entry) ~= "table" then
     table.insert(lines, "Output  select a mission or role to view workspace output")
     return lines
@@ -878,16 +915,17 @@ function M:output_lines(entry)
     return lines
   end
 
-  local output, error_message = self.workspace_terminal_snapshot(entry, { max_lines = 8 })
+  local max_lines = tonumber(opts.max_lines) or 8
+  local output, error_message = self.workspace_terminal_snapshot(entry, { max_lines = max_lines })
   output = trim(output)
   if output == "" then
     table.insert(lines, "  " .. tostring(error_message or "no terminal output available"))
     return lines
   end
 
-  local width = math.max(20, (self:window_width() or 80) - 4)
+  local width = math.max(20, tonumber(opts.width) or ((self:window_width() or 80) - 4))
   local output_lines = vim.split(output, "\n", { plain = true })
-  local start = math.max(1, #output_lines - 7)
+  local start = math.max(1, #output_lines - max_lines + 1)
   for index = start, #output_lines do
     local line = self.workspace_ui.truncate_display_tail(output_lines[index], width)
     table.insert(lines, "  " .. line)
@@ -1100,6 +1138,155 @@ function M:highlight_dashboard(bufnr, lines, items)
   end
 end
 
+function M:highlight_output_panel(bufnr, lines)
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, self.namespace, 0, -1)
+  for index, line in ipairs(lines or {}) do
+    if line:find("^Output%s%s", 1, false) then
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKeyDesc", index - 1, 0, 6)
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 6, -1)
+    elseif line:find("^%s+", 1, false) then
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
+    end
+  end
+end
+
+function M:selected_output_entry()
+  local item = self:selected_item()
+  if type(item) ~= "table" then
+    local rows = self.state.mission_dashboard_selectable_rows or {}
+    local first_row = rows[1]
+    item = first_row and self.state.mission_dashboard_items and self.state.mission_dashboard_items[first_row] or nil
+  end
+  return self:dashboard_output_entry(item)
+end
+
+function M:render_output_panel(entry)
+  if not self.is_loaded_buf(self.state.mission_dashboard_output_buf) then
+    return false
+  end
+  entry = type(entry) == "table" and entry or self:selected_output_entry()
+  self.state.mission_dashboard_output_entry = entry
+
+  local width = math.max(20, (self.get_window_width(self.state.mission_dashboard_output_win) or self:window_width() or 80) - 4)
+  local height = self.get_window_height(self.state.mission_dashboard_output_win) or 10
+  local max_lines = math.max(1, height - 2)
+  local lines = self:output_lines(entry, {
+    leading_blank = false,
+    max_lines = max_lines,
+    width = width,
+  })
+  self.ui.set_lines(self.state.mission_dashboard_output_buf, lines, { modifiable = true })
+  self:highlight_output_panel(self.state.mission_dashboard_output_buf, lines)
+  return true
+end
+
+function M:focus_output_panel()
+  if not self.is_valid_win(self.state.mission_dashboard_output_win) then
+    return false
+  end
+  return self.set_current_win(self.state.mission_dashboard_output_win)
+end
+
+function M:bind_output_panel_commands(bufnr)
+  self.bind_close_keys(bufnr, function()
+    return self:focus_mission_list()
+  end, "Focus Codux Mission List", "n", { escape = true, q = true })
+  self.set_buffer_keymap(bufnr, "n", "<Tab>", function()
+    return self:focus_mission_list()
+  end, "Focus Codux Mission List", {
+    nowait = true,
+  })
+  self.set_buffer_keymap(bufnr, "n", "r", function()
+    return self:render_output_panel()
+  end, "Refresh Codux Mission Output", {
+    nowait = true,
+  })
+  self.set_buffer_keymap(bufnr, "n", "o", function()
+    return self:open_role_workspace(self.state.mission_dashboard_output_entry)
+  end, "Open Codux Mission Workspace", {
+    nowait = true,
+  })
+  self.set_buffer_keymap(bufnr, "n", "p", function()
+    return self:open_workspace_prompt(self.state.mission_dashboard_output_entry)
+  end, "Prompt Codux Mission Role", {
+    nowait = true,
+  })
+end
+
+function M:open_output_panel(entry)
+  if not self.is_valid_win(self.state.mission_dashboard_win) then
+    return false
+  end
+  if self.is_valid_win(self.state.mission_dashboard_output_win) and self.is_loaded_buf(self.state.mission_dashboard_output_buf) then
+    return self:render_output_panel(entry)
+  end
+
+  local bufnr = self.ui.create_scratch_buffer({
+    bufhidden = "wipe",
+    filetype = "codux-missions-output",
+    buftype = "nofile",
+    swapfile = false,
+    modifiable = false,
+  })
+  if not bufnr then
+    self.notify("Failed to create Codux mission output", vim.log.levels.ERROR)
+    return false
+  end
+  mark_internal_buffer(self.is_loaded_buf, bufnr)
+
+  local initial_lines = self:output_lines(entry, {
+    leading_blank = false,
+    max_lines = 8,
+    width = math.max(20, (self:window_width() or 80) - 4),
+  })
+  self.ui.set_lines(bufnr, initial_lines, { modifiable = true })
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, self:dashboard_output_config(#initial_lines))
+  if not win_ok then
+    self.ui.delete_buffer(bufnr)
+    self.notify("Failed to open Codux mission output", vim.log.levels.ERROR)
+    return false
+  end
+
+  self.state.mission_dashboard_output_buf = bufnr
+  self.state.mission_dashboard_output_win = win
+  self.state.mission_dashboard_output_entry = entry
+  self.ui.set_window_options(win, {
+    wrap = false,
+    number = false,
+    relativenumber = false,
+    signcolumn = "no",
+    winfixbuf = true,
+    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
+  })
+  self:highlight_output_panel(bufnr, initial_lines)
+  self:bind_output_panel_commands(bufnr)
+
+  local group = vim.api.nvim_create_augroup("codux-mission-output-" .. tostring(bufnr), { clear = true })
+  vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
+    group = group,
+    buffer = bufnr,
+    callback = function()
+      if self.state.mission_dashboard_output_buf == bufnr then
+        self.state.mission_dashboard_output_buf = nil
+        self.state.mission_dashboard_output_win = nil
+        self.state.mission_dashboard_output_entry = nil
+      end
+      pcall(vim.api.nvim_del_augroup_by_id, group)
+    end,
+  })
+
+  return true
+end
+
+function M:close_output_panel()
+  self.ui.close_window(self.state.mission_dashboard_output_win)
+  self.ui.delete_buffer(self.state.mission_dashboard_output_buf)
+  self.state.mission_dashboard_output_win = nil
+  self.state.mission_dashboard_output_buf = nil
+  self.state.mission_dashboard_output_entry = nil
+  return true
+end
+
 function M:render_dashboard()
   if not self.is_loaded_buf(self.state.mission_dashboard_buf) then
     return false
@@ -1118,6 +1305,7 @@ function M:render_dashboard()
 
   self.ui.set_lines(self.state.mission_dashboard_buf, lines, { modifiable = true })
   self:highlight_dashboard(self.state.mission_dashboard_buf, lines, items)
+  self:render_output_panel(self:selected_output_entry())
   if self.state.mission_dashboard_focus_match and self.is_valid_win(self.state.mission_dashboard_win) then
     local row = best_match_row or selectable_rows[1] or 1
     self.set_window_cursor(self.state.mission_dashboard_win, { row, 0 })
@@ -1422,6 +1610,7 @@ end
 function M:close_dashboard()
   self:stop_monitor_timer()
   self:close_action_palette()
+  self:close_output_panel()
   self.ui.close_window(self.state.mission_dashboard_search_win)
   self.ui.close_window(self.state.mission_dashboard_command_win)
   self.ui.close_window(self.state.mission_dashboard_win)
@@ -1448,6 +1637,9 @@ function M:close_dashboard()
   self.state.mission_dashboard_search_win = nil
   self.state.mission_dashboard_command_buf = nil
   self.state.mission_dashboard_command_win = nil
+  self.state.mission_dashboard_output_buf = nil
+  self.state.mission_dashboard_output_win = nil
+  self.state.mission_dashboard_output_entry = nil
   self.state.mission_dashboard_action_buf = nil
   self.state.mission_dashboard_action_win = nil
   self.state.mission_dashboard_action_items = {}
@@ -2068,6 +2260,9 @@ function M:bind_dashboard_commands(bufnr)
   self.set_buffer_keymap(bufnr, "n", "p", function()
     return self:open_workspace_prompt()
   end, "Prompt Codux Mission Role")
+  self.set_buffer_keymap(bufnr, "n", "O", function()
+    return self:focus_output_panel()
+  end, "Focus Codux Mission Output")
   self.set_buffer_keymap(bufnr, "n", "e", function()
     return self:edit_selected_mission()
   end, "Edit Codux Mission Objective")
@@ -2102,7 +2297,9 @@ function M:open_dashboard(root)
 
   self.ui.set_lines(bufnr, lines, { modifiable = true })
   self:highlight_dashboard(bufnr, lines, items)
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:dashboard_config(#lines))
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:dashboard_config(#lines, {
+    reserve_output_panel = true,
+  }))
   if not win_ok then
     self.ui.delete_buffer(bufnr)
     self.notify("Failed to open Codux missions dashboard", vim.log.levels.ERROR)
@@ -2129,6 +2326,7 @@ function M:open_dashboard(root)
   self.state.mission_dashboard_search_confirmed = false
 
   self:bind_dashboard_commands(bufnr)
+  self:open_output_panel(self:selected_output_entry())
   self:open_command_sink()
   self:start_monitor_timer()
   if #selectable_rows > 0 then
