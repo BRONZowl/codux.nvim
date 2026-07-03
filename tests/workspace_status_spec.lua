@@ -347,6 +347,8 @@ do
   assert_contains(table.concat(lines, "\n"), "missing")
   assert_contains(table.concat(lines, "\n"), "merged")
   assert_contains(table.concat(lines, "\n"), "init.lua")
+  assert_equal(table.concat(lines, "\n"):find("Commands", 1, true), nil)
+  assert_equal(table.concat(lines, "\n"):find("Tab search", 1, true), nil)
   assert_equal(items[3].kind, "mission")
   assert_equal(items[5].kind, "role")
   assert_equal(items[5].entry.safe_name, "alpha-builder")
@@ -379,11 +381,29 @@ do
   })
   assert_equal(table.concat(reviewer_lines, "\n"):find("Output  Reviewer", 1, true), nil)
   assert_equal(table.concat(reviewer_lines, "\n"):find("reviewer output", 1, true), nil)
+  assert_equal(table.concat(reviewer_lines, "\n"):find("Commands", 1, true), nil)
 
   local no_match_lines, no_match_items, no_match_rows = controller:dashboard_lines("/repo", { query = "zzz" })
   assert_contains(table.concat(no_match_lines, "\n"), "No matching Codux missions")
   assert_equal(#no_match_items, 0)
   assert_equal(#no_match_rows, 0)
+end
+
+do
+  local controller = mission_control_mod.new({})
+  local command_lines = controller:dashboard_command_lines(120)
+  local command_text = table.concat(command_lines, "\n")
+  assert_contains(command_text, "Tab search")
+  assert_contains(command_text, "j/k move")
+  assert_contains(command_text, "m menu")
+  assert_contains(command_text, "p prompt")
+  assert_contains(command_text, "O preview")
+  assert_contains(command_text, "e edit")
+  assert_contains(command_text, "x close")
+  assert_contains(command_text, "d delete")
+  assert_contains(command_text, "n mission")
+  assert_contains(command_text, "w workspace")
+  assert_contains(command_text, "q close")
 end
 
 do
@@ -700,6 +720,68 @@ if type(vim.api) == "table" then
   assert_true(controller:open_command_sink())
   assert_equal(window_config.focusable, false)
   vim.api.nvim_open_win = old_open_win
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
+  local old_create_augroup = vim.api.nvim_create_augroup
+  local old_create_autocmd = vim.api.nvim_create_autocmd
+  local window_config
+  local rendered_lines
+  vim.api.nvim_open_win = function(_, _, config)
+    window_config = config
+    return 42
+  end
+  vim.api.nvim_create_augroup = function()
+    return 93
+  end
+  vim.api.nvim_create_autocmd = function() end
+
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_win = 10,
+    },
+    is_loaded_buf = function(bufnr)
+      return bufnr == 32
+    end,
+    is_valid_win = function(win)
+      return win == 10 or win == 42
+    end,
+    get_window_config = function()
+      return { col = 2, row = 3 }
+    end,
+    get_window_height = function()
+      return 8
+    end,
+    get_window_width = function()
+      return 100
+    end,
+    ui = {
+      create_scratch_buffer = function()
+        return 32
+      end,
+      set_lines = function(_, lines)
+        rendered_lines = lines
+      end,
+      close_window = function() end,
+      delete_buffer = function() end,
+      set_window_options = function() end,
+    },
+  })
+
+  assert_true(controller:open_command_bar())
+  assert_equal(window_config.title, " Commands ")
+  assert_equal(window_config.focusable, false)
+  assert_equal(controller.state.mission_dashboard_command_bar_buf, 32)
+  assert_equal(controller.state.mission_dashboard_command_bar_win, 42)
+  local command_text = table.concat(rendered_lines, "\n")
+  assert_contains(command_text, "Tab search")
+  assert_contains(command_text, "O preview")
+  assert_contains(command_text, "q close")
+
+  vim.api.nvim_open_win = old_open_win
+  vim.api.nvim_create_augroup = old_create_augroup
+  vim.api.nvim_create_autocmd = old_create_autocmd
 end
 
 if type(vim.api) == "table" then
@@ -1162,31 +1244,87 @@ if type(vim.api) == "table" then
   local objective_config = controller:objective_editor_config(20)
   local preview_config = controller:preview_config(20)
   local dashboard_config = controller:dashboard_config(20)
+  local command_config = controller:dashboard_command_config(3)
+  local output_config = controller:dashboard_output_config(2)
   assert_equal(objective_config.title, " Codux Mission Objective ")
   assert_equal(preview_config.title, " Codux Mission Control ")
   assert_equal(dashboard_config.title, " Mission Control ")
-  assert_contains(dashboard_config.footer, "Tab search")
-  assert_contains(dashboard_config.footer, "m menu")
+  assert_contains(dashboard_config.footer, "Commands shown below")
   assert_equal(dashboard_config.footer:find("Enter open", 1, true), nil)
-  assert_equal(dashboard_config.footer:find("j/k role", 1, true), nil)
-  assert_contains(dashboard_config.footer, "p prompt")
-  assert_contains(dashboard_config.footer, "n mission")
-  assert_contains(dashboard_config.footer, "w workspace")
-  assert_equal(dashboard_config.footer:find("output above", 1, true), nil)
-  assert_equal(dashboard_config.footer:find("e/x/d mission", 1, true), nil)
-  assert_equal(dashboard_config.footer:find("r refresh", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("Tab search", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("m menu", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("p prompt", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("O preview", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("e edit", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("x close", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("d delete", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("n mission", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("w workspace", 1, true), nil)
   assert_equal(dashboard_config.footer:find("q close", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("output above", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("r refresh", 1, true), nil)
   assert_true(objective_config.width <= 38)
   assert_true(preview_config.width <= 38)
   assert_true(dashboard_config.width <= 38)
   assert_true(objective_config.height <= 7)
   assert_true(preview_config.height <= 7)
   assert_true(dashboard_config.height <= 7)
+  assert_equal(command_config.title, " Commands ")
+  assert_equal(command_config.focusable, false)
+  assert_equal(output_config.title, " Mission Preview ")
+  assert_contains(output_config.footer, "Ctrl-q dashboard")
+  assert_contains(output_config.footer, "Ctrl-o workspace")
+  assert_equal(output_config.footer:find("Tab list", 1, true), nil)
+  assert_equal(output_config.footer:find("r refresh", 1, true), nil)
+  assert_equal(output_config.footer:find("p prompt", 1, true), nil)
+  assert_equal(output_config.footer:find("o open", 1, true), nil)
+
+  local old_is_valid_win = controller.is_valid_win
+  local old_get_window_config = controller.get_window_config
+  local old_get_window_height = controller.get_window_height
+  local old_get_window_width = controller.get_window_width
+  vim.o.columns = 120
+  vim.o.lines = 24
+  vim.o.cmdheight = 1
+  local reserved_dashboard_config = controller:dashboard_config(18, {
+    reserve_command_bar = true,
+    reserve_output_panel = true,
+  })
+  local reserved_command_config
+  controller.state.mission_dashboard_win = 91
+  controller.state.mission_dashboard_command_bar_win = 92
+  controller.is_valid_win = function(win)
+    return win == 91 or win == 92
+  end
+  controller.get_window_config = function(win)
+    if win == 92 then
+      return reserved_command_config
+    end
+    return reserved_dashboard_config
+  end
+  controller.get_window_height = function(win)
+    if win == 92 and reserved_command_config then
+      return reserved_command_config.height
+    end
+    return reserved_dashboard_config.height
+  end
+  controller.get_window_width = function()
+    return reserved_dashboard_config.width
+  end
+  reserved_command_config = controller:dashboard_command_config(3)
+  local reserved_output_config = controller:dashboard_output_config(2)
+  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
+  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+  controller.is_valid_win = old_is_valid_win
+  controller.get_window_config = old_get_window_config
+  controller.get_window_height = old_get_window_height
+  controller.get_window_width = old_get_window_width
 
   local codux = require("codux")
   codux.setup({ token_monitor = false })
   assert_true(codux._v5.should_select_permission_profile(nil))
   assert_false(codux._v5.should_select_permission_profile(12))
+  assert_equal(codux._v5.remote_show_existing_codex_terminal(), "not_running")
 
   local profile_choices = codux._v5.permission_profile_choices()
   assert_equal(profile_choices[1].profile, "default")
@@ -2230,6 +2368,97 @@ do
 end
 
 do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local expected_server
+    local runtime = workspace_prepare_runtime({
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        if expected_server and command:find("nvim --server " .. expected_server .. " --remote-expr", 1, true) then
+          return "ok\n", 0
+        end
+        if command == "tmux kill-session -t codux-preview-test" then
+          return "", 1
+        end
+        if command == "tmux new-session -d -t session -s codux-preview-test" then
+          return "", 0
+        end
+        if command == "tmux select-window -t codux-preview-test:review" then
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+    expected_server = runtime:workspace_server_path("/repo", "review")
+
+    local preview, error_message = runtime:workspace_interactive_preview({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+      nvim_server = "/tmp/stale-review.sock",
+    }, { attempts = 1, preview_session = "codux-preview-test" })
+    assert_nil(error_message)
+    assert_equal(table.concat(preview.command, " "), "tmux attach-session -t codux-preview-test")
+    assert_equal(preview.preview_session, "codux-preview-test")
+    local command_text = table.concat(commands, "\n")
+    assert_contains(command_text, "remote_show_existing_codex_terminal")
+    assert_contains(command_text, expected_server)
+    assert_contains(command_text, "tmux new-session -d -t session -s codux-preview-test")
+    assert_contains(command_text, "tmux select-window -t codux-preview-test:review")
+    assert_equal(command_text:find("/tmp/stale-review.sock", 1, true), nil)
+    assert_equal(command_text:find(" codex ", 1, true), nil)
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local expected_server
+    local runtime = workspace_prepare_runtime({
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        if expected_server and command:find("nvim --server " .. expected_server .. " --remote-expr", 1, true) then
+          return "not_running\n", 0
+        end
+        return "", 1
+      end,
+    })
+    expected_server = runtime:workspace_server_path("/repo", "review")
+
+    local preview, error_message = runtime:workspace_interactive_preview({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+    }, { attempts = 1, preview_session = "codux-preview-test" })
+    assert_nil(preview)
+    assert_equal(error_message, "workspace Codex session is not running")
+    local command_text = table.concat(commands, "\n")
+    assert_contains(command_text, "remote_show_existing_codex_terminal")
+    assert_equal(command_text:find("tmux new-session", 1, true), nil)
+  end)
+end
+
+do
   assert_equal(workspace_ui.manager_mode_label({ status = "inactive", codex_mode = "plan" }), "--")
   assert_equal(workspace_ui.manager_mode_label({ status = "idle", codex_mode = "plan" }), "plan")
 end
@@ -2466,14 +2695,17 @@ do
 end
 
 if type(vim.api) == "table" then
+  local bufnr = vim.api.nvim_create_buf(false, true)
   local rendered_lines
-  local snapshot_entry
+  local preview_entry
+  local term_command
+  local snapshot_called = false
   local controller = mission_control_mod.new({
     namespace = vim.api.nvim_create_namespace("codux.mission_output.test"),
     state = {
       mission_dashboard_buf = 10,
       mission_dashboard_win = 11,
-      mission_dashboard_output_buf = 12,
+      mission_dashboard_output_buf = bufnr,
       mission_dashboard_output_win = 13,
       mission_dashboard_items = {
         [3] = { kind = "mission", mission = { roles = { { safe_name = "alpha-builder", mission_role = "Builder" } } } },
@@ -2484,7 +2716,7 @@ if type(vim.api) == "table" then
       mission_dashboard_selected_row = 5,
     },
     is_loaded_buf = function(bufnr)
-      return bufnr == 10 or bufnr == 12
+      return bufnr == 10 or vim.api.nvim_buf_is_loaded(bufnr)
     end,
     is_valid_win = function(win)
       return win == 11 or win == 13
@@ -2500,35 +2732,83 @@ if type(vim.api) == "table" then
         rendered_lines = lines
       end,
     },
-    workspace_terminal_snapshot = function(entry, opts)
-      snapshot_entry = entry
-      assert_equal(opts.max_lines, 4)
-      return "old\nnew", nil
+    workspace_terminal_snapshot = function()
+      snapshot_called = true
+      return "", "snapshot should not be used"
+    end,
+    workspace_interactive_preview = function(entry)
+      preview_entry = entry
+      return {
+        command = { "tmux", "attach-session", "-t", "codux-preview-test" },
+        preview_session = "codux-preview-test",
+      }, nil
+    end,
+    termopen = function(command)
+      term_command = command
+      return 77
     end,
   })
 
   assert_equal(controller:selected_output_entry().safe_name, "alpha-reviewer")
   assert_true(controller:render_output_panel())
-  assert_equal(snapshot_entry.safe_name, "alpha-reviewer")
-  assert_contains(table.concat(rendered_lines, "\n"), "Output  Reviewer")
-  assert_contains(table.concat(rendered_lines, "\n"), "new")
+  assert_equal(preview_entry.safe_name, "alpha-reviewer")
+  assert_equal(table.concat(term_command, " "), "tmux attach-session -t codux-preview-test")
+  assert_equal(controller.state.mission_dashboard_output_job, 77)
+  assert_false(snapshot_called)
+  assert_contains(table.concat(rendered_lines, "\n"), "Codex  Reviewer")
+  assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-q dashboard")
+  assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-o workspace")
+  vim.api.nvim_buf_delete(bufnr, { force = true })
+end
+
+if type(vim.api) == "table" then
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  local rendered_lines
+  local preview_called = false
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_buf = bufnr,
+      mission_dashboard_output_win = 13,
+    },
+    is_loaded_buf = function(target)
+      return target == bufnr and vim.api.nvim_buf_is_loaded(target)
+    end,
+    ui = {
+      set_lines = function(_, lines)
+        rendered_lines = lines
+      end,
+    },
+    workspace_interactive_preview = function()
+      preview_called = true
+      return nil, "should not be called"
+    end,
+  })
+
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "inactive",
+  }))
+  assert_false(preview_called)
+  assert_contains(table.concat(rendered_lines, "\n"), "Codex  Reviewer")
+  assert_contains(table.concat(rendered_lines, "\n"), "workspace is not active")
+  assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-q dashboard")
+  assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-o workspace")
+  vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 
 do
   local bound = {}
-  local prompted
   local opened
   local focused = false
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_output_entry = { safe_name = "alpha-builder", mission_role = "Builder", status = "idle" },
     },
-    bind_close_keys = function(_, callback)
-      bound.q = callback
-    end,
     set_buffer_keymap = function(_, mode, lhs, rhs, desc)
-      if mode == "n" then
-        bound[lhs] = { rhs = rhs, desc = desc }
+      local modes = type(mode) == "table" and table.concat(mode, ",") or mode
+      if modes:find("n", 1, true) or modes:find("t", 1, true) then
+        bound[lhs] = { rhs = rhs, desc = desc, mode = modes }
       end
     end,
   })
@@ -2543,22 +2823,47 @@ do
     opened = entry
     return true
   end
-  function controller:open_workspace_prompt(entry)
-    prompted = entry
-    return true
-  end
 
   controller:bind_output_panel_commands(12)
-  assert_equal(bound["<Tab>"].desc, "Focus Codux Mission List")
-  assert_equal(bound.r.desc, "Refresh Codux Mission Output")
-  assert_equal(bound.o.desc, "Open Codux Mission Workspace")
-  assert_equal(bound.p.desc, "Prompt Codux Mission Role")
-  assert_true(bound.q())
+  assert_equal(bound["<C-q>"].desc, "Focus Codux Mission List")
+  assert_equal(bound["<C-o>"].desc, "Open Codux Mission Workspace")
+  assert_nil(bound.r)
+  assert_nil(bound.o)
+  assert_nil(bound.p)
+  assert_nil(bound.e)
+  assert_nil(bound.x)
+  assert_nil(bound.d)
+  assert_nil(bound.n)
+  assert_nil(bound.w)
+  assert_true(bound["<C-q>"].rhs())
   assert_true(focused)
-  assert_true(bound.o.rhs())
+  assert_true(bound["<C-o>"].rhs())
   assert_equal(opened.safe_name, "alpha-builder")
-  assert_true(bound.p.rhs())
-  assert_equal(prompted.safe_name, "alpha-builder")
+end
+
+do
+  local stopped_job
+  local closed_preview
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_job = 77,
+      mission_dashboard_output_preview = { preview_session = "codux-preview-test" },
+    },
+    jobstop = function(job_id)
+      stopped_job = job_id
+      return true
+    end,
+    close_workspace_interactive_preview = function(preview)
+      closed_preview = preview
+      return true
+    end,
+  })
+
+  controller:close_output_preview()
+  assert_equal(stopped_job, 77)
+  assert_equal(closed_preview.preview_session, "codux-preview-test")
+  assert_nil(controller.state.mission_dashboard_output_job)
+  assert_nil(controller.state.mission_dashboard_output_preview)
 end
 
 do

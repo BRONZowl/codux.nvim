@@ -87,7 +87,9 @@ local mission_control_filetypes = {
   ["codux-missions"] = true,
   ["codux-missions-search"] = true,
   ["codux-missions-command"] = true,
+  ["codux-missions-commands"] = true,
   ["codux-missions-actions"] = true,
+  ["codux-missions-output"] = true,
   ["codux-mission-preview"] = true,
   ["codux-mission-objective-preview"] = true,
   ["codux-mission-objective"] = true,
@@ -1000,6 +1002,14 @@ function M:tmux_window_commands(window_id)
   return commands
 end
 
+function M:kill_tmux_session(session_name)
+  if type(session_name) ~= "string" or session_name == "" then
+    return false
+  end
+  local _, code = self:tmux_system({ "kill-session", "-t", session_name })
+  return code == 0
+end
+
 function M:status_for_window(window_id)
   if not window_id then
     return "inactive"
@@ -1086,6 +1096,70 @@ function M:workspace_terminal_snapshot(entry, opts)
   end
   local max_lines = math.max(1, tonumber(opts.max_lines) or 14)
   return self:remote_luaeval(server, "require('codux')._v5.remote_terminal_snapshot(" .. tostring(max_lines) .. ")", opts)
+end
+
+function M:workspace_preview_session_name(entry)
+  entry = type(entry) == "table" and entry or {}
+  return "codux-preview-"
+    .. path_token(entry.project_root or "")
+    .. "-"
+    .. path_token(entry.safe_name or entry.name or entry.window_name or "")
+end
+
+function M:workspace_interactive_preview(entry, opts)
+  opts = type(opts) == "table" and opts or {}
+  local workspace, ensure_error = self:ensure_workspace_remote(entry, {
+    attempts = opts.remote_attempts or 1,
+    sleep_ms = opts.remote_sleep_ms or 100,
+  })
+  if not workspace then
+    return nil, ensure_error or "workspace is inactive"
+  end
+
+  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
+  local output, remote_error = self:remote_luaeval(
+    server,
+    "require('codux')._v5.remote_show_existing_codex_terminal()",
+    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
+  )
+  if output ~= "ok" then
+    if output == "not_running" then
+      return nil, "workspace Codex session is not running"
+    end
+    return nil, remote_error or output or "workspace Codex session is not reachable"
+  end
+
+  local session = self:current_tmux_session()
+  if not session then
+    return nil, "no tmux session running"
+  end
+
+  local preview_session = opts.preview_session or self:workspace_preview_session_name(workspace)
+  self:kill_tmux_session(preview_session)
+  local _, create_code = self:tmux_system({ "new-session", "-d", "-t", session, "-s", preview_session })
+  if create_code ~= 0 then
+    return nil, "failed to create Codux preview session"
+  end
+
+  local window_name = workspace.tmux_window or workspace.window_name or M.workspace_window_name(workspace.safe_name or workspace.name)
+  local _, select_code = self:tmux_system({ "select-window", "-t", preview_session .. ":" .. window_name })
+  if select_code ~= 0 then
+    self:kill_tmux_session(preview_session)
+    return nil, "failed to select Codux workspace preview window"
+  end
+
+  return {
+    command = { self:tmux_cmd(), "attach-session", "-t", preview_session },
+    preview_session = preview_session,
+    workspace = workspace,
+    window_name = window_name,
+    window_id = workspace.window_id,
+  }, nil
+end
+
+function M:close_workspace_interactive_preview(preview)
+  local session_name = type(preview) == "table" and preview.preview_session or preview
+  return self:kill_tmux_session(session_name)
 end
 
 function M:ensure_workspace_remote(entry, opts)

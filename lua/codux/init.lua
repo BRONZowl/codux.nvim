@@ -966,6 +966,13 @@ function M._v5.remote_send_to_codex(message)
   return terminal:send_to_codex(tostring(message or "")) and "ok" or "failed"
 end
 
+function M._v5.remote_show_existing_codex_terminal()
+  if not terminal:terminal_running() then
+    return "not_running"
+  end
+  return terminal:open_window(true) and "ok" or "failed"
+end
+
 function M._v5.suppress_startup_plan_warning_for_workspace(workspace)
   return type(workspace) == "table" and type(workspace.mission_id) == "string" and workspace.mission_id ~= ""
 end
@@ -1189,6 +1196,12 @@ mission_controller = mission_control_mod.new({
   end,
   workspace_terminal_snapshot = function(entry, opts)
     return workspace_runtime:workspace_terminal_snapshot(entry, opts)
+  end,
+  workspace_interactive_preview = function(entry, opts)
+    return workspace_runtime:workspace_interactive_preview(entry, opts)
+  end,
+  close_workspace_interactive_preview = function(preview)
+    return workspace_runtime:close_workspace_interactive_preview(preview)
   end,
   send_prompt_to_workspace = function(entry, prompt)
     local ok, error_message = workspace_runtime:send_prompt_to_workspace(entry, prompt)
