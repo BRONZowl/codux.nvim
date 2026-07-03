@@ -2408,7 +2408,7 @@ do
       nvim_server = "/tmp/stale-review.sock",
     }, { attempts = 1, preview_session = "codux-preview-test" })
     assert_nil(error_message)
-    assert_equal(table.concat(preview.command, " "), "tmux attach-session -t codux-preview-test")
+    assert_equal(table.concat(preview.command, " "), "env -u TMUX tmux attach-session -t codux-preview-test")
     assert_equal(preview.preview_session, "codux-preview-test")
     local command_text = table.concat(commands, "\n")
     assert_contains(command_text, "remote_show_existing_codex_terminal")
@@ -2417,6 +2417,51 @@ do
     assert_contains(command_text, "tmux select-window -t codux-preview-test:review")
     assert_equal(command_text:find("/tmp/stale-review.sock", 1, true), nil)
     assert_equal(command_text:find(" codex ", 1, true), nil)
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local runtime = workspace_prepare_runtime({
+      get_config = function()
+        local config = default_workspace_config()
+        config.workspaces.tmux_cmd = "/usr/bin/tmux"
+        return config
+      end,
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "/usr/bin/tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "/usr/bin/tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n", 0
+        end
+        if command == "/usr/bin/tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        if command:find("nvim --server ", 1, true) and command:find("remote_show_existing_codex_terminal", 1, true) then
+          return "ok\n", 0
+        end
+        if command == "/usr/bin/tmux kill-session -t codux-preview-test" then
+          return "", 1
+        end
+        if command == "/usr/bin/tmux new-session -d -t session -s codux-preview-test" then
+          return "", 0
+        end
+        if command == "/usr/bin/tmux select-window -t codux-preview-test:review" then
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local preview, error_message = runtime:workspace_interactive_preview({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+    }, { attempts = 1, preview_session = "codux-preview-test" })
+    assert_nil(error_message)
+    assert_equal(table.concat(preview.command, " "), "env -u TMUX /usr/bin/tmux attach-session -t codux-preview-test")
   end)
 end
 
@@ -2739,7 +2784,7 @@ if type(vim.api) == "table" then
     workspace_interactive_preview = function(entry)
       preview_entry = entry
       return {
-        command = { "tmux", "attach-session", "-t", "codux-preview-test" },
+        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
         preview_session = "codux-preview-test",
       }, nil
     end,
@@ -2752,12 +2797,153 @@ if type(vim.api) == "table" then
   assert_equal(controller:selected_output_entry().safe_name, "alpha-reviewer")
   assert_true(controller:render_output_panel())
   assert_equal(preview_entry.safe_name, "alpha-reviewer")
-  assert_equal(table.concat(term_command, " "), "tmux attach-session -t codux-preview-test")
+  assert_equal(table.concat(term_command, " "), "env -u TMUX tmux attach-session -t codux-preview-test")
   assert_equal(controller.state.mission_dashboard_output_job, 77)
   assert_false(snapshot_called)
   assert_contains(table.concat(rendered_lines, "\n"), "Codex  Reviewer")
   assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-q dashboard")
   assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-o workspace")
+  vim.api.nvim_buf_delete(bufnr, { force = true })
+end
+
+if type(vim.api) == "table" then
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  local rendered_lines
+  local closed_preview
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_buf = bufnr,
+      mission_dashboard_output_win = 13,
+    },
+    is_loaded_buf = function(target)
+      return target == bufnr and vim.api.nvim_buf_is_loaded(target)
+    end,
+    ui = {
+      set_lines = function(_, lines)
+        rendered_lines = lines
+      end,
+    },
+    workspace_interactive_preview = function()
+      return {
+        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
+        preview_session = "codux-preview-test",
+      }, nil
+    end,
+    close_workspace_interactive_preview = function(preview)
+      closed_preview = preview
+      return true
+    end,
+    termopen = function()
+      error("permission denied")
+    end,
+  })
+
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "idle",
+  }))
+  local rendered_text = table.concat(rendered_lines, "\n")
+  assert_contains(rendered_text, "failed to attach workspace session preview: ")
+  assert_contains(rendered_text, "permission denied")
+  assert_contains(rendered_text, "env -u TMUX tmux attach-session -t codux-preview-test")
+  assert_equal(closed_preview.preview_session, "codux-preview-test")
+  assert_nil(controller.state.mission_dashboard_output_job)
+  assert_nil(controller.state.mission_dashboard_output_preview)
+  vim.api.nvim_buf_delete(bufnr, { force = true })
+end
+
+if type(vim.api) == "table" then
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  local rendered_lines
+  local closed_preview
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_buf = bufnr,
+      mission_dashboard_output_win = 13,
+    },
+    is_loaded_buf = function(target)
+      return target == bufnr and vim.api.nvim_buf_is_loaded(target)
+    end,
+    ui = {
+      set_lines = function(_, lines)
+        rendered_lines = lines
+      end,
+    },
+    workspace_interactive_preview = function()
+      return {
+        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
+        preview_session = "codux-preview-test",
+      }, nil
+    end,
+    close_workspace_interactive_preview = function(preview)
+      closed_preview = preview
+      return true
+    end,
+    termopen = function()
+      return 0
+    end,
+  })
+
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "idle",
+  }))
+  local rendered_text = table.concat(rendered_lines, "\n")
+  assert_contains(rendered_text, "failed to attach workspace session preview: invalid job id 0")
+  assert_contains(rendered_text, "env -u TMUX tmux attach-session -t codux-preview-test")
+  assert_equal(closed_preview.preview_session, "codux-preview-test")
+  assert_nil(controller.state.mission_dashboard_output_job)
+  assert_nil(controller.state.mission_dashboard_output_preview)
+  vim.api.nvim_buf_delete(bufnr, { force = true })
+end
+
+if type(vim.api) == "table" then
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  local rendered_lines
+  local closed_preview
+  local on_exit
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_buf = bufnr,
+      mission_dashboard_output_win = 13,
+    },
+    is_loaded_buf = function(target)
+      return target == bufnr and vim.api.nvim_buf_is_loaded(target)
+    end,
+    ui = {
+      set_lines = function(_, lines)
+        rendered_lines = lines
+      end,
+    },
+    workspace_interactive_preview = function()
+      return {
+        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
+        preview_session = "codux-preview-test",
+      }, nil
+    end,
+    close_workspace_interactive_preview = function(preview)
+      closed_preview = preview
+      return true
+    end,
+    termopen = function(_, opts)
+      on_exit = opts.on_exit
+      return 77
+    end,
+  })
+
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "idle",
+  }))
+  assert_equal(controller.state.mission_dashboard_output_job, 77)
+  on_exit(77, 2)
+  assert_contains(table.concat(rendered_lines, "\n"), "workspace preview exited with code 2")
+  assert_equal(closed_preview.preview_session, "codux-preview-test")
+  assert_nil(controller.state.mission_dashboard_output_job)
+  assert_nil(controller.state.mission_dashboard_output_preview)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 

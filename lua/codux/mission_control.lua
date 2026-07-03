@@ -10,6 +10,31 @@ local function trim(value)
   return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function command_display(command)
+  if type(command) == "table" then
+    local parts = {}
+    for _, part in ipairs(command) do
+      table.insert(parts, tostring(part))
+    end
+    return table.concat(parts, " ")
+  end
+  return tostring(command or "")
+end
+
+local function preview_attach_error(command, detail)
+  local message = "failed to attach workspace session preview"
+  detail = tostring(detail or "")
+  if detail ~= "" then
+    message = message .. ": " .. detail
+  end
+
+  local display = command_display(command)
+  if display ~= "" then
+    message = message .. " (" .. display .. ")"
+  end
+  return message
+end
+
 local function available_dimension(total, margin)
   return math.max(1, total - margin)
 end
@@ -1393,28 +1418,29 @@ function M:start_output_preview(entry)
     return self:render_output_status(entry, "workspace session preview command unavailable")
   end
 
-  local job_id
   local term_ok, term_error = pcall(vim.api.nvim_buf_call, self.state.mission_dashboard_output_buf, function()
     return self.termopen(command, {
-      on_exit = function(_, _)
-        if self.state.mission_dashboard_output_job == job_id then
+      on_exit = function(exited_job_id, code)
+        if self.state.mission_dashboard_output_job == exited_job_id then
           self.state.mission_dashboard_output_job = nil
+          local active_entry = self.state.mission_dashboard_output_entry
           local active_preview = self.state.mission_dashboard_output_preview
           self.state.mission_dashboard_output_preview = nil
           if active_preview then
             pcall(self.close_workspace_interactive_preview, active_preview)
           end
+          self:render_output_status(active_entry, "workspace preview exited with code " .. tostring(code))
         end
       end,
     })
   end)
   if not term_ok or type(term_error) ~= "number" or term_error <= 0 then
     self.close_workspace_interactive_preview(preview)
-    return self:render_output_status(entry, "failed to attach workspace session preview")
+    local detail = term_ok and ("invalid job id " .. tostring(term_error)) or term_error
+    return self:render_output_status(entry, preview_attach_error(command, detail))
   end
 
-  job_id = term_error
-  self.state.mission_dashboard_output_job = job_id
+  self.state.mission_dashboard_output_job = term_error
   self.state.mission_dashboard_output_preview = preview
   pcall(vim.api.nvim_set_option_value, "filetype", "codux-missions-output", { buf = self.state.mission_dashboard_output_buf })
   return true
