@@ -836,19 +836,20 @@ end
 
 do
   local captured = {}
-  local closed = false
+  local events = {}
   local rendered = false
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_project_root = "/repo",
     },
     start_mission = function(name, root, opts)
+      table.insert(events, "start")
       captured = { name = name, root = root, opts = opts }
       return true
     end,
   })
   function controller:close_dashboard()
-    closed = true
+    table.insert(events, "close")
   end
   function controller:render_dashboard()
     rendered = true
@@ -860,31 +861,40 @@ do
   assert_true(captured.opts.restart_inactive)
   assert_true(captured.opts.prompt_roles)
   assert_true(captured.opts.focus_first)
-  assert_true(closed)
+  assert_equal(events[1], "close")
+  assert_equal(events[2], "start")
   assert_false(rendered)
 end
 
 do
-  local closed = false
+  local events = {}
   local rendered = false
+  local reopened_root
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_project_root = "/repo",
     },
     start_mission = function()
+      table.insert(events, "start")
       return false
     end,
   })
   function controller:close_dashboard()
-    closed = true
+    table.insert(events, "close")
   end
   function controller:render_dashboard()
     rendered = true
   end
+  function controller:open_dashboard(root)
+    reopened_root = root
+    return true
+  end
 
   assert_false(controller:start_selected_mission({ name = "Alpha" }))
-  assert_false(closed)
-  assert_true(rendered)
+  assert_equal(events[1], "close")
+  assert_equal(events[2], "start")
+  assert_false(rendered)
+  assert_equal(reopened_root, "/repo")
 end
 
 do
@@ -1872,6 +1882,7 @@ end
 do
   with_workspace_prepare_env(function()
     local commands = {}
+    local expected_server
     local runtime = workspace_prepare_runtime({
       system = function(args)
         local command = table.concat(args, " ")
@@ -1885,24 +1896,27 @@ do
         if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
           return "nvim\n", 0
         end
-        if command:find("^nvim %-%-server /tmp/review%.sock %-%-remote%-expr", 1, false) then
+        if expected_server and command:find("nvim --server " .. expected_server .. " --remote-expr", 1, true) then
           return "ok\n", 0
         end
         return "", 1
       end,
     })
+    expected_server = runtime:workspace_server_path("/repo", "review")
 
     local ok, error_message = runtime:send_prompt_to_workspace({
       name = "review",
       safe_name = "review",
       project_root = "/repo",
-      nvim_server = "/tmp/review.sock",
+      nvim_server = "/tmp/stale-review.sock",
     }, "  /plan  ", { attempts = 1 })
     assert_nil(error_message)
     assert_true(ok)
     local command_text = table.concat(commands, "\n")
     assert_contains(command_text, "remote_send_to_codex")
     assert_contains(command_text, "  /plan  ")
+    assert_contains(command_text, expected_server)
+    assert_equal(command_text:find("/tmp/stale-review.sock", 1, true), nil)
   end)
 end
 
@@ -1910,6 +1924,7 @@ do
   with_workspace_prepare_env(function()
     local commands = {}
     local pane_checks = 0
+    local expected_server
     local runtime = workspace_prepare_runtime({
       system = function(args)
         local command = table.concat(args, " ")
@@ -1927,22 +1942,26 @@ do
           end
           return "nvim\n", 0
         end
-        if command:find("^nvim %-%-server /tmp/review%.sock %-%-remote%-expr", 1, false) then
+        if expected_server and command:find("nvim --server " .. expected_server .. " --remote-expr", 1, true) then
           return "ok\n", 0
         end
         return "", 1
       end,
     })
+    expected_server = runtime:workspace_server_path("/repo", "review")
 
     local ok, error_message = runtime:ensure_workspace_plan_mode({
       name = "review",
       safe_name = "review",
       project_root = "/repo",
-      nvim_server = "/tmp/review.sock",
+      nvim_server = "/tmp/stale-review.sock",
     }, { attempts = 1, remote_attempts = 2, remote_sleep_ms = 1 })
     assert_nil(error_message)
     assert_true(ok)
-    assert_contains(table.concat(commands, "\n"), "remote_ensure_plan_mode")
+    local command_text = table.concat(commands, "\n")
+    assert_contains(command_text, "remote_ensure_plan_mode")
+    assert_contains(command_text, expected_server)
+    assert_equal(command_text:find("/tmp/stale-review.sock", 1, true), nil)
     assert_equal(pane_checks, 2)
   end)
 end
@@ -5410,6 +5429,7 @@ do
                 safe_name = "review",
                 project_root = "/repo",
                 tmux_window = "review",
+                nvim_server = "/tmp/stale-review.sock",
               }),
             },
           },
@@ -5460,11 +5480,17 @@ do
       project_root = "/repo",
       restart_inactive = true,
     })
+    local expected_server = runtime:workspace_server_path("/repo", "review")
     assert_nil(error_message)
     assert_equal(workspace.window_id, "@2")
+    assert_equal(workspace.nvim_server, expected_server)
     assert_true(killed)
     assert_true(created)
-    assert_contains(table.concat(commands, "\n"), "tmux kill-window -t @1")
+    local command_text = table.concat(commands, "\n")
+    assert_contains(command_text, "tmux kill-window -t @1")
+    assert_contains(command_text, "--listen")
+    assert_contains(command_text, expected_server)
+    assert_equal(command_text:find("/tmp/stale-review.sock", 1, true), nil)
   end)
 end
 

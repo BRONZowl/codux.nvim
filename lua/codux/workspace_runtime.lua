@@ -1115,7 +1115,7 @@ function M:ensure_workspace_remote(entry, opts)
         last_error = "workspace is inactive"
       elseif self:status_for_window(window_id) == "active" then
         entry.window_id = window_id
-        entry.nvim_server = entry.nvim_server or self:workspace_server_path(root, safe_name)
+        entry.nvim_server = self:workspace_server_path(root, safe_name)
         return entry, nil
       else
         last_error = "workspace is inactive"
@@ -2816,7 +2816,7 @@ function M:prepare_workspace(name, opts)
   workspace.safe_name = workspace.safe_name or safe_name_or_error
   workspace.window_name = M.workspace_window_name(workspace.safe_name)
   workspace.tmux_target = M.tmux_target(session, workspace.window_name)
-  workspace.nvim_server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name)
+  workspace.nvim_server = self:workspace_server_path(workspace.project_root, workspace.safe_name)
   workspace.initial_mode = initial_mode or workspace.initial_mode
   local saved_workspace = type(existing) == "table" or (opts.require_existing and file_instruction ~= nil)
   workspace.open_visible = not saved_workspace

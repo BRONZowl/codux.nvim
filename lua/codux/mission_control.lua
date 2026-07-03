@@ -1721,15 +1721,14 @@ function M:start_selected_mission(mission)
     self.notify("No Codux mission selected", vim.log.levels.WARN)
     return false
   end
+  self:close_dashboard()
   local ok = self.start_mission(mission.name or mission.mission_id, root, {
     restart_inactive = true,
     prompt_roles = true,
     focus_first = true,
   })
-  if ok then
-    self:close_dashboard()
-  else
-    self:render_dashboard()
+  if not ok then
+    self:open_dashboard(root)
   end
   return ok
 end
