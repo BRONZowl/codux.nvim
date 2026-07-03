@@ -394,6 +394,7 @@ do
   local command_lines = controller:dashboard_command_lines(120)
   local command_text = table.concat(command_lines, "\n")
   assert_equal(#command_lines, 1)
+  assert_equal(command_lines[1]:find("Tab search", 1, true), 11)
   assert_contains(command_text, "Tab search")
   assert_contains(command_text, "j/k move")
   assert_contains(command_text, "m menu")
@@ -405,6 +406,65 @@ do
   assert_contains(command_text, "n mission")
   assert_contains(command_text, "w workspace")
   assert_contains(command_text, "q close")
+end
+
+do
+  local old_api = vim.api
+  local highlights = {}
+  vim.api = {
+    nvim_buf_clear_namespace = function() end,
+    nvim_buf_add_highlight = function(bufnr, namespace, group, row, start_col, end_col)
+      table.insert(highlights, {
+        bufnr = bufnr,
+        namespace = namespace,
+        group = group,
+        row = row,
+        start_col = start_col,
+        end_col = end_col,
+      })
+    end,
+  }
+
+  local controller = mission_control_mod.new({ namespace = 99 })
+  local command_lines = controller:dashboard_command_lines(120)
+  controller:highlight_command_bar(12, command_lines)
+
+  local function assert_highlight(group, start_col, end_col)
+    for _, highlight in ipairs(highlights) do
+      if highlight.group == group and highlight.start_col == start_col and highlight.end_col == end_col then
+        return true
+      end
+    end
+    error("missing highlight " .. group .. " " .. tostring(start_col) .. "-" .. tostring(end_col), 2)
+  end
+
+  local line = command_lines[1]
+  local commands = {
+    { key = "Tab", label = "search" },
+    { key = "j/k", label = "move" },
+    { key = "m", label = "menu" },
+    { key = "p", label = "prompt" },
+    { key = "O", label = "preview" },
+    { key = "e", label = "edit" },
+    { key = "x", label = "close" },
+    { key = "d", label = "delete" },
+    { key = "n", label = "mission" },
+    { key = "w", label = "workspace" },
+    { key = "q", label = "close" },
+  }
+  local search_start = 1
+  for _, command in ipairs(commands) do
+    local pair = command.key .. " " .. command.label
+    local pair_start = line:find(pair, search_start, true)
+    assert_true(type(pair_start) == "number")
+    local key_start = pair_start - 1
+    local label_start = pair_start + #command.key
+    assert_highlight("WhichKey", key_start, key_start + #command.key)
+    assert_highlight("Comment", label_start, label_start + #command.label)
+    search_start = pair_start + #pair
+  end
+
+  vim.api = old_api
 end
 
 do

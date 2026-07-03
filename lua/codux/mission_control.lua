@@ -47,6 +47,20 @@ local function next_bordered_float_row(row, content_height)
   return math.max(0, tonumber(row) or 0) + bordered_float_outer_height(content_height)
 end
 
+local dashboard_command_items = {
+  { key = "Tab", label = "search" },
+  { key = "j/k", label = "move" },
+  { key = "m", label = "menu" },
+  { key = "p", label = "prompt" },
+  { key = "O", label = "preview" },
+  { key = "e", label = "edit" },
+  { key = "x", label = "close" },
+  { key = "d", label = "delete" },
+  { key = "n", label = "mission" },
+  { key = "w", label = "workspace" },
+  { key = "q", label = "close" },
+}
+
 local function entry_key(entry)
   entry = type(entry) == "table" and entry or {}
   return tostring(entry.safe_name or entry.name or entry.mission_role or "")
@@ -985,15 +999,13 @@ function M:mission_role_line(entry, dashboard_width, now, dirty_by_role)
 end
 
 function M:dashboard_command_lines(dashboard_width)
-  local command_lines = {
-    "Tab search j/k move m menu p prompt O preview e edit x close d delete n mission w workspace q close",
-  }
   local width = math.max(40, tonumber(dashboard_width) or 80)
-  local lines = {}
-  for _, line in ipairs(command_lines) do
-    table.insert(lines, self.workspace_ui.truncate_display_tail(line, width))
+  local parts = {}
+  for _, item in ipairs(dashboard_command_items) do
+    table.insert(parts, item.key .. " " .. item.label)
   end
-  return lines
+  local line = self.workspace_ui.truncate_display_tail(table.concat(parts, " "), width)
+  return { center_display_line(self.workspace_ui, line, width) }
 end
 
 function M:dashboard_lines(root, opts)
@@ -1351,12 +1363,20 @@ end
 function M:highlight_command_bar(bufnr, lines)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, self.namespace, 0, -1)
   for index, line in ipairs(lines or {}) do
-    local first_space = line:find("%s")
-    if first_space and first_space > 1 then
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKey", index - 1, 0, first_space - 1)
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, first_space - 1, -1)
-    else
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
+    pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
+    local search_start = 1
+    for _, item in ipairs(dashboard_command_items) do
+      local key = tostring(item.key or "")
+      local label = tostring(item.label or "")
+      local pair = key .. " " .. label
+      local pair_start = line:find(pair, search_start, true)
+      if pair_start then
+        local key_start = pair_start - 1
+        local label_start = pair_start + #key
+        pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKey", index - 1, key_start, key_start + #key)
+        pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, label_start, label_start + #label)
+        search_start = pair_start + #pair
+      end
     end
   end
 end
