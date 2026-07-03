@@ -20,6 +20,7 @@ local defaults = {
   workspace_auto_cmd = vim.env.CODEX_WORKSPACE_AUTO_CMD
     or 'codex -s workspace-write -a on-request -c approvals_reviewer="auto_review"',
   danger_full_access_cmd = vim.env.CODEX_DANGER_FULL_ACCESS_CMD or "codex -s danger-full-access -a never",
+  default_initial_mode = "plan",
   auto_open = true,
   auto_focus = true,
   popup = {
@@ -952,6 +953,7 @@ function M.open_workspace_session(workspace, initial_prompt, opts)
     hidden = not visible,
     capture_workspace_session = workspace ~= nil,
     initial_mode = workspace and workspace.initial_mode,
+    suppress_startup_plan_warning = M._v5.suppress_startup_plan_warning_for_workspace(workspace),
   })
 end
 
@@ -962,6 +964,14 @@ end
 
 function M._v5.remote_send_to_codex(message)
   return terminal:send_to_codex(tostring(message or "")) and "ok" or "failed"
+end
+
+function M._v5.suppress_startup_plan_warning_for_workspace(workspace)
+  return type(workspace) == "table" and type(workspace.mission_id) == "string" and workspace.mission_id ~= ""
+end
+
+function M._v5.remote_ensure_plan_mode()
+  return terminal:ensure_plan_mode() and "ok" or "failed"
 end
 
 function M.open_hidden(initial_prompt)
@@ -992,6 +1002,10 @@ end
 
 function M.create_mission(mission, objective, opts)
   return workspace_runtime:create_mission(mission, objective, opts)
+end
+
+function M.start_mission(name, opts)
+  return workspace_runtime:start_mission(name, opts)
 end
 
 function M.update_mission_objective(name, objective, opts)
@@ -1152,6 +1166,9 @@ mission_controller = mission_control_mod.new({
   end,
   workspace_branch_state = function(entry)
     return workspace_runtime:workspace_branch_state(entry)
+  end,
+  start_mission = function(name, root)
+    return M.start_mission(name, { project_root = root })
   end,
   close_mission = function(name, root)
     return M.close_mission(name, { project_root = root })

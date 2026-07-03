@@ -36,6 +36,14 @@ local function workspace_mode_for(mode)
   return nil
 end
 
+local function normalize_initial_mode(mode)
+  if mode == "execute" or mode == "plan" then
+    return mode
+  end
+
+  return nil
+end
+
 function M.mode_display_label(mode)
   if mode == "execute" then
     return "exec"
@@ -60,16 +68,30 @@ function M.detect_terminal_mode_from_line(line)
     return nil
   end
 
-  if line == "/plan" then
-    return "plan"
-  end
-
   local mode = line:match("^mode:%s*(plan)$") or line:match("^codex mode:%s*(plan)$")
+  if not mode and line == "plan mode" then
+    mode = "plan"
+  end
+  if not mode and line:find("plan mode (shift+tab to cycle)", 1, true) then
+    mode = "plan"
+  end
+  if not mode and line:match("plan mode$") then
+    mode = "plan"
+  end
   if mode then
     return mode
   end
 
   mode = line:match("^mode:%s*(execute)$") or line:match("^codex mode:%s*(execute)$")
+  if not mode and line == "execute mode" then
+    mode = "execute"
+  end
+  if not mode and line:find("execute mode (shift+tab to cycle)", 1, true) then
+    mode = "execute"
+  end
+  if not mode and line:match("execute mode$") then
+    mode = "execute"
+  end
   if mode then
     return mode
   end
@@ -84,25 +106,12 @@ function M.detect_terminal_mode_from_lines(lines, first_index)
 
   first_index = math.max(1, tonumber(first_index) or 1)
   local start_index = math.max(first_index, #lines - 39)
-  local saw_execute = false
-  local saw_plan = false
 
   for index = #lines, start_index, -1 do
     local mode = M.detect_terminal_mode_from_line(lines[index])
     if mode ~= nil then
-      saw_execute = saw_execute or mode == "execute"
-      saw_plan = saw_plan or mode == "plan"
-      if saw_execute and saw_plan then
-        return nil
-      end
+      return mode
     end
-  end
-
-  if saw_execute then
-    return "execute"
-  end
-  if saw_plan then
-    return "plan"
   end
 
   return nil
@@ -608,6 +617,278 @@ function M:sync_terminal_mode_from_buffer()
   return M.detect_terminal_mode_from_lines(lines)
 end
 
+function M:recent_terminal_lines(max_lines)
+  if not self:valid_buf() then
+    return nil
+  end
+
+  local line_count = vim.api.nvim_buf_line_count(self.state.buf)
+  local start_line = math.max(0, line_count - (tonumber(max_lines) or 80))
+  return buffer_lines(self.state.buf, start_line, line_count)
+end
+
+function M:terminal_screen_height()
+  if self:valid_win() then
+    local ok, height = pcall(vim.api.nvim_win_get_height, self.state.win)
+    if ok and type(height) == "number" and height > 0 then
+      return height
+    end
+  end
+
+  local height = tonumber(vim.o.lines) or 24
+  local cmdheight = tonumber(vim.o.cmdheight) or 0
+  return math.max(1, height - cmdheight)
+end
+
+function M:terminal_screen_lines()
+  if not self:valid_buf() then
+    return nil
+  end
+
+  local line_count = vim.api.nvim_buf_line_count(self.state.buf)
+  local screen_height = self:terminal_screen_height()
+  local start_line = math.max(0, line_count - screen_height)
+  return buffer_lines(self.state.buf, start_line, line_count)
+end
+
+function M:startup_sequence_ready()
+  if self.state.job_id == nil then
+    return false
+  end
+
+  local lines = self:terminal_screen_lines()
+  if type(lines) ~= "table" then
+    return false
+  end
+
+  local saw_ready_surface = false
+  for index = #lines, 1, -1 do
+    local line = trim(M.strip_terminal_control_sequences(lines[index]):lower():gsub("%s+", " "))
+    if line ~= "" then
+      if line:find("booting mcp server", 1, true) or line:find("esc to interrupt", 1, true) then
+        return false
+      end
+      saw_ready_surface = saw_ready_surface
+        or line:match("^›") ~= nil
+        or line:match("^>") ~= nil
+        or M.detect_terminal_mode_from_line(line) ~= nil
+    end
+  end
+
+  return saw_ready_surface
+end
+
+function M:startup_plan_command_busy()
+  local lines = self:recent_terminal_lines(24)
+  if type(lines) ~= "table" then
+    return false
+  end
+
+  for index = #lines, 1, -1 do
+    local line = trim(M.strip_terminal_control_sequences(lines[index]):lower():gsub("%s+", " "))
+    if line:find("'/plan' is disabled while a task is in progress", 1, true) then
+      return true
+    end
+  end
+
+  return false
+end
+
+function M:send_startup_plan_toggle()
+  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, "\27[200~/plan\27[201~\r")
+  return send_ok and sent ~= 0
+end
+
+function M:paste_startup_prompt(initial_prompt)
+  local paste = "\27[200~" .. initial_prompt .. "\27[201~\r"
+  local paste_ok, pasted = pcall(vim.fn.chansend, self.state.job_id, paste)
+  if paste_ok and pasted ~= 0 then
+    self:mark_terminal_prompt_submission()
+    self:invalidate_terminal_prompt_tracking()
+    self:set_codex_working(true)
+    return true
+  end
+
+  return false
+end
+
+function M:confirm_startup_plan_sequence(initial_prompt, prompt_after_mode, attempts_remaining, retry_toggle, opts)
+  opts = type(opts) == "table" and opts or {}
+  attempts_remaining = tonumber(attempts_remaining) or 60
+  retry_toggle = retry_toggle == true
+
+  local function run(attempts_left)
+    if not self:terminal_running() then
+      return
+    end
+
+    local mode = self:sync_terminal_mode_from_buffer()
+    if mode == "plan" then
+      self:set_mode("plan")
+      if prompt_after_mode then
+        self:paste_startup_prompt(initial_prompt)
+      end
+      return
+    end
+
+    if mode == "execute" and retry_toggle then
+      if self:send_startup_plan_toggle() then
+        retry_toggle = false
+      end
+      if attempts_left > 0 and type(vim.defer_fn) == "function" then
+        vim.defer_fn(function()
+          run(attempts_left - 1)
+        end, 250)
+        return
+      end
+    end
+
+    if self:startup_plan_command_busy() then
+      self:send_startup_plan_toggle()
+    end
+
+    if attempts_left > 0 and type(vim.defer_fn) == "function" then
+      vim.defer_fn(function()
+        run(attempts_left - 1)
+      end, 250)
+      return
+    end
+
+    if opts.suppress_warning ~= true then
+      self.notify("Codex did not confirm plan mode on startup", vim.log.levels.WARN)
+    end
+  end
+
+  if type(vim.defer_fn) == "function" then
+    vim.defer_fn(function()
+      run(attempts_remaining - 1)
+    end, 250)
+  else
+    run(0)
+  end
+end
+
+function M:schedule_startup_plan_sequence(initial_prompt, prompt_after_mode, attempts_remaining, opts)
+  opts = type(opts) == "table" and opts or {}
+  attempts_remaining = tonumber(attempts_remaining) or 20
+  local settle_ms = math.max(250, tonumber(self:config().startup_plan_settle_ms) or 4000)
+
+  local function run(attempts_left)
+    if not self:terminal_running() then
+      return
+    end
+
+    local mode = self:sync_terminal_mode_from_buffer()
+    if mode == "plan" then
+      self:set_mode("plan")
+      if prompt_after_mode then
+        self:paste_startup_prompt(initial_prompt)
+      end
+      return
+    end
+
+    if mode == "execute" then
+      if not self:send_startup_plan_toggle() then
+        return
+      end
+
+      self:confirm_startup_plan_sequence(initial_prompt, prompt_after_mode, nil, false, {
+        suppress_warning = opts.suppress_warning,
+      })
+      return
+    end
+
+    if not self:startup_sequence_ready() then
+      if attempts_left > 0 and type(vim.defer_fn) == "function" then
+        vim.defer_fn(function()
+          run(attempts_left - 1)
+        end, 250)
+      end
+      return
+    end
+
+    local function send_after_settle()
+      if not self:terminal_running() then
+        return
+      end
+
+      local settled_mode = self:sync_terminal_mode_from_buffer()
+      if settled_mode == "plan" then
+        self:set_mode("plan")
+        if prompt_after_mode then
+          self:paste_startup_prompt(initial_prompt)
+        end
+        return
+      end
+
+      if not self:send_startup_plan_toggle() then
+        return
+      end
+
+      self:confirm_startup_plan_sequence(initial_prompt, prompt_after_mode, nil, false, {
+        suppress_warning = opts.suppress_warning,
+      })
+    end
+
+    if type(vim.defer_fn) == "function" then
+      vim.defer_fn(send_after_settle, settle_ms)
+    else
+      send_after_settle()
+    end
+    return
+  end
+
+  if type(vim.defer_fn) == "function" then
+    vim.defer_fn(function()
+      run(attempts_remaining - 1)
+    end, 250)
+  else
+    run(0)
+  end
+end
+
+function M:ensure_plan_mode(opts)
+  opts = type(opts) == "table" and opts or {}
+  local attempts = math.max(1, tonumber(opts.attempts) or 60)
+  local sleep_ms = math.max(1, tonumber(opts.sleep_ms) or 250)
+  local retry_toggle = opts.retry_toggle == true
+  local sent_toggle = false
+
+  if not self:terminal_running() then
+    return false
+  end
+
+  for attempt = 1, attempts do
+    local mode = self:sync_terminal_mode_from_buffer()
+    if mode == "plan" then
+      self:set_mode("plan")
+      return true
+    end
+
+    if not sent_toggle then
+      sent_toggle = self:send_startup_plan_toggle()
+    elseif self:startup_plan_command_busy() then
+      self:send_startup_plan_toggle()
+    elseif mode == "execute" and retry_toggle then
+      if self:send_startup_plan_toggle() then
+        retry_toggle = false
+      end
+    end
+
+    if attempt < attempts then
+      pcall(vim.fn.sleep, tostring(sleep_ms) .. "m")
+    end
+  end
+
+  local mode = self:sync_terminal_mode_from_buffer()
+  if mode == "plan" then
+    self:set_mode("plan")
+    return true
+  end
+
+  return false
+end
+
 function M:schedule_terminal_buffer_observation()
   if self.state.terminal_mode_sync_pending then
     return
@@ -617,6 +898,10 @@ function M:schedule_terminal_buffer_observation()
   vim.schedule(function()
     self.state.terminal_mode_sync_pending = false
     self:note_terminal_activity()
+    local mode = self:sync_terminal_mode_from_buffer()
+    if mode ~= nil then
+      self:set_mode(mode)
+    end
   end)
 end
 
@@ -965,9 +1250,10 @@ end
 function M:start_terminal(focus, initial_prompt, command, workspace, permission_profile, opts)
   opts = opts or {}
   local hidden = opts.hidden == true
-  local initial_mode = opts.initial_mode == "plan" and "plan" or nil
-  local apply_initial_mode = initial_mode == "plan" and type(initial_prompt) == "string" and initial_prompt ~= ""
-  local prompt_after_mode = apply_initial_mode
+  local initial_mode = normalize_initial_mode(opts.initial_mode) or normalize_initial_mode(self:config().default_initial_mode)
+  local has_initial_prompt = type(initial_prompt) == "string" and initial_prompt ~= ""
+  local apply_initial_mode = initial_mode == "plan"
+  local prompt_after_mode = apply_initial_mode and has_initial_prompt
 
   if self:terminal_running() then
     if focus and not hidden then
@@ -1022,7 +1308,11 @@ function M:start_terminal(focus, initial_prompt, command, workspace, permission_
 
   local job_id
   local session_capture_mtime = os.time() - 2
-  local term_command = self.command_util.with_prompt(command, prompt_after_mode and nil or initial_prompt)
+  local command_prompt = initial_prompt
+  if prompt_after_mode then
+    command_prompt = nil
+  end
+  local term_command = self.command_util.with_prompt(command, command_prompt)
   local term_options = {
     on_exit = function(_, code)
       local expected_exit = self.state.exiting_jobs[job_id] == true
@@ -1078,26 +1368,13 @@ function M:start_terminal(focus, initial_prompt, command, workspace, permission_
   if self:valid_win() then
     pcall(vim.api.nvim_set_option_value, "wrap", true, { win = self.state.win })
   end
-  self:set_mode(apply_initial_mode and "plan" or "execute")
+  self:set_mode("execute")
   self.start_token_monitor_timer()
-  self:set_codex_working(type(initial_prompt) == "string" and initial_prompt ~= "")
+  self:set_codex_working(has_initial_prompt and not prompt_after_mode)
   if apply_initial_mode then
-    local function send_startup_sequence()
-      if self:terminal_running() then
-        pcall(vim.fn.chansend, self.state.job_id, "\27[Z")
-        if prompt_after_mode then
-          local paste = "\27[200~" .. initial_prompt .. "\27[201~\r"
-          pcall(vim.fn.chansend, self.state.job_id, paste)
-          self:mark_terminal_prompt_submission()
-          self:invalidate_terminal_prompt_tracking()
-        end
-      end
-    end
-    if type(vim.defer_fn) == "function" then
-      vim.defer_fn(send_startup_sequence, 250)
-    else
-      send_startup_sequence()
-    end
+    self:schedule_startup_plan_sequence(initial_prompt, prompt_after_mode, nil, {
+      suppress_warning = opts.suppress_startup_plan_warning == true,
+    })
   end
   if opts.capture_workspace_session == true and workspace ~= nil then
     self.capture_workspace_session(workspace, session_capture_mtime)

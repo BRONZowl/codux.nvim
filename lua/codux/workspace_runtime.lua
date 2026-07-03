@@ -1077,7 +1077,8 @@ function M:workspace_terminal_snapshot(entry, opts)
   return self:remote_luaeval(server, "require('codux')._v5.remote_terminal_snapshot(" .. tostring(max_lines) .. ")", opts)
 end
 
-function M:ensure_workspace_remote(entry)
+function M:ensure_workspace_remote(entry, opts)
+  opts = type(opts) == "table" and opts or {}
   entry = type(entry) == "table" and entry or {}
   local safe_name = entry.safe_name or entry.name
   local root = entry.project_root
@@ -1088,24 +1089,34 @@ function M:ensure_workspace_remote(entry)
     return nil, "workspace root is required"
   end
 
-  local session = self:current_tmux_session()
-  if not session then
-    return nil, "workspace is inactive"
-  end
-
   local window_name = entry.tmux_window or entry.window_name or M.workspace_window_name(safe_name)
-  local window_id = self:tmux_window_id(session, window_name)
-  if not window_id then
-    return nil, "workspace is inactive"
+  local attempts = math.max(1, tonumber(opts.attempts) or 1)
+  local sleep_ms = math.max(1, tonumber(opts.sleep_ms) or 100)
+  local last_error = "workspace is inactive"
+
+  for attempt = 1, attempts do
+    local session = self:current_tmux_session()
+    if not session then
+      last_error = "workspace is inactive"
+    else
+      local window_id = self:tmux_window_id(session, window_name)
+      if not window_id then
+        last_error = "workspace is inactive"
+      elseif self:status_for_window(window_id) == "active" then
+        entry.window_id = window_id
+        entry.nvim_server = entry.nvim_server or self:workspace_server_path(root, safe_name)
+        return entry, nil
+      else
+        last_error = "workspace is inactive"
+      end
+    end
+
+    if attempt < attempts then
+      pcall(vim.fn.sleep, tostring(sleep_ms) .. "m")
+    end
   end
 
-  if self:status_for_window(window_id) ~= "active" then
-    return nil, "workspace is inactive"
-  end
-
-  entry.window_id = window_id
-  entry.nvim_server = entry.nvim_server or self:workspace_server_path(root, safe_name)
-  return entry, nil
+  return nil, last_error
 end
 
 function M:send_prompt_to_workspace(entry, prompt, opts)
@@ -1131,6 +1142,27 @@ function M:send_prompt_to_workspace(entry, prompt, opts)
   end
 
   return false, remote_error or output or "Failed to send prompt"
+end
+
+function M:ensure_workspace_plan_mode(entry, opts)
+  opts = type(opts) == "table" and opts or {}
+  local workspace, ensure_error =
+    self:ensure_workspace_remote(entry, { attempts = opts.remote_attempts or 60, sleep_ms = opts.remote_sleep_ms or 250 })
+  if not workspace then
+    return false, ensure_error or "workspace not found"
+  end
+
+  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
+  local output, remote_error = self:remote_luaeval(
+    server,
+    "require('codux')._v5.remote_ensure_plan_mode()",
+    { attempts = opts.attempts or 60, sleep_ms = opts.sleep_ms or 250 }
+  )
+  if output == "ok" then
+    return true, nil
+  end
+
+  return false, remote_error or output or "Failed to switch workspace to plan mode"
 end
 
 function M:normalize_codex_mode(mode)
@@ -2383,6 +2415,81 @@ function M:close_mission(name, opts)
   return failed == 0
 end
 
+function M:start_mission(name, opts)
+  opts = type(opts) == "table" and opts or {}
+  local root = opts.project_root or self:project_root()
+  local mission, mission_error = self:mission_for_name(root, name)
+  if not mission then
+    self.notify(mission_error or "mission not found", vim.log.levels.ERROR)
+    return false
+  end
+
+  local started = 0
+  local failed = 0
+  for _, entry in ipairs(type(mission.roles) == "table" and mission.roles or {}) do
+    local workspace_name = entry.name or entry.safe_name
+    if type(workspace_name) ~= "string" or workspace_name == "" then
+      failed = failed + 1
+    else
+      local workspace, workspace_error = self:prepare_workspace(workspace_name, {
+        allow_existing = true,
+        initial_mode = entry.initial_mode or "plan",
+        permission_profile = entry.permission_profile or "auto",
+        require_existing = true,
+        project_root = entry.project_root or root,
+      })
+      if workspace then
+        local ok = true
+        local plan_error = nil
+        if workspace.initial_mode == "plan" then
+          ok, plan_error = self:ensure_workspace_plan_mode(workspace)
+        end
+        if ok then
+          started = started + 1
+        else
+          failed = failed + 1
+          local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
+          self.notify(
+            "Failed to start Codux mission role "
+              .. tostring(label)
+              .. ": "
+              .. tostring(plan_error or "failed to switch workspace to plan mode"),
+            vim.log.levels.WARN
+          )
+        end
+      else
+        failed = failed + 1
+        local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
+        self.notify(
+          "Failed to start Codux mission role " .. tostring(label) .. ": " .. tostring(workspace_error or "unknown error"),
+          vim.log.levels.WARN
+        )
+      end
+    end
+  end
+
+  if failed > 0 then
+    self.notify(
+      "Started "
+        .. tostring(started)
+        .. " roles in Codux mission "
+        .. tostring(mission.name or name)
+        .. "; "
+        .. tostring(failed)
+        .. " failed",
+      vim.log.levels.WARN
+    )
+  else
+    self.notify("Started Codux mission " .. tostring(mission.name or name) .. " with " .. tostring(started) .. " roles")
+  end
+
+  if self.state.workspace_manager_project_root then
+    self.render_workspace_manager()
+  end
+
+  return failed == 0
+end
+
 function M:shell_env_assignment(name, value)
   return name .. "=" .. vim.fn.shellescape(tostring(value or ""))
 end
@@ -2711,6 +2818,7 @@ function M:prepare_workspace(name, opts)
   end
 
   workspace.window_id = window_id
+  workspace.window_created = created == true
   if created and not workspace.initial_prompt then
     workspace.codex_status = "idle"
   end

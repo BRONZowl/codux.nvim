@@ -249,6 +249,7 @@ end
 
 function M.mission_action_items()
   return {
+    { key = "s", action = "start_mission", label = "Start Mission" },
     { key = "v", action = "view_objective", label = "View Objective" },
     { key = "e", action = "edit_objective", label = "Edit Objective" },
     { key = "x", action = "close_mission", label = "Close Mission" },

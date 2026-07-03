@@ -155,6 +155,7 @@ function M.new(opts)
         merged = false,
       }
     end,
+    start_mission = type(opts.start_mission) == "function" and opts.start_mission or noop,
     close_mission = type(opts.close_mission) == "function" and opts.close_mission or noop,
     delete_mission = type(opts.delete_mission) == "function" and opts.delete_mission or noop,
     project_root = type(opts.project_root) == "function" and opts.project_root or function()
@@ -1705,6 +1706,18 @@ function M:close_selected_mission(mission)
   return self.close_mission(mission.name or mission.mission_id, root)
 end
 
+function M:start_selected_mission(mission)
+  local root = self.state.mission_dashboard_project_root or self.project_root()
+  mission = mission or self:selected_mission()
+  if not mission then
+    self.notify("No Codux mission selected", vim.log.levels.WARN)
+    return false
+  end
+  local ok = self.start_mission(mission.name or mission.mission_id, root)
+  self:render_dashboard()
+  return ok
+end
+
 function M:run_action(action, target)
   local workspace = self.state.mission_dashboard_action_workspace or target
   if action == "open_workspace" then
@@ -1760,6 +1773,10 @@ function M:run_action(action, target)
   if action == "view_objective" then
     self:close_action_palette()
     return self:view_mission_objective(mission)
+  end
+  if action == "start_mission" then
+    self:close_action_palette()
+    return self:start_selected_mission(mission)
   end
   if action == "close_mission" then
     self:close_action_palette()

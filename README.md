@@ -120,6 +120,7 @@
 
 <p>
   Inside tmux, Codux creates or reuses a window named after the workspace in the current tmux session, restores Neo-tree to the same target when available, and starts new workspaces with your current Codex permission profile.
+  New Codux-managed Codex sessions start in plan mode by default; set <code>default_initial_mode = "execute"</code> in <code>require("codux").setup()</code> to keep the previous execute-mode startup behavior.
   Reopened saved workspaces keep their stored profile.
   Reopened saved workspaces resume the stored Codex session id when available, so the workspace returns to the same Codex conversation instead of starting a new one.
   Workspace windows use the requested workspace name for the tmux window.
@@ -134,7 +135,7 @@
   Codux opens a <code>Codux mission:</code> search field above the mission dashboard; type a fuzzy mission, role, or workspace name to filter the dashboard while keeping each matching mission block visible.
   Press <code>&lt;Tab&gt;</code> to switch between mission search and the dashboard list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted mission or role, then use <code>j</code>/<code>k</code> to move through selectable mission and role rows.
   The dashboard shows a live output panel near the top; it follows the highlighted role, or the first role in the highlighted mission.
-  From the mission dashboard, press <code>p</code> to send a prompt or command to the highlighted role workspace when it is open, <code>m</code> to open a mission menu when a mission row is highlighted or a workspace menu when a role row is highlighted, <code>v</code> from a mission menu to view the objective, <code>o</code> from a role workspace menu to open that workspace, <code>e</code> to edit the mission objective across all role instructions, <code>x</code> to close all role windows, <code>d</code> to delete the whole mission after a destructive confirmation, <code>n</code> to create another mission, or <code>w</code> to create a Codux workspace.
+  From the mission dashboard, press <code>p</code> to send a prompt or command to the highlighted role workspace when it is open, <code>m</code> to open a mission menu when a mission row is highlighted or a workspace menu when a role row is highlighted, <code>s</code> from a mission menu to start or reopen all role workspaces, <code>v</code> from a mission menu to view the objective, <code>o</code> from a role workspace menu to open that workspace, <code>e</code> to edit the mission objective across all role instructions, <code>x</code> to close all role windows, <code>d</code> to delete the whole mission after a destructive confirmation, <code>n</code> to create another mission, or <code>w</code> to create a Codux workspace.
   Command equivalents are <code>:CoduxMissionEdit &lt;mission&gt;</code>, <code>:CoduxMissionClose &lt;mission&gt;</code>, and <code>:CoduxMissionDelete &lt;mission&gt;</code>.
 </p>
 

@@ -155,6 +155,21 @@ do
 end
 
 do
+  assert_nil(terminal_mod.detect_terminal_mode_from_lines({ "> /plan" }))
+  assert_nil(terminal_mod.detect_terminal_mode_from_lines({ "/plan" }))
+  assert_equal(terminal_mod.detect_terminal_mode_from_lines({ "Plan mode" }), "plan")
+  assert_equal(terminal_mod.detect_terminal_mode_from_lines({ "Execute mode" }), "execute")
+  assert_equal(terminal_mod.detect_terminal_mode_from_lines({ "gpt-5.5 xhigh · ~/repo · Plan mode (shift+tab to cycle)" }), "plan")
+  assert_equal(terminal_mod.detect_terminal_mode_from_lines({ "gpt-5.5 high · ~/repo · Execute mode (shift+tab to cycle)" }), "execute")
+  assert_equal(terminal_mod.detect_terminal_mode_from_lines({ "gpt-5.5 xhigh · ~/repo                Plan mode" }), "plan")
+  assert_equal(terminal_mod.detect_terminal_mode_from_lines({ "gpt-5.5 high · ~/repo                Execute mode" }), "execute")
+  assert_equal(terminal_mod.detect_terminal_mode_from_lines({
+    "gpt-5.5 high · ~/repo · Execute mode (shift+tab to cycle)",
+    "gpt-5.5 xhigh · ~/repo · Plan mode (shift+tab to cycle)",
+  }), "plan")
+end
+
+do
   local mission, error_message = mission_mod.plan("Crew", "Ship it", {
     roles = {
       { name = "One", safe_name = "same" },
@@ -723,6 +738,10 @@ do
     ran_action = "view:" .. tostring(mission.name)
     return true
   end
+  function controller:start_selected_mission(mission)
+    ran_action = "start:" .. tostring(mission.name)
+    return true
+  end
 
   assert_true(controller:move_action_cursor(1))
   assert_equal(cursor_set[1], 2)
@@ -730,7 +749,7 @@ do
   assert_equal(cursor_set[1], 1)
 
   assert_true(controller:run_highlighted_action())
-  assert_equal(ran_action, "view:Alpha")
+  assert_equal(ran_action, "start:Alpha")
   assert_true(closed)
   assert_nil(controller.state.mission_dashboard_action_win)
 end
@@ -842,6 +861,15 @@ if type(vim.api) == "table" then
   assert_equal(profile_choices[2].profile, "auto")
   assert_equal(profile_choices[3].profile, "danger")
   assert_equal(profile_choices[3].label, "Full Access")
+  assert_true(codux._v5.suppress_startup_plan_warning_for_workspace({
+    mission_id = "mission:alpha",
+  }))
+  assert_false(codux._v5.suppress_startup_plan_warning_for_workspace({
+    mission_id = "",
+  }))
+  assert_false(codux._v5.suppress_startup_plan_warning_for_workspace({
+    name = "review",
+  }))
 
   local profile_calls = {}
   local function open_default(prompt)
@@ -1059,6 +1087,7 @@ local function default_workspace_config()
     codex_cmd = "codex",
     workspace_auto_cmd = "codex-auto",
     danger_full_access_cmd = "codex-danger",
+    default_initial_mode = "plan",
     workspaces = {
       tmux_cmd = "tmux",
       nvim_cmd = "nvim",
@@ -1718,6 +1747,47 @@ end
 do
   with_workspace_prepare_env(function()
     local commands = {}
+    local pane_checks = 0
+    local runtime = workspace_prepare_runtime({
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          pane_checks = pane_checks + 1
+          if pane_checks == 1 then
+            return "bash\n", 0
+          end
+          return "nvim\n", 0
+        end
+        if command:find("^nvim %-%-server /tmp/review%.sock %-%-remote%-expr", 1, false) then
+          return "ok\n", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local ok, error_message = runtime:ensure_workspace_plan_mode({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+      nvim_server = "/tmp/review.sock",
+    }, { attempts = 1, remote_attempts = 2, remote_sleep_ms = 1 })
+    assert_nil(error_message)
+    assert_true(ok)
+    assert_contains(table.concat(commands, "\n"), "remote_ensure_plan_mode")
+    assert_equal(pane_checks, 2)
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
     local runtime = workspace_prepare_runtime({
       system = function(args)
         local command = table.concat(args, " ")
@@ -1952,14 +2022,17 @@ do
     labels_by_key[action.key] = action.label
   end
 
+  assert_equal(by_key.s, "start_mission")
   assert_equal(by_key.e, "edit_objective")
   assert_equal(by_key.v, "view_objective")
   assert_equal(by_key.x, "close_mission")
   assert_equal(by_key.d, "delete_mission")
   assert_nil(by_key.n)
   assert_nil(by_key.r)
-  assert_contains(workspace_ui.mission_action_line(actions[1], 40), "View Objective")
-  assert_contains(workspace_ui.mission_action_line(actions[2], 40), "Edit Objective")
+  assert_contains(workspace_ui.mission_action_line(actions[1], 40), "Start Mission")
+  assert_contains(workspace_ui.mission_action_line(actions[2], 40), "View Objective")
+  assert_contains(workspace_ui.mission_action_line(actions[3], 40), "Edit Objective")
+  assert_equal(labels_by_key.s, "Start Mission")
   assert_equal(labels_by_key.v, "View Objective")
   assert_equal(labels_by_key.x, "Close Mission")
 end
@@ -2397,6 +2470,212 @@ do
   assert_true(runtime:delete_mission("Alpha", { project_root = "/repo" }))
   table.sort(deleted)
   assert_equal(table.concat(deleted, ","), "alpha-builder,alpha-reviewer")
+end
+
+do
+  local calls = {}
+  local notifications = {}
+  local rendered_manager = false
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    render_workspace_manager = function()
+      rendered_manager = true
+    end,
+  })
+  function runtime:mission_for_name(root, name)
+    assert_equal(root, "/repo")
+    assert_equal(name, "Alpha")
+    return {
+      name = "Alpha",
+      roles = {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          mission_role = "Builder",
+          permission_profile = "danger",
+          project_root = "/codux-worktrees/alpha-builder",
+        },
+        {
+          name = "alpha-reviewer",
+          safe_name = "alpha-reviewer",
+          mission_role = "Reviewer",
+          project_root = "/codux-worktrees/alpha-reviewer",
+        },
+      },
+    }
+  end
+  function runtime:prepare_workspace(name, opts)
+    table.insert(calls, { name = name, opts = opts })
+    assert_true(opts.allow_existing)
+    assert_true(opts.require_existing)
+    assert_nil(opts.initial_prompt)
+    assert_equal(opts.initial_mode, "plan")
+    if name == "alpha-builder" then
+      assert_equal(opts.permission_profile, "danger")
+    else
+      assert_equal(opts.permission_profile, "auto")
+    end
+    if name == "alpha-reviewer" then
+      return nil, "workspace failed"
+    end
+    return { name = name, window_id = "@1" }, nil
+  end
+
+  assert_false(runtime:start_mission("Alpha", { project_root = "/repo" }))
+  assert_equal(#calls, 2)
+  assert_equal(calls[1].name, "alpha-builder")
+  assert_equal(calls[1].opts.project_root, "/codux-worktrees/alpha-builder")
+  assert_equal(calls[1].opts.initial_mode, "plan")
+  assert_equal(calls[1].opts.permission_profile, "danger")
+  assert_equal(calls[2].name, "alpha-reviewer")
+  assert_equal(calls[2].opts.project_root, "/codux-worktrees/alpha-reviewer")
+  assert_equal(calls[2].opts.initial_mode, "plan")
+  assert_equal(calls[2].opts.permission_profile, "auto")
+  assert_true(rendered_manager)
+  assert_contains(table.concat(notifications, "\n"), "Failed to start Codux mission role Reviewer: workspace failed")
+  assert_contains(table.concat(notifications, "\n"), "Started 1 roles in Codux mission Alpha; 1 failed")
+end
+
+do
+  local calls = {}
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    render_workspace_manager = function() end,
+  })
+  function runtime:mission_for_name(root, name)
+    assert_equal(root, "/repo")
+    assert_equal(name, "Alpha")
+    return {
+      name = "Alpha",
+      roles = {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          mission_role = "Builder",
+          project_root = "/repo",
+        },
+      },
+    }
+  end
+  function runtime:prepare_workspace(name, opts)
+    table.insert(calls, { name = name, opts = opts })
+    return {
+      name = name,
+      safe_name = name,
+      project_root = "/repo",
+      window_id = "@1",
+      status = "idle",
+      initial_mode = opts.initial_mode,
+      window_created = false,
+    }, nil
+  end
+  function runtime:ensure_workspace_plan_mode(workspace)
+    assert_equal(workspace.safe_name, "alpha-builder")
+    table.insert(calls, { name = "ensure_plan" })
+    return true, nil
+  end
+
+  assert_true(runtime:start_mission("Alpha", { project_root = "/repo" }))
+  assert_equal(calls[1].opts.initial_mode, "plan")
+  assert_equal(calls[2].name, "ensure_plan")
+end
+
+do
+  local calls = {}
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    render_workspace_manager = function() end,
+  })
+  function runtime:mission_for_name(root, name)
+    assert_equal(root, "/repo")
+    assert_equal(name, "Alpha")
+    return {
+      name = "Alpha",
+      roles = {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          mission_role = "Builder",
+          project_root = "/repo",
+        },
+      },
+    }
+  end
+  function runtime:prepare_workspace(name, opts)
+    table.insert(calls, { name = name, opts = opts })
+    return {
+      name = name,
+      safe_name = name,
+      project_root = "/repo",
+      window_id = "@1",
+      status = "inactive",
+      initial_mode = opts.initial_mode,
+      window_created = true,
+    }, nil
+  end
+  function runtime:ensure_workspace_plan_mode(workspace)
+    assert_equal(workspace.safe_name, "alpha-builder")
+    assert_true(workspace.window_created)
+    table.insert(calls, { name = "ensure_plan" })
+    return true, nil
+  end
+
+  assert_true(runtime:start_mission("Alpha", { project_root = "/repo" }))
+  assert_equal(calls[1].opts.initial_mode, "plan")
+  assert_equal(calls[2].name, "ensure_plan")
+end
+
+do
+  local notifications = {}
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    render_workspace_manager = function() end,
+  })
+  function runtime:mission_for_name()
+    return {
+      name = "Alpha",
+      roles = {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          mission_role = "Builder",
+          project_root = "/repo",
+        },
+      },
+    }
+  end
+  function runtime:prepare_workspace(_, opts)
+    return {
+      name = "alpha-builder",
+      safe_name = "alpha-builder",
+      project_root = "/repo",
+      window_id = "@1",
+      status = "idle",
+      initial_mode = opts.initial_mode,
+      window_created = false,
+    }, nil
+  end
+  function runtime:ensure_workspace_plan_mode()
+    return false, "still execute"
+  end
+
+  assert_false(runtime:start_mission("Alpha", { project_root = "/repo" }))
+  assert_contains(table.concat(notifications, "\n"), "Failed to start Codux mission role Builder: still execute")
+  assert_contains(table.concat(notifications, "\n"), "Started 0 roles in Codux mission Alpha; 1 failed")
 end
 
 do
@@ -2846,6 +3125,432 @@ do
   assert_nil(calls[2].workspace)
   assert_equal(calls[2].permission_profile, "auto")
   assert_equal(calls[2].hidden, true)
+end
+
+do
+  local function with_terminal_start_env(opts, callback)
+    opts = opts or {}
+    local old_api = vim.api
+    local old_defer_fn = vim.defer_fn
+    local old_executable = vim.fn.executable
+    local old_termopen = vim.fn.termopen
+    local old_chansend = vim.fn.chansend
+    local old_sleep = vim.fn.sleep
+    local env = {
+      lines = opts.lines or { "›", "Plan mode (shift+tab to cycle)" },
+      sent = {},
+      scheduled = {},
+      notifications = {},
+      sleep_count = 0,
+    }
+    function env:set_lines(lines)
+      self.lines = lines
+    end
+    vim.api = {
+      nvim_get_current_win = function()
+        return 1
+      end,
+      nvim_buf_call = function(_, inner_callback)
+        return inner_callback()
+      end,
+      nvim_buf_is_valid = function()
+        return true
+      end,
+      nvim_buf_is_loaded = function()
+        return true
+      end,
+      nvim_buf_line_count = function()
+        return #env.lines
+      end,
+      nvim_buf_get_lines = function(_, start_line, end_line)
+        local result = {}
+        for index = start_line + 1, end_line do
+          table.insert(result, env.lines[index])
+        end
+        return result
+      end,
+    }
+    vim.defer_fn = function(inner_callback, delay)
+      if opts.queue_defer then
+        table.insert(env.scheduled, { callback = inner_callback, delay = delay })
+      else
+        inner_callback()
+      end
+    end
+    vim.fn.executable = function()
+      return 1
+    end
+    vim.fn.termopen = function()
+      return 42
+    end
+    vim.fn.chansend = function(_, value)
+      table.insert(env.sent, value)
+      return #tostring(value or "")
+    end
+    vim.fn.sleep = function()
+      env.sleep_count = env.sleep_count + 1
+      if type(opts.on_sleep) == "function" then
+        opts.on_sleep(env)
+      end
+      return 0
+    end
+
+    local controller = terminal_mod.new({
+      command_util = {
+        error = function()
+          return nil
+        end,
+        executable = function()
+          return "codex"
+        end,
+        with_prompt = function(command, prompt)
+          env.command_prompt = prompt
+          return command
+        end,
+      },
+      get_config = opts.get_config or function()
+        return {
+          codex_cmd = "codex",
+          default_initial_mode = "plan",
+        }
+      end,
+      notify = function(message, level)
+        table.insert(env.notifications, {
+          message = message,
+          level = level,
+        })
+      end,
+    })
+    function controller:terminal_running()
+      return self.state.job_id ~= nil
+    end
+    function controller:ensure_buffer()
+      self.state.buf = 12
+      return true
+    end
+    function controller:valid_win()
+      return false
+    end
+    function controller:set_codex_working(value)
+      self.state.codex_working = value
+    end
+    function controller:mark_terminal_prompt_submission()
+      self.state.marked_prompt_submission = true
+    end
+    if type(opts.screen_height) == "number" then
+      function controller:terminal_screen_height()
+        return opts.screen_height
+      end
+    end
+
+    local ok, err = pcall(callback, controller, env)
+    vim.api = old_api
+    vim.defer_fn = old_defer_fn
+    vim.fn.executable = old_executable
+    vim.fn.termopen = old_termopen
+    vim.fn.chansend = old_chansend
+    vim.fn.sleep = old_sleep
+    if not ok then
+      error(err, 0)
+    end
+  end
+
+  with_terminal_start_env({
+    lines = { "›", "Booting MCP server: codex_apps (0s • esc to interrupt)" },
+  }, function(controller)
+    controller.state.buf = 12
+    controller.state.job_id = 42
+    assert_false(controller:startup_sequence_ready())
+  end)
+
+  with_terminal_start_env({
+    lines = { "Booting MCP server: codex_apps (0s • esc to interrupt)", "›" },
+    screen_height = 1,
+  }, function(controller)
+    controller.state.buf = 12
+    controller.state.job_id = 42
+    assert_true(controller:startup_sequence_ready())
+  end)
+
+  with_terminal_start_env({
+    lines = { "Plan mode (shift+tab to cycle)" },
+  }, function(controller)
+    controller.state.buf = 12
+    controller.state.job_id = 42
+    assert_true(controller:startup_sequence_ready())
+  end)
+
+  with_terminal_start_env({
+    get_config = function()
+      return {
+        codex_cmd = "codex",
+      }
+    end,
+  }, function(controller, env)
+    assert_true(controller:start_terminal(false, nil, "codex", { name = "role" }, "auto", {
+      hidden = true,
+      initial_mode = "plan",
+    }))
+    assert_equal(controller.state.mode, "plan")
+    assert_nil(env.command_prompt)
+    assert_equal(#env.sent, 0)
+    assert_false(controller.state.codex_working)
+  end)
+
+  with_terminal_start_env({
+    get_config = function()
+      return {
+        codex_cmd = "codex",
+      }
+    end,
+  }, function(controller, env)
+    assert_true(controller:start_terminal(false, "hello", "codex", { name = "role" }, "auto", {
+      hidden = true,
+      initial_mode = "plan",
+    }))
+    assert_equal(controller.state.mode, "plan")
+    assert_nil(env.command_prompt)
+    assert_equal(#env.sent, 1)
+    assert_equal(env.sent[1], "\27[200~hello\27[201~\r")
+    assert_true(controller.state.codex_working)
+    assert_true(controller.state.marked_prompt_submission)
+  end)
+
+  with_terminal_start_env({}, function(controller, env)
+    assert_true(controller:start_terminal(false, nil, "codex", { name = "role" }, "auto", {
+      hidden = true,
+    }))
+    assert_equal(controller.state.mode, "plan")
+    assert_equal(#env.sent, 0)
+  end)
+
+  with_terminal_start_env({
+    get_config = function()
+      return {
+        codex_cmd = "codex",
+        default_initial_mode = "execute",
+      }
+    end,
+  }, function(controller, env)
+    assert_true(controller:start_terminal(false, nil, "codex", { name = "role" }, "auto", {
+      hidden = true,
+    }))
+    assert_equal(controller.state.mode, "execute")
+    assert_equal(#env.sent, 0)
+  end)
+
+  with_terminal_start_env({}, function(controller, env)
+    assert_true(controller:start_terminal(false, "hello", "codex", { name = "role" }, "auto", {
+      hidden = true,
+      initial_mode = "execute",
+    }))
+    assert_equal(controller.state.mode, "execute")
+    assert_equal(env.command_prompt, "hello")
+    assert_equal(#env.sent, 0)
+    assert_true(controller.state.codex_working)
+  end)
+
+  with_terminal_start_env({
+    lines = { "›", "Booting MCP server: codex_apps (0s • esc to interrupt)" },
+    queue_defer = true,
+  }, function(controller, env)
+    assert_true(controller:start_terminal(false, "hello", "codex", { name = "role" }, "auto", {
+      hidden = true,
+    }))
+    assert_nil(env.command_prompt)
+    assert_equal(#env.sent, 0)
+    assert_equal(#env.scheduled, 1)
+    assert_equal(env.scheduled[1].delay, 250)
+
+    env.scheduled[1].callback()
+    assert_equal(#env.sent, 0)
+    assert_nil(controller.state.marked_prompt_submission)
+    assert_equal(#env.scheduled, 2)
+    assert_equal(env.scheduled[2].delay, 250)
+
+    env:set_lines({ "›" })
+    env.scheduled[2].callback()
+    assert_equal(controller.state.mode, "execute")
+    assert_equal(#env.sent, 0)
+    assert_nil(controller.state.marked_prompt_submission)
+    assert_equal(#env.scheduled, 3)
+    assert_equal(env.scheduled[3].delay, 4000)
+
+    env.scheduled[3].callback()
+    assert_equal(controller.state.mode, "execute")
+    assert_equal(#env.sent, 1)
+    assert_equal(env.sent[1], "\27[200~/plan\27[201~\r")
+    assert_equal(#env.scheduled, 4)
+    assert_equal(env.scheduled[4].delay, 250)
+
+    env:set_lines({ "Plan mode (shift+tab to cycle)" })
+    env.scheduled[4].callback()
+    assert_equal(controller.state.mode, "plan")
+    assert_equal(#env.sent, 2)
+    assert_equal(env.sent[2], "\27[200~hello\27[201~\r")
+    assert_true(controller.state.marked_prompt_submission)
+  end)
+
+  with_terminal_start_env({
+    lines = { "›" },
+    queue_defer = true,
+  }, function(controller, env)
+    assert_true(controller:start_terminal(false, nil, "codex", { name = "role" }, "auto", {
+      hidden = true,
+    }))
+    assert_equal(#env.sent, 0)
+    assert_equal(#env.scheduled, 1)
+
+    env.scheduled[1].callback()
+    assert_equal(controller.state.mode, "execute")
+    assert_equal(#env.sent, 0)
+    assert_equal(#env.scheduled, 2)
+    assert_equal(env.scheduled[2].delay, 4000)
+
+    env.scheduled[2].callback()
+    assert_equal(controller.state.mode, "execute")
+    assert_equal(#env.sent, 1)
+    assert_equal(env.sent[1], "\27[200~/plan\27[201~\r")
+    assert_equal(#env.scheduled, 3)
+    assert_equal(env.scheduled[3].delay, 250)
+
+    env:set_lines({ "Plan mode (shift+tab to cycle)" })
+    env.scheduled[3].callback()
+    assert_equal(controller.state.mode, "plan")
+    assert_equal(#env.sent, 1)
+  end)
+
+  with_terminal_start_env({
+    lines = { "Plan mode (shift+tab to cycle)" },
+  }, function(controller, env)
+    controller.state.buf = 12
+    controller.state.job_id = 42
+    controller.state.mode = "execute"
+    assert_true(controller:ensure_plan_mode({ attempts = 1 }))
+    assert_equal(controller.state.mode, "plan")
+    assert_equal(#env.sent, 0)
+  end)
+
+  with_terminal_start_env({
+    lines = { "Execute mode (shift+tab to cycle)" },
+    on_sleep = function(env)
+      if env.sleep_count == 1 then
+        env:set_lines({ "Execute mode (shift+tab to cycle)" })
+      else
+        env:set_lines({ "Plan mode (shift+tab to cycle)" })
+      end
+    end,
+  }, function(controller, env)
+    controller.state.buf = 12
+    controller.state.job_id = 42
+    controller.state.mode = "execute"
+    assert_true(controller:ensure_plan_mode({ attempts = 3 }))
+    assert_equal(controller.state.mode, "plan")
+    assert_equal(#env.sent, 1)
+    assert_equal(env.sent[1], "\27[200~/plan\27[201~\r")
+  end)
+
+  with_terminal_start_env({
+    lines = { "›" },
+    on_sleep = function(env)
+      if env.sleep_count < 3 then
+        env:set_lines({ "■ '/plan' is disabled while a task is in progress." })
+      else
+        env:set_lines({ "gpt-5.5 xhigh · ~/repo                Plan mode" })
+      end
+    end,
+  }, function(controller, env)
+    controller.state.buf = 12
+    controller.state.job_id = 42
+    controller.state.mode = "execute"
+    assert_true(controller:ensure_plan_mode({ attempts = 4 }))
+    assert_equal(controller.state.mode, "plan")
+    assert_equal(#env.sent, 3)
+    assert_equal(env.sent[1], "\27[200~/plan\27[201~\r")
+    assert_equal(env.sent[2], "\27[200~/plan\27[201~\r")
+    assert_equal(env.sent[3], "\27[200~/plan\27[201~\r")
+  end)
+
+  with_terminal_start_env({
+    lines = { "Execute mode (shift+tab to cycle)" },
+  }, function(controller, env)
+    controller.state.buf = 12
+    controller.state.job_id = 42
+    controller.state.mode = "execute"
+    controller:confirm_startup_plan_sequence(nil, false, 1, false)
+    assert_equal(#env.notifications, 1)
+    assert_equal(env.notifications[1].message, "Codex did not confirm plan mode on startup")
+  end)
+
+  with_terminal_start_env({
+    lines = { "Execute mode (shift+tab to cycle)" },
+  }, function(controller, env)
+    controller.state.buf = 12
+    controller.state.job_id = 42
+    controller.state.mode = "execute"
+    controller:confirm_startup_plan_sequence(nil, false, 1, false, {
+      suppress_warning = true,
+    })
+    assert_equal(#env.notifications, 0)
+  end)
+
+  with_terminal_start_env({}, function(controller, env)
+    controller.state.buf = 12
+    controller.state.job_id = nil
+    assert_false(controller:ensure_plan_mode({ attempts = 1 }))
+    assert_equal(#env.sent, 0)
+  end)
+end
+
+do
+  local old_api = vim.api
+  local old_schedule = vim.schedule
+  local lines = { "> /plan" }
+  local synced_mode
+  vim.api = {
+    nvim_buf_is_valid = function()
+      return true
+    end,
+    nvim_buf_is_loaded = function()
+      return true
+    end,
+    nvim_buf_line_count = function()
+      return #lines
+    end,
+    nvim_buf_get_lines = function(_, start_line, end_line)
+      local result = {}
+      for index = start_line + 1, end_line do
+        table.insert(result, lines[index])
+      end
+      return result
+    end,
+  }
+  vim.schedule = function(callback)
+    callback()
+  end
+
+  local controller = terminal_mod.new({
+    state = {
+      buf = 9,
+      job_id = 42,
+      mode = "execute",
+    },
+    sync_workspace_mode = function(mode)
+      synced_mode = mode
+    end,
+  })
+
+  controller:schedule_terminal_buffer_observation()
+  assert_equal(controller.state.mode, "execute")
+  assert_nil(synced_mode)
+
+  lines = { "Plan mode" }
+  controller:schedule_terminal_buffer_observation()
+  assert_equal(controller.state.mode, "plan")
+  assert_equal(synced_mode, "plan")
+
+  vim.api = old_api
+  vim.schedule = old_schedule
 end
 
 do
@@ -4513,6 +5218,7 @@ do
           resolved_instruction = "existing instructions",
           target_path = "/repo/neo-tree filesystem [1]",
           target_type = "file",
+          initial_mode = "execute",
         }),
       }),
       read_instruction_file = function()
@@ -4548,12 +5254,16 @@ do
       allow_existing = true,
       require_existing = true,
       project_root = "/repo",
+      initial_mode = "plan",
     })
     assert_nil(error_message)
+    assert_equal(workspace.initial_mode, "plan")
     assert_equal(workspace.target_path, "/repo")
     assert_equal(workspace.target_type, "directory")
     assert_contains(new_window_command, "'nvim' --listen")
+    assert_contains(new_window_command, 'initial_mode="plan"')
     assert_contains(new_window_command, "/codux/repo-review.sock' '.'")
+    assert_equal(store.state_data().projects["/repo"].workspaces.review.initial_mode, "plan")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.target_path, "/repo")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.target_type, "directory")
   end)
