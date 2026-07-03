@@ -360,6 +360,7 @@ function M:open_objective_editor(name, default_objective, opts)
     objective_lines = { "" }
   end
   self.ui.set_lines(bufnr, objective_lines)
+  pcall(vim.api.nvim_set_option_value, "modified", false, { buf = bufnr })
   local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:objective_editor_config(#objective_lines, opts))
   if not win_ok then
     self.ui.delete_buffer(bufnr)
@@ -404,6 +405,7 @@ function M:open_objective_editor(name, default_objective, opts)
       end
 
       saved = true
+      pcall(vim.api.nvim_set_option_value, "modified", false, { buf = bufnr })
       close_editor()
       return
     end
@@ -415,6 +417,7 @@ function M:open_objective_editor(name, default_objective, opts)
     end
 
     saved = true
+    pcall(vim.api.nvim_set_option_value, "modified", false, { buf = bufnr })
     close_editor()
     self:open_preview(mission)
   end
@@ -423,13 +426,6 @@ function M:open_objective_editor(name, default_objective, opts)
     group = autocmd_group,
     buffer = bufnr,
     callback = save_editor,
-  })
-  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
-    group = autocmd_group,
-    buffer = bufnr,
-    callback = function()
-      pcall(vim.api.nvim_set_option_value, "modified", false, { buf = bufnr })
-    end,
   })
   vim.api.nvim_create_autocmd("WinClosed", {
     group = autocmd_group,

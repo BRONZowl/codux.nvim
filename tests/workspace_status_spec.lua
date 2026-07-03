@@ -959,10 +959,29 @@ if type(vim.api) == "table" then
   local bufnr = vim.api.nvim_get_current_buf()
   assert_contains(vim.api.nvim_buf_get_name(bufnr), "codux://mission-objective/")
   assert_equal(vim.b[bufnr].codux_disable_completion, true)
+  assert_false(vim.bo[bufnr].modified)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "mission objective" })
+  assert_true(vim.bo[bufnr].modified)
   vim.cmd("write")
   assert_equal(captured_mission.name, "Save Test")
   assert_equal(captured_mission.objective, "mission objective")
+
+  local attempted_objective
+  assert_true(controller:open_objective_editor("Failed Save", "old objective", {
+    on_save = function(_, objective)
+      attempted_objective = objective
+      return false
+    end,
+  }))
+  local failed_bufnr = vim.api.nvim_get_current_buf()
+  assert_false(vim.bo[failed_bufnr].modified)
+  vim.api.nvim_buf_set_lines(failed_bufnr, 0, -1, false, { "new objective" })
+  assert_true(vim.bo[failed_bufnr].modified)
+  vim.cmd("write")
+  assert_equal(attempted_objective, "new objective")
+  assert_equal(vim.api.nvim_get_current_buf(), failed_bufnr)
+  assert_true(vim.bo[failed_bufnr].modified)
+  pcall(vim.api.nvim_buf_delete, failed_bufnr, { force = true })
 end
 
 do
