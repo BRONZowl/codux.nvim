@@ -19,6 +19,18 @@ local function entry_key(entry)
   return tostring(entry.safe_name or entry.name or entry.mission_role or "")
 end
 
+local function pluralize(count, singular, plural)
+  return tostring(count) .. " " .. (count == 1 and singular or plural)
+end
+
+local function center_display_line(display, text, width)
+  text = tostring(text or "")
+  width = tonumber(width) or 0
+  local text_width = display.display_width(text)
+  local padding = math.max(0, math.floor((width - text_width) / 2))
+  return string.rep(" ", padding) .. text
+end
+
 local function disable_completion(is_loaded_buf, bufnr)
   if type(is_loaded_buf) == "function" and not is_loaded_buf(bufnr) then
     return false
@@ -264,7 +276,7 @@ function M:preview_config(line_count)
     relative = "editor",
     style = "minimal",
     border = "rounded",
-    title = " codux mission control ",
+    title = " Codux Mission Control ",
     title_pos = "center",
     width = width,
     height = height,
@@ -278,14 +290,14 @@ function M:dashboard_config(line_count)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local max_width = available_dimension(total_width, 4)
   local max_height = available_dimension(total_height, 4)
-  local width = math.min(max_width, math.max(80, math.floor(total_width * 0.76)))
+  local width = math.min(max_width, math.max(80, math.min(88, math.floor(total_width * 0.75))))
   local height = math.min(max_height, math.max(8, line_count or 1))
 
   return {
     relative = "editor",
     style = "minimal",
     border = "rounded",
-    title = " codux mission dashboard ",
+    title = " Mission Control ",
     title_pos = "center",
     footer = " Tab search | m menu | p prompt | n mission | w workspace ",
     footer_pos = "center",
@@ -335,6 +347,7 @@ function M:open_objective_editor(name, default_objective, opts)
     winfixbuf = true,
     wrap = true,
     linebreak = true,
+    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
   })
   disable_completion(self.is_loaded_buf, bufnr)
   pcall(vim.cmd, "stopinsert")
@@ -430,6 +443,7 @@ function M:open_preview(mission)
   self.ui.set_window_options(win, {
     wrap = true,
     linebreak = true,
+    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
   })
 
   local function close_preview()
@@ -478,17 +492,16 @@ function M:dashboard_lines(root, opts)
   local all_missions = self.mission.group_entries(entries)
   local query = tostring(opts.query or "")
   local missions = self:filter_missions(all_missions, query)
-  local lines = {
-    "Mission Control",
-  }
+  local dashboard_width = tonumber(opts.dashboard_width) or self:window_width() or self:dashboard_config(1).width
+  local lines = {}
   local items = {}
   local selectable_rows = {}
   local best_match_row = nil
   if #all_missions == 0 then
-    return { "Mission Control", "", "No Codux missions" }, items, selectable_rows
+    return { center_display_line(self.workspace_ui, "No Codux missions", dashboard_width) }, items, selectable_rows
   end
   if query ~= "" and #missions == 0 then
-    return { "Mission Control", "", "No matching Codux missions" }, items, selectable_rows
+    return { center_display_line(self.workspace_ui, "No matching Codux missions", dashboard_width) }, items, selectable_rows
   end
 
   local total_roles = 0
@@ -505,13 +518,17 @@ function M:dashboard_lines(root, opts)
 
   table.insert(
     lines,
-    string.format(
-      "%d missions | %d roles | %d active | %d question | %d idle",
-      #missions,
-      total_roles,
-      total_active,
-      total_question,
-      total_idle
+    center_display_line(
+      self.workspace_ui,
+      string.format(
+        "%s | %s | active %d | question %d | idle %d",
+        pluralize(#missions, "mission", "missions"),
+        pluralize(total_roles, "role", "roles"),
+        total_active,
+        total_question,
+        total_idle
+      ),
+      dashboard_width
     )
   )
 
@@ -527,19 +544,15 @@ function M:dashboard_lines(root, opts)
     table.insert(lines, "")
     local counts = self.mission.status_counts(mission)
     local status = self.mission.status_label(mission)
-    local mission_name = self.workspace_ui.truncate_display_tail(tostring(mission.name or mission.mission_id), 34)
-    table.insert(lines, string.format("%-34s %-8s %2d roles", mission_name, status, counts.total))
+    local mission_name = self.workspace_ui.pad_display_right(tostring(mission.name or mission.mission_id), 34)
+    local mission_status = self.workspace_ui.pad_display_right(status, 8)
+    table.insert(lines, string.format("%s %s %s", mission_name, mission_status, pluralize(counts.total, "role", "roles")))
     items[#lines] = { kind = "mission", mission = mission }
     table.insert(selectable_rows, #lines)
     if query ~= "" and not best_match_row and mission._codux_match_kind == "mission" then
       best_match_row = #lines
     end
-    if type(mission.objective) == "string" and mission.objective ~= "" then
-      local objective = mission.objective:gsub("\n.*$", "")
-      table.insert(lines, "  objective  " .. self.workspace_ui.truncate_display_tail(objective, 76))
-      items[#lines] = { kind = "mission", mission = mission }
-    end
-    table.insert(lines, "  role           status    mode  profile age   target")
+    table.insert(lines, "  role            status    mode  profile  age   target")
     for _, entry in ipairs(mission.roles) do
       local role = entry.mission_role or entry.name or entry.safe_name
       local status = entry.status or "inactive"
@@ -549,15 +562,18 @@ function M:dashboard_lines(root, opts)
       local target = type(entry.target_path) == "string" and entry.target_path ~= ""
           and vim.fn.fnamemodify(entry.target_path, ":t")
         or "--"
-      local line = string.format(
-        "  %-14s %-8s %-4s %-7s %-4s %s",
-        self.workspace_ui.truncate_display_tail(role, 14),
-        status,
-        mode,
-        self.workspace_ui.truncate_display_tail(profile, 7),
-        age,
-        self.workspace_ui.truncate_display_tail(target, 34)
-      )
+      local line = "  "
+        .. self.workspace_ui.pad_display_right(role, 14)
+        .. "  "
+        .. self.workspace_ui.pad_display_right(status, 8)
+        .. "  "
+        .. self.workspace_ui.pad_display_right(mode, 4)
+        .. "  "
+        .. self.workspace_ui.pad_display_right(profile, 7)
+        .. "  "
+        .. self.workspace_ui.pad_display_right(age, 4)
+        .. "  "
+        .. self.workspace_ui.truncate_display_tail(target, 34)
       table.insert(lines, line)
       items[#lines] = { kind = "role", mission = mission, entry = entry }
       table.insert(selectable_rows, #lines)
@@ -604,12 +620,12 @@ function M:output_lines(entry)
     "",
   }
   if type(entry) ~= "table" then
-    table.insert(lines, "Output: select a mission or role to view workspace output")
+    table.insert(lines, "Output  select a mission or role to view workspace output")
     return lines
   end
 
   local role = entry.mission_role or entry.name or entry.safe_name or "workspace"
-  table.insert(lines, "Output: " .. tostring(role))
+  table.insert(lines, "Output  " .. tostring(role))
   if entry.status == "inactive" then
     table.insert(lines, "  workspace is not active")
     return lines
@@ -721,12 +737,14 @@ end
 
 function M:highlight_dashboard(bufnr, lines, items)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, self.namespace, 0, -1)
-  pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Title", 0, 0, -1)
-  pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", 1, 0, -1)
+  pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", 0, 0, -1)
 
   for index, line in ipairs(lines) do
     local item = items[index]
-    if item and item.kind == "mission" and not line:find("^%s+objective", 1, false) then
+    if line:find("^Output%s%s", 1, false) then
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKeyDesc", index - 1, 0, 6)
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 6, -1)
+    elseif item and item.kind == "mission" and not line:find("^%s+objective", 1, false) then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKey", index - 1, 0, -1)
     elseif item and item.kind == "mission" then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
@@ -1300,6 +1318,30 @@ function M:render_action_palette()
   end
 
   self.ui.set_lines(self.state.mission_dashboard_action_buf, lines, { modifiable = true })
+  pcall(vim.api.nvim_buf_clear_namespace, self.state.mission_dashboard_action_buf, self.namespace, 0, -1)
+  for index, item in ipairs(self.state.mission_dashboard_action_items or {}) do
+    local key = tostring(item.key or "")
+    if key ~= "" then
+      pcall(
+        vim.api.nvim_buf_add_highlight,
+        self.state.mission_dashboard_action_buf,
+        self.namespace,
+        "WhichKey",
+        index - 1,
+        0,
+        #key
+      )
+      pcall(
+        vim.api.nvim_buf_add_highlight,
+        self.state.mission_dashboard_action_buf,
+        self.namespace,
+        "WhichKeySeparator",
+        index - 1,
+        #key,
+        -1
+      )
+    end
+  end
   return true
 end
 
@@ -1710,6 +1752,11 @@ function M:open_dashboard()
   self.ui.set_window_options(win, {
     cursorline = true,
     wrap = false,
+    number = false,
+    relativenumber = false,
+    signcolumn = "no",
+    winfixbuf = true,
+    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
   })
   self.state.mission_dashboard_buf = bufnr
   self.state.mission_dashboard_win = win

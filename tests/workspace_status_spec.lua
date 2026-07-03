@@ -270,32 +270,36 @@ do
     end,
   })
   local lines, items = controller:dashboard_lines("/repo")
-  assert_equal(lines[1], "Mission Control")
+  assert_contains(lines[1], "1 mission | 2 roles | active 1 | question 1 | idle 0")
+  assert_true(lines[1]:find("^%s+1 mission") ~= nil)
   assert_contains(table.concat(lines, "\n"), "2 roles")
   assert_contains(table.concat(lines, "\n"), "Alpha")
-  assert_contains(table.concat(lines, "\n"), "Output: Builder")
+  assert_equal(table.concat(lines, "\n"):find("Mission Control", 1, true), nil)
+  assert_contains(table.concat(lines, "\n"), "Output  Builder")
   assert_contains(table.concat(lines, "\n"), "builder output")
-  assert_contains(table.concat(lines, "\n"), "objective  Build the dashboard")
+  assert_equal(table.concat(lines, "\n"):find("Build the dashboard", 1, true), nil)
+  assert_equal(table.concat(lines, "\n"):find("objective", 1, true), nil)
+  assert_contains(table.concat(lines, "\n"), "role            status")
   assert_contains(table.concat(lines, "\n"), "profile")
   assert_contains(table.concat(lines, "\n"), "target")
   assert_contains(table.concat(lines, "\n"), "auto")
   assert_contains(table.concat(lines, "\n"), "init.lua")
-  assert_equal(items[7].kind, "mission")
-  assert_equal(items[10].kind, "role")
-  assert_equal(items[10].entry.safe_name, "alpha-builder")
+  assert_equal(items[6].kind, "mission")
+  assert_equal(items[8].kind, "role")
+  assert_equal(items[8].entry.safe_name, "alpha-builder")
 
   local filtered_lines, filtered_items, filtered_rows, best_match_row =
     controller:dashboard_lines("/repo", { query = "rev" })
   assert_contains(table.concat(filtered_lines, "\n"), "Alpha")
-  assert_equal(filtered_items[11].kind, "role")
-  assert_equal(filtered_items[11].entry.safe_name, "alpha-reviewer")
-  assert_equal(best_match_row, 11)
-  assert_equal(table.concat(filtered_rows, ","), "7,10,11")
+  assert_equal(filtered_items[9].kind, "role")
+  assert_equal(filtered_items[9].entry.safe_name, "alpha-reviewer")
+  assert_equal(best_match_row, 9)
+  assert_equal(table.concat(filtered_rows, ","), "6,8,9")
 
   local mission_lines, mission_items, _, mission_best_row = controller:dashboard_lines("/repo", { query = "alp" })
   assert_contains(table.concat(mission_lines, "\n"), "Alpha")
-  assert_equal(mission_items[7].kind, "mission")
-  assert_equal(mission_best_row, 7)
+  assert_equal(mission_items[6].kind, "mission")
+  assert_equal(mission_best_row, 6)
 
   local reviewer_lines = controller:dashboard_lines("/repo", {
     selected_item = {
@@ -307,7 +311,7 @@ do
       },
     },
   })
-  assert_contains(table.concat(reviewer_lines, "\n"), "Output: Reviewer")
+  assert_contains(table.concat(reviewer_lines, "\n"), "Output  Reviewer")
   assert_contains(table.concat(reviewer_lines, "\n"), "reviewer output")
 
   local no_match_lines, no_match_items, no_match_rows = controller:dashboard_lines("/repo", { query = "zzz" })
@@ -605,6 +609,9 @@ if type(vim.api) == "table" then
   local objective_config = controller:objective_editor_config(20)
   local preview_config = controller:preview_config(20)
   local dashboard_config = controller:dashboard_config(20)
+  assert_equal(objective_config.title, " Codux Mission Objective ")
+  assert_equal(preview_config.title, " Codux Mission Control ")
+  assert_equal(dashboard_config.title, " Mission Control ")
   assert_contains(dashboard_config.footer, "Tab search")
   assert_contains(dashboard_config.footer, "m menu")
   assert_equal(dashboard_config.footer:find("Enter open", 1, true), nil)
@@ -641,7 +648,7 @@ if type(vim.api) == "table" then
   dashboard_config = controller:dashboard_config(20)
   assert_equal(objective_config.width, 96)
   assert_equal(preview_config.width, 92)
-  assert_equal(dashboard_config.width, 106)
+  assert_equal(dashboard_config.width, 88)
   vim.o.columns = old_columns
   vim.o.lines = old_lines
   vim.o.cmdheight = old_cmdheight
@@ -1600,7 +1607,7 @@ do
     mission_role = "Builder",
     status = "idle",
   })
-  assert_contains(table.concat(lines, "\n"), "Output: Builder")
+  assert_contains(table.concat(lines, "\n"), "Output  Builder")
   assert_contains(table.concat(lines, "\n"), "latest line")
 
   local inactive = controller:output_lines({
