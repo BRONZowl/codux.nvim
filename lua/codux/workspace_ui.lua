@@ -247,6 +247,31 @@ function M.manager_action_line(item, width)
   return M.truncate_display_tail(line, width)
 end
 
+function M.mission_action_items()
+  return {
+    { key = "e", action = "edit_objective", label = "Edit Objective" },
+    { key = "x", action = "close_mission", label = "Close Mission" },
+    { key = "d", action = "delete_mission", label = "Delete Mission" },
+  }
+end
+
+function M.mission_action_line(item, width)
+  return M.manager_action_line(item, width)
+end
+
+function M.role_workspace_action_items()
+  return {
+    { key = "o", action = "open_workspace", label = "Open Workspace" },
+    { key = "e", action = "edit_instructions", label = "Edit Instructions" },
+    { key = "x", action = "close_workspace", label = "Close Workspace" },
+    { key = "d", action = "delete_workspace", label = "Delete Workspace" },
+  }
+end
+
+function M.role_workspace_action_line(item, width)
+  return M.manager_action_line(item, width)
+end
+
 function M.fuzzy_workspace_score(value, query)
   value = tostring(value or "")
   query = tostring(query or "")

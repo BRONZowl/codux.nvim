@@ -131,8 +131,10 @@
   Use <code>:CoduxMissionCreate</code> or <code>&lt;leader&gt;zm</code> to launch Mission Control.
   Codux prompts for one mission objective, previews a default crew of architect, builder, reviewer, and QA roles, then creates a clean Git worktree workspace for each role and starts each agent with workspace-auto permissions.
   Mission role workspaces keep their mission metadata in Codux workspace state, and <code>:CoduxMissions</code> or <code>&lt;leader&gt;zM</code> opens a mission dashboard with mission status, objective preview, role status, and workspace jump actions.
-  From the mission dashboard, press <code>&lt;CR&gt;</code> to open a role, <code>e</code> to edit the mission objective across all role instructions, <code>d</code> to delete the whole mission after confirmation, <code>n</code> to create another mission, or <code>r</code> to refresh.
-  Command equivalents are <code>:CoduxMissionEdit &lt;mission&gt;</code> and <code>:CoduxMissionDelete &lt;mission&gt;</code>.
+  Codux opens a <code>Codux mission:</code> search field above the mission dashboard; type a fuzzy mission, role, or workspace name to filter the dashboard while keeping each matching mission block visible.
+  Press <code>&lt;Tab&gt;</code> to switch between mission search and the dashboard list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted mission or role, then use <code>j</code>/<code>k</code> to move through selectable mission and role rows.
+  From the mission dashboard, press <code>&lt;CR&gt;</code> to open a role, <code>m</code> to open a mission menu when a mission row is highlighted or a workspace menu when a role row is highlighted, <code>e</code> to edit the mission objective across all role instructions, <code>x</code> to close all role windows, <code>d</code> to delete the whole mission after a destructive confirmation, <code>n</code> to create another mission, or <code>r</code> to refresh.
+  Command equivalents are <code>:CoduxMissionEdit &lt;mission&gt;</code>, <code>:CoduxMissionClose &lt;mission&gt;</code>, and <code>:CoduxMissionDelete &lt;mission&gt;</code>.
 </p>
 
 <p>
@@ -308,6 +310,11 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <td>Edit a Codux mission objective</td>
 <td></td>
 <td><code>:CoduxMissionEdit &lt;mission&gt;</code></td>
+</tr>
+<tr>
+<td>Close a Codux mission</td>
+<td></td>
+<td><code>:CoduxMissionClose &lt;mission&gt;</code></td>
 </tr>
 <tr>
 <td>Delete a Codux mission</td>

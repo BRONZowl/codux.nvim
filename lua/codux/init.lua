@@ -131,7 +131,24 @@ local state = {
   workspace_manager_ns = vim.api.nvim_create_namespace("codux.workspace_manager"),
   mission_dashboard_buf = nil,
   mission_dashboard_win = nil,
+  mission_dashboard_search_buf = nil,
+  mission_dashboard_search_win = nil,
+  mission_dashboard_command_buf = nil,
+  mission_dashboard_command_win = nil,
+  mission_dashboard_action_buf = nil,
+  mission_dashboard_action_win = nil,
+  mission_dashboard_action_items = {},
+  mission_dashboard_action_mission = nil,
+  mission_dashboard_action_workspace = nil,
+  mission_dashboard_action_kind = nil,
   mission_dashboard_items = {},
+  mission_dashboard_selectable_rows = {},
+  mission_dashboard_query = "",
+  mission_dashboard_best_match_row = nil,
+  mission_dashboard_selected_row = nil,
+  mission_dashboard_focus_match = false,
+  mission_dashboard_search_confirmed = false,
+  mission_dashboard_project_root = nil,
   workspace_instruction_ignore_warnings = {},
   workspace_target_signature = nil,
   workspace_target_update_pending = false,
@@ -926,6 +943,10 @@ function M.delete_mission(name, opts)
   return workspace_runtime:delete_mission(name, opts)
 end
 
+function M.close_mission(name, opts)
+  return workspace_runtime:close_mission(name, opts)
+end
+
 function M.open_workspace(name)
   return M.create_workspace(name)
 end
@@ -1049,6 +1070,10 @@ mission_controller = mission_control_mod.new({
   mission = mission_mod,
   ui = ui,
   workspace_ui = workspace_ui,
+  is_valid_win = is_valid_win,
+  is_loaded_buf = is_loaded_buf,
+  window_buffer = window_buffer,
+  buffer_filetype = buffer_filetype,
   notify = notify,
   create_mission = function(mission)
     return M.create_mission(mission)
@@ -1056,12 +1081,23 @@ mission_controller = mission_control_mod.new({
   update_mission_objective = function(name, objective, root)
     return M.update_mission_objective(name, objective, { project_root = root })
   end,
+  mission_dirty_roles = function(name, root)
+    return workspace_runtime:mission_dirty_roles(name, { project_root = root })
+  end,
+  close_mission = function(name, root)
+    return M.close_mission(name, { project_root = root })
+  end,
   delete_mission = function(name, root)
     return M.delete_mission(name, { project_root = root })
   end,
   workspace_entries_for_project = workspace_entries_for_project,
   open_saved_workspace = function(name, project_root)
     return M.open_saved_workspace(name, project_root)
+  end,
+  edit_saved_workspace_instruction = edit_saved_workspace_instruction,
+  delete_saved_workspace = delete_saved_workspace,
+  close_saved_workspace_window = function(entry)
+    return M._v5.close_saved_workspace_window(entry)
   end,
   project_root = workspace_manager_project_root,
   set_buffer_keymap = M._v5.set_buffer_keymap,
@@ -1087,6 +1123,10 @@ end
 
 function M.delete_saved_mission(name)
   return mission_controller:delete_saved_mission(name, workspace_manager_project_root())
+end
+
+function M.close_saved_mission(name)
+  return mission_controller:close_saved_mission(name, workspace_manager_project_root())
 end
 
 function M.close()
@@ -1348,6 +1388,10 @@ local function create_commands()
   vim.api.nvim_create_user_command("CoduxMissionDelete", function(opts)
     M.delete_saved_mission(opts.args)
   end, { force = true, nargs = 1, complete = M._v5.complete_mission_names, desc = "Delete a Codux mission" })
+
+  vim.api.nvim_create_user_command("CoduxMissionClose", function(opts)
+    M.close_saved_mission(opts.args)
+  end, { force = true, nargs = 1, complete = M._v5.complete_mission_names, desc = "Close a Codux mission" })
 
   vim.api.nvim_create_user_command("CoduxToggle", function()
     M.toggle()

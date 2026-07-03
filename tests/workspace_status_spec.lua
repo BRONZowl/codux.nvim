@@ -263,6 +263,233 @@ do
   assert_equal(items[4].kind, "mission")
   assert_equal(items[7].kind, "role")
   assert_equal(items[7].entry.safe_name, "alpha-builder")
+
+  local filtered_lines, filtered_items, filtered_rows, best_match_row =
+    controller:dashboard_lines("/repo", { query = "rev" })
+  assert_contains(table.concat(filtered_lines, "\n"), "Alpha")
+  assert_equal(filtered_items[8].kind, "role")
+  assert_equal(filtered_items[8].entry.safe_name, "alpha-reviewer")
+  assert_equal(best_match_row, 8)
+  assert_equal(table.concat(filtered_rows, ","), "4,7,8")
+
+  local mission_lines, mission_items, _, mission_best_row = controller:dashboard_lines("/repo", { query = "alp" })
+  assert_contains(table.concat(mission_lines, "\n"), "Alpha")
+  assert_equal(mission_items[4].kind, "mission")
+  assert_equal(mission_best_row, 4)
+
+  local no_match_lines, no_match_items, no_match_rows = controller:dashboard_lines("/repo", { query = "zzz" })
+  assert_contains(table.concat(no_match_lines, "\n"), "No matching Codux missions")
+  assert_equal(#no_match_items, 0)
+  assert_equal(#no_match_rows, 0)
+end
+
+do
+  local current_win = 20
+  local cursors = {}
+  local render_count = 0
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_win = 10,
+      mission_dashboard_search_win = 20,
+      mission_dashboard_items = {
+        [4] = { kind = "mission", mission = { name = "Alpha" } },
+        [7] = { kind = "role", mission = { name = "Alpha" }, entry = { name = "alpha-builder" } },
+        [8] = { kind = "role", mission = { name = "Alpha" }, entry = { name = "alpha-reviewer" } },
+      },
+      mission_dashboard_selectable_rows = { 4, 7, 8 },
+      mission_dashboard_best_match_row = 7,
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 7,
+    },
+    is_valid_win = function(win)
+      return win == 10 or win == 20
+    end,
+    get_current_win = function()
+      return current_win
+    end,
+    set_current_win = function(win)
+      current_win = win
+      return true
+    end,
+    set_window_cursor = function(win, cursor)
+      cursors[win] = cursor
+      return true
+    end,
+  })
+  function controller:render_dashboard()
+    render_count = render_count + 1
+    return true
+  end
+
+  assert_true(controller:toggle_search_list_focus())
+  assert_equal(current_win, 10)
+  assert_equal(cursors[10][1], 7)
+
+  assert_true(controller:toggle_search_list_focus())
+  assert_equal(current_win, 20)
+
+  assert_true(controller:move_mission_selection(1))
+  assert_equal(controller.state.mission_dashboard_selected_row, 8)
+  assert_equal(cursors[10][1], 8)
+  assert_equal(controller:selected_item().entry.name, "alpha-reviewer")
+
+  assert_true(controller:move_mission_selection(1))
+  assert_equal(controller.state.mission_dashboard_selected_row, 8)
+
+  assert_true(controller:move_mission_selection(-1))
+  assert_equal(controller.state.mission_dashboard_selected_row, 7)
+  assert_equal(controller:selected_item().entry.name, "alpha-builder")
+  assert_equal(controller:selected_mission().name, "Alpha")
+  assert_equal(render_count, 3)
+end
+
+do
+  local opened_kind
+  local opened_target
+  local notifications = {}
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_items = {
+        [4] = { kind = "mission", mission = { name = "Alpha" } },
+        [5] = { kind = "mission", mission = { name = "Alpha" } },
+        [7] = { kind = "role", mission = { name = "Alpha" }, entry = { name = "alpha-builder" } },
+      },
+      mission_dashboard_selectable_rows = { 4, 7 },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 4,
+    },
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+  })
+  function controller:open_action_palette_for(target, kind)
+    opened_target = target
+    opened_kind = kind
+    return true
+  end
+
+  assert_true(controller:open_action_palette())
+  assert_equal(opened_kind, "mission")
+  assert_equal(opened_target.name, "Alpha")
+
+  controller.state.mission_dashboard_selected_row = 7
+  assert_true(controller:open_action_palette())
+  assert_equal(opened_kind, "workspace")
+  assert_equal(opened_target.name, "alpha-builder")
+
+  controller.state.mission_dashboard_selected_row = 5
+  assert_false(controller:open_action_palette())
+  assert_equal(notifications[#notifications], "No Codux mission or workspace selected")
+end
+
+do
+  local bound = {}
+  local controller = mission_control_mod.new({
+    state = {},
+    bind_close_keys = function() end,
+    set_buffer_keymap = function(_, mode, lhs, _rhs, desc)
+      if mode == "n" then
+        bound[lhs] = desc
+      end
+    end,
+  })
+
+  controller:bind_dashboard_commands(12)
+
+  assert_equal(bound.m, "Open Codux Mission Menu")
+  assert_equal(bound.j, "Next Codux Mission")
+  assert_equal(bound.k, "Previous Codux Mission")
+  assert_equal(bound["<CR>"], "Open Codux Mission Role")
+  assert_equal(bound["<Tab>"], "Search/List Codux Missions")
+  assert_equal(bound.e, "Edit Codux Mission Objective")
+  assert_equal(bound.x, "Close Codux Mission")
+  assert_equal(bound.d, "Delete Codux Mission")
+end
+
+do
+  local current_cursor = { 1, 0 }
+  local cursor_set
+  local ran_action
+  local closed = false
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_action_win = 30,
+      mission_dashboard_action_buf = 31,
+      mission_dashboard_action_items = workspace_ui.mission_action_items(),
+      mission_dashboard_action_mission = { name = "Alpha" },
+    },
+    is_valid_win = function(win)
+      return win == 30
+    end,
+    get_window_cursor = function()
+      return current_cursor
+    end,
+    set_window_cursor = function(_, cursor)
+      cursor_set = cursor
+      current_cursor = cursor
+      return true
+    end,
+    ui = {
+      close_window = function()
+        closed = true
+      end,
+      delete_buffer = function() end,
+    },
+  })
+  function controller:edit_selected_mission(mission)
+    ran_action = "edit:" .. tostring(mission.name)
+    return true
+  end
+
+  assert_true(controller:move_action_cursor(1))
+  assert_equal(cursor_set[1], 2)
+  assert_true(controller:move_action_cursor(-1))
+  assert_equal(cursor_set[1], 1)
+
+  assert_true(controller:run_highlighted_action())
+  assert_equal(ran_action, "edit:Alpha")
+  assert_true(closed)
+  assert_nil(controller.state.mission_dashboard_action_win)
+end
+
+do
+  local calls = {}
+  local entry = { name = "alpha-builder", safe_name = "alpha-builder" }
+  local old_confirm = vim.fn.confirm
+  vim.fn.confirm = function(message, choices, default)
+    table.insert(calls, "confirm:" .. tostring(message) .. ":" .. tostring(choices) .. ":" .. tostring(default))
+    return 1
+  end
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_action_workspace = entry,
+    },
+    ui = {
+      close_window = function() end,
+      delete_buffer = function() end,
+    },
+    edit_saved_workspace_instruction = function(workspace)
+      table.insert(calls, "edit:" .. tostring(workspace.name))
+      return true
+    end,
+    close_saved_workspace_window = function(workspace)
+      table.insert(calls, "close:" .. tostring(workspace.name))
+      return true
+    end,
+    delete_saved_workspace = function(workspace)
+      table.insert(calls, "delete:" .. tostring(workspace.name))
+      return true
+    end,
+  })
+
+  assert_true(controller:run_action("edit_instructions", entry))
+  assert_true(controller:run_action("close_workspace", entry))
+  assert_true(controller:run_action("delete_workspace", entry))
+  assert_equal(calls[1], "edit:alpha-builder")
+  assert_equal(calls[2], "close:alpha-builder")
+  assert_contains(calls[3], "confirm:Delete Codux workspace alpha-builder?")
+  assert_equal(calls[4], "delete:alpha-builder")
+  vim.fn.confirm = old_confirm
 end
 
 if type(vim.api) == "table" then
@@ -294,6 +521,8 @@ if type(vim.api) == "table" then
   local objective_config = controller:objective_editor_config(20)
   local preview_config = controller:preview_config(20)
   local dashboard_config = controller:dashboard_config(20)
+  assert_contains(dashboard_config.footer, "m menu")
+  assert_contains(dashboard_config.footer, "x close")
   assert_true(objective_config.width <= 38)
   assert_true(preview_config.width <= 38)
   assert_true(dashboard_config.width <= 38)
@@ -1087,6 +1316,43 @@ do
 end
 
 do
+  local actions = workspace_ui.mission_action_items()
+  local by_key = {}
+  local labels_by_key = {}
+  for _, action in ipairs(actions) do
+    by_key[action.key] = action.action
+    labels_by_key[action.key] = action.label
+  end
+
+  assert_equal(by_key.e, "edit_objective")
+  assert_equal(by_key.x, "close_mission")
+  assert_equal(by_key.d, "delete_mission")
+  assert_nil(by_key.n)
+  assert_nil(by_key.r)
+  assert_contains(workspace_ui.mission_action_line(actions[1], 40), "Edit Objective")
+  assert_equal(labels_by_key.x, "Close Mission")
+end
+
+do
+  local actions = workspace_ui.role_workspace_action_items()
+  local by_key = {}
+  local labels_by_key = {}
+  for _, action in ipairs(actions) do
+    by_key[action.key] = action.action
+    labels_by_key[action.key] = action.label
+  end
+
+  assert_equal(by_key.o, "open_workspace")
+  assert_equal(by_key.e, "edit_instructions")
+  assert_equal(by_key.x, "close_workspace")
+  assert_equal(by_key.d, "delete_workspace")
+  assert_nil(by_key.r)
+  assert_nil(by_key.X)
+  assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Open Workspace")
+  assert_equal(labels_by_key.d, "Delete Workspace")
+end
+
+do
   local footer = workspace_ui.footer_line(workspace_ui.manager_footer_segments({}, 200))
   assert_contains(footer, "tab search/list")
   assert_contains(footer, "j/k move")
@@ -1300,6 +1566,9 @@ do
             project_root = "/codux-worktrees/alpha-builder",
             workspace_kind = "worktree",
             git_common_dir = "/repo/.git",
+            status = "active",
+            codex_status = "working",
+            codex_mode = "execute",
             mission_id = "mission:alpha",
             mission_name = "Alpha",
             mission_role = "Builder",
@@ -1316,6 +1585,9 @@ do
             project_root = "/codux-worktrees/alpha-reviewer",
             workspace_kind = "worktree",
             git_common_dir = "/repo/.git",
+            status = "idle",
+            codex_status = "idle",
+            codex_mode = "plan",
             mission_id = "mission:alpha",
             mission_name = "Alpha",
             mission_role = "Reviewer",
@@ -1364,6 +1636,12 @@ do
       if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
         return "/repo/.git\n", 0
       end
+      if command == "git -C /codux-worktrees/alpha-builder status --porcelain" then
+        return " M lua/codux/init.lua\n", 0
+      end
+      if command == "git -C /codux-worktrees/alpha-reviewer status --porcelain" then
+        return "", 0
+      end
       return "", 1
     end,
   })
@@ -1383,6 +1661,19 @@ do
   assert_equal(runtime.state.workspace.mission_objective, "New objective")
   assert_equal(#written_instructions, 2)
 
+  local dirty_roles, dirty_error = runtime:mission_dirty_roles("Alpha", { project_root = "/repo" })
+  assert_nil(dirty_error)
+  assert_equal(#dirty_roles, 1)
+  assert_equal(dirty_roles[1].name, "alpha-builder")
+  assert_equal(dirty_roles[1].reason, "dirty")
+
+  assert_true(runtime:close_mission("Alpha", { project_root = "/repo" }))
+  assert_equal(state_data.projects["/codux-worktrees/alpha-builder"].workspaces["alpha-builder"].status, "inactive")
+  assert_equal(state_data.projects["/codux-worktrees/alpha-builder"].workspaces["alpha-builder"].codex_status, "idle")
+  assert_nil(state_data.projects["/codux-worktrees/alpha-builder"].workspaces["alpha-builder"].codex_mode)
+  assert_equal(state_data.projects["/codux-worktrees/alpha-reviewer"].workspaces["alpha-reviewer"].status, "inactive")
+  assert_equal(state_data.projects["/codux-worktrees/alpha-reviewer"].workspaces["alpha-reviewer"].mission_id, "mission:alpha")
+
   local deleted = {}
   runtime.delete_saved_workspace = function(_, entry)
     table.insert(deleted, entry.safe_name)
@@ -1391,6 +1682,32 @@ do
   assert_true(runtime:delete_mission("Alpha", { project_root = "/repo" }))
   table.sort(deleted)
   assert_equal(table.concat(deleted, ","), "alpha-builder,alpha-reviewer")
+end
+
+do
+  local confirmed_message
+  local old_confirm = vim.fn.confirm
+  vim.fn.confirm = function(message, choices, default)
+    confirmed_message = message
+    assert_equal(choices, "&Yes\n&No")
+    assert_equal(default, 2)
+    return 2
+  end
+  local controller = mission_control_mod.new({
+    mission_dirty_roles = function()
+      return {
+        { name = "mission-builder", reason = "dirty" },
+        { name = "mission-reviewer", reason = "unknown" },
+      }
+    end,
+  })
+
+  assert_false(controller:confirm_delete_mission({ name = "Mission" }, "/repo"))
+  assert_contains(confirmed_message, "permanently remove every role workspace")
+  assert_contains(confirmed_message, "mission-builder")
+  assert_contains(confirmed_message, "mission-reviewer (status unknown)")
+  assert_contains(confirmed_message, "nuke uncommitted and untracked work")
+  vim.fn.confirm = old_confirm
 end
 
 do
@@ -2998,6 +3315,26 @@ do
     assert_equal(builder.mission_objective, "Build it")
     assert_contains(table.concat(commands, "\n"), "git -C /repo status --porcelain")
     assert_contains(table.concat(commands, "\n"), "Start your Mission Control role now.")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local runtime = workspace_prepare_runtime({})
+    local lua = runtime:bootstrap_lua({
+      name = "mission-builder",
+      safe_name = "mission-builder",
+      project_root = "/codux-worktrees/mission-builder",
+      mission_id = "mission:mission",
+      mission_name = "Mission",
+      mission_role = "Builder",
+      mission_objective = "Build it",
+    })
+
+    assert_contains(lua, 'mission_id="mission:mission"')
+    assert_contains(lua, 'mission_name="Mission"')
+    assert_contains(lua, 'mission_role="Builder"')
+    assert_contains(lua, 'mission_objective="Build it"')
   end)
 end
 

@@ -2076,6 +2076,123 @@ function M:close_all_saved_workspace_windows(root)
   return failed == 0
 end
 
+function M:mission_dirty_roles(name, opts)
+  opts = type(opts) == "table" and opts or {}
+  local root = opts.project_root or self:project_root()
+  local mission, mission_error = self:mission_for_name(root, name)
+  if not mission then
+    return nil, mission_error or "mission not found"
+  end
+
+  local dirty = {}
+  for _, entry in ipairs(type(mission.roles) == "table" and mission.roles or {}) do
+    local path = entry.worktree_path or entry.project_root
+    local label = entry.name or entry.safe_name or entry.mission_role or "unknown"
+    if type(path) ~= "string" or path == "" then
+      table.insert(dirty, { name = label, reason = "unknown" })
+    else
+      local output, code = self.system({ "git", "-C", path, "status", "--porcelain" })
+      if code ~= 0 then
+        table.insert(dirty, { name = label, reason = "unknown" })
+      elseif trim(output) ~= "" then
+        table.insert(dirty, { name = label, reason = "dirty" })
+      end
+    end
+  end
+
+  return dirty, nil
+end
+
+function M:close_mission(name, opts)
+  opts = type(opts) == "table" and opts or {}
+  local root = opts.project_root or self:project_root()
+  local mission, mission_error = self:mission_for_name(root, name)
+  if not mission then
+    self.notify(mission_error or "mission not found", vim.log.levels.ERROR)
+    return false
+  end
+
+  local state_data, state_error = self:read_state()
+  if state_error then
+    self.notify(state_error, vim.log.levels.ERROR)
+    return false
+  end
+
+  local session = self:current_tmux_session()
+  local now = self:timestamp()
+  local closed = 0
+  local failed = 0
+  local close_results = {}
+
+  for _, entry in ipairs(vim.deepcopy(mission.roles)) do
+    local entry_root = entry.project_root or root
+    local safe_name = entry.safe_name
+    local project = type(state_data.projects) == "table" and state_data.projects[entry_root] or nil
+    local workspaces = type(project) == "table" and project.workspaces or nil
+    local record = type(workspaces) == "table" and type(safe_name) == "string" and workspaces[safe_name] or nil
+    if type(record) ~= "table" then
+      failed = failed + 1
+    else
+      local window_name = record.tmux_window or record.window_name or entry.window_name or safe_name
+      local window_id = entry.window_id or (session and self:tmux_window_id(session, window_name)) or nil
+      local close_failed = false
+      if window_id and not self:kill_tmux_window(window_id) then
+        failed = failed + 1
+        close_failed = true
+      end
+
+      if not close_failed then
+        record.status = "inactive"
+        record.codex_status = "idle"
+        record.codex_mode = nil
+        record.tmux_target = nil
+        closed = closed + 1
+        close_results[tostring(entry_root) .. "\0" .. tostring(safe_name)] = true
+      end
+      record.tmux_window = window_name
+      record.last_reconciled_at = now
+      project.updated_at = now
+    end
+  end
+
+  local write_ok, write_error = self:write_state(state_data)
+  if not write_ok then
+    self.notify(write_error, vim.log.levels.ERROR)
+    return false
+  end
+
+  if self.state.workspace then
+    local key = tostring(self.state.workspace.project_root or "") .. "\0" .. tostring(self.state.workspace.safe_name or "")
+    if close_results[key] then
+      self.state.workspace.status = "inactive"
+      self.state.workspace.codex_status = "idle"
+      self.state.workspace.codex_mode = nil
+      self.state.workspace.tmux_target = nil
+    end
+  end
+
+  if failed > 0 then
+    self.notify(
+      "Closed "
+        .. tostring(closed)
+        .. " roles in Codux mission "
+        .. tostring(mission.name or name)
+        .. "; "
+        .. tostring(failed)
+        .. " failed",
+      vim.log.levels.WARN
+    )
+  else
+    self.notify("Closed Codux mission " .. tostring(mission.name or name) .. " with " .. tostring(closed) .. " roles")
+  end
+
+  if self.state.workspace_manager_project_root then
+    self.render_workspace_manager()
+  end
+
+  return failed == 0
+end
+
 function M:shell_env_assignment(name, value)
   return name .. "=" .. vim.fn.shellescape(tostring(value or ""))
 end
@@ -2098,6 +2215,10 @@ function M:bootstrap_lua(workspace)
   local worktree_branch = workspace.worktree_branch or ""
   local worktree_base = workspace.worktree_base or ""
   local worktree_base_commit = workspace.worktree_base_commit or ""
+  local mission_id = workspace.mission_id or ""
+  local mission_name = workspace.mission_name or ""
+  local mission_role = workspace.mission_role or ""
+  local mission_objective = workspace.mission_objective or ""
   local window_name = workspace.window_name or ""
   local custom_instruction = workspace.custom_instruction or ""
   local resolved_instruction = workspace.resolved_instruction or ""
@@ -2117,7 +2238,7 @@ function M:bootstrap_lua(workspace)
     "local profile=" .. self:lua_string(profile),
     "local prompt=" .. self:lua_string(initial_prompt),
     "local show_codux=" .. tostring(show_codux),
-    "local workspace={name=" .. self:lua_string(name) .. ",safe_name=" .. self:lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. self:lua_string(branch) .. ",workspace_kind=" .. self:lua_string(workspace_kind) .. ",git_common_dir=" .. self:lua_string(git_common_dir) .. ",worktree_path=" .. self:lua_string(worktree_path) .. ",worktree_branch=" .. self:lua_string(worktree_branch) .. ",worktree_base=" .. self:lua_string(worktree_base) .. ",worktree_base_commit=" .. self:lua_string(worktree_base_commit) .. ",window_name=" .. self:lua_string(window_name) .. ",custom_instruction=" .. self:lua_string(custom_instruction) .. ",resolved_instruction=" .. self:lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. self:lua_string(codex_status) .. ",status=" .. self:lua_string(status) .. ",codex_session_id=" .. self:lua_string(codex_session_id) .. ",codex_session_path=" .. self:lua_string(codex_session_path) .. ",codex_session_captured_at=" .. self:lua_string(codex_session_captured_at) .. ",open_visible=" .. tostring(open_visible) .. "}",
+    "local workspace={name=" .. self:lua_string(name) .. ",safe_name=" .. self:lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. self:lua_string(branch) .. ",workspace_kind=" .. self:lua_string(workspace_kind) .. ",git_common_dir=" .. self:lua_string(git_common_dir) .. ",worktree_path=" .. self:lua_string(worktree_path) .. ",worktree_branch=" .. self:lua_string(worktree_branch) .. ",worktree_base=" .. self:lua_string(worktree_base) .. ",worktree_base_commit=" .. self:lua_string(worktree_base_commit) .. ",mission_id=" .. self:lua_string(mission_id) .. ",mission_name=" .. self:lua_string(mission_name) .. ",mission_role=" .. self:lua_string(mission_role) .. ",mission_objective=" .. self:lua_string(mission_objective) .. ",window_name=" .. self:lua_string(window_name) .. ",custom_instruction=" .. self:lua_string(custom_instruction) .. ",resolved_instruction=" .. self:lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. self:lua_string(codex_status) .. ",status=" .. self:lua_string(status) .. ",codex_session_id=" .. self:lua_string(codex_session_id) .. ",codex_session_path=" .. self:lua_string(codex_session_path) .. ",codex_session_captured_at=" .. self:lua_string(codex_session_captured_at) .. ",open_visible=" .. tostring(open_visible) .. "}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
