@@ -286,7 +286,7 @@ function M:dashboard_config(line_count)
     border = "rounded",
     title = " codux mission dashboard ",
     title_pos = "center",
-    footer = " Enter open | j/k role | p prompt | output above | m menu | e/x/d mission | n new | r refresh | q close ",
+    footer = " m menu | p prompt | n new ",
     footer_pos = "center",
     width = width,
     height = height,
@@ -1552,6 +1552,11 @@ function M:open_workspace_prompt(entry)
   end
 
   local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
+  if entry.status == "inactive" then
+    self.notify("workspace is inactive", vim.log.levels.WARN)
+    return false
+  end
+
   local prompt_fn = self.ui.single_line_prompt
   if type(prompt_fn) ~= "function" then
     self.notify("Codux prompt input is unavailable", vim.log.levels.ERROR)
@@ -1642,9 +1647,6 @@ function M:bind_dashboard_commands(bufnr)
   end, "Previous Codux Mission", {
     nowait = true,
   })
-  self.set_buffer_keymap(bufnr, "n", "<CR>", function()
-    return self:open_selected()
-  end, "Open Codux Mission Role")
   self.set_buffer_keymap(bufnr, "n", "m", function()
     return self:open_action_palette()
   end, "Open Codux Mission Menu")
@@ -1663,9 +1665,6 @@ function M:bind_dashboard_commands(bufnr)
   self.set_buffer_keymap(bufnr, "n", "n", function()
     return self:create_new_mission()
   end, "Create Codux Mission")
-  self.set_buffer_keymap(bufnr, "n", "r", function()
-    return self:refresh_dashboard()
-  end, "Refresh Codux Missions")
 end
 
 function M:open_dashboard()

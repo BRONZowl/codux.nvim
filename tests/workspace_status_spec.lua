@@ -108,6 +108,7 @@ local workspace_store_mod = require("codux.workspace_store")
 local workspace_ui = require("codux.workspace_ui")
 local manager_mod = require("codux.workspace_manager")
 local terminal_mod = require("codux.terminal")
+local which_key_mod = require("codux.which_key")
 
 local function assert_equal(actual, expected, message)
   if actual ~= expected then
@@ -426,12 +427,13 @@ do
   assert_equal(bound.m, "Open Codux Mission Menu")
   assert_equal(bound.j, "Next Codux Mission")
   assert_equal(bound.k, "Previous Codux Mission")
-  assert_equal(bound["<CR>"], "Open Codux Mission Role")
+  assert_nil(bound["<CR>"])
   assert_equal(bound["<Tab>"], "Search/List Codux Missions")
   assert_equal(bound.p, "Prompt Codux Mission Role")
   assert_equal(bound.e, "Edit Codux Mission Objective")
   assert_equal(bound.x, "Close Codux Mission")
   assert_equal(bound.d, "Delete Codux Mission")
+  assert_nil(bound.r)
 end
 
 do
@@ -508,15 +510,22 @@ do
       table.insert(calls, "delete:" .. tostring(workspace.name))
       return true
     end,
+    open_saved_workspace = function(name)
+      table.insert(calls, "open:" .. tostring(name))
+      return true
+    end,
   })
+  function controller:close_dashboard() end
 
+  assert_true(controller:run_action("open_workspace", entry))
   assert_true(controller:run_action("edit_instructions", entry))
   assert_true(controller:run_action("close_workspace", entry))
   assert_true(controller:run_action("delete_workspace", entry))
-  assert_equal(calls[1], "edit:alpha-builder")
-  assert_equal(calls[2], "close:alpha-builder")
-  assert_contains(calls[3], "confirm:Delete Codux workspace alpha-builder?")
-  assert_equal(calls[4], "delete:alpha-builder")
+  assert_equal(calls[1], "open:alpha-builder")
+  assert_equal(calls[2], "edit:alpha-builder")
+  assert_equal(calls[3], "close:alpha-builder")
+  assert_contains(calls[4], "confirm:Delete Codux workspace alpha-builder?")
+  assert_equal(calls[5], "delete:alpha-builder")
   vim.fn.confirm = old_confirm
 end
 
@@ -550,15 +559,27 @@ if type(vim.api) == "table" then
   local preview_config = controller:preview_config(20)
   local dashboard_config = controller:dashboard_config(20)
   assert_contains(dashboard_config.footer, "m menu")
+  assert_equal(dashboard_config.footer:find("Enter open", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("j/k role", 1, true), nil)
   assert_contains(dashboard_config.footer, "p prompt")
-  assert_contains(dashboard_config.footer, "output above")
-  assert_contains(dashboard_config.footer, "e/x/d mission")
+  assert_contains(dashboard_config.footer, "n new")
+  assert_equal(dashboard_config.footer:find("output above", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("e/x/d mission", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("r refresh", 1, true), nil)
+  assert_equal(dashboard_config.footer:find("q close", 1, true), nil)
   assert_true(objective_config.width <= 38)
   assert_true(preview_config.width <= 38)
   assert_true(dashboard_config.width <= 38)
   assert_true(objective_config.height <= 7)
   assert_true(preview_config.height <= 7)
   assert_true(dashboard_config.height <= 7)
+
+  local codux = require("codux")
+  codux.setup({ token_monitor = false })
+  local mission_map = vim.fn.maparg("<leader>zm", "n", false, true)
+  assert_true(vim.tbl_isempty(mission_map))
+  local missions_map = vim.fn.maparg("<leader>zM", "n", false, true)
+  assert_equal(missions_map.desc, "mission control")
   vim.o.columns = 140
   vim.o.lines = 40
   vim.o.cmdheight = 1
@@ -1336,6 +1357,9 @@ do
         if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
           return "@1\treview\n", 0
         end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
         if command:find("^nvim %-%-server /tmp/review%.sock %-%-remote%-expr", 1, false) then
           return "ok\n", 0
         end
@@ -1354,6 +1378,67 @@ do
     local command_text = table.concat(commands, "\n")
     assert_contains(command_text, "remote_send_to_codex")
     assert_contains(command_text, "  /plan  ")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local runtime = workspace_prepare_runtime({
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local ok, error_message = runtime:send_prompt_to_workspace({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+      nvim_server = "/tmp/review.sock",
+    }, "/plan", { attempts = 1 })
+    assert_false(ok)
+    assert_equal(error_message, "workspace is inactive")
+    assert_equal(table.concat(commands, "\n"):find("remote_send_to_codex", 1, true), nil)
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local runtime = workspace_prepare_runtime({
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "bash\n", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local ok, error_message = runtime:send_prompt_to_workspace({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+      nvim_server = "/tmp/review.sock",
+    }, "/plan", { attempts = 1 })
+    assert_false(ok)
+    assert_equal(error_message, "workspace is inactive")
+    assert_equal(table.concat(commands, "\n"):find("remote_send_to_codex", 1, true), nil)
   end)
 end
 
@@ -1380,6 +1465,30 @@ do
   assert_nil(by_key.h)
   assert_contains(workspace_ui.manager_action_line(actions[1], 40), "Rename Workspace")
   assert_equal(labels_by_key.X, "Close All Workspaces")
+end
+
+do
+  local controller = which_key_mod.new({
+    get_mode = function()
+      return "not running"
+    end,
+  })
+  local entries = controller:normal_entries({
+    open = "<leader>zc",
+    workspace = "<leader>zw",
+    workspaces = "<leader>zW",
+    missions = "<leader>zM",
+  })
+  local by_lhs = {}
+  local by_desc = {}
+  for _, entry in ipairs(entries) do
+    by_lhs[entry.lhs] = entry.desc
+    by_desc[entry.desc] = entry.lhs
+  end
+
+  assert_nil(by_desc["create codux mission"])
+  assert_nil(by_lhs["<leader>zm"])
+  assert_equal(by_lhs["<leader>zM"], "mission control")
 end
 
 do
@@ -1410,14 +1519,14 @@ do
   end
 
   assert_equal(by_key.o, "open_workspace")
-  assert_equal(by_key.p, "prompt_workspace")
   assert_equal(by_key.e, "edit_instructions")
   assert_equal(by_key.x, "close_workspace")
   assert_equal(by_key.d, "delete_workspace")
+  assert_nil(by_key.p)
   assert_nil(by_key.r)
   assert_nil(by_key.X)
   assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Open Workspace")
-  assert_equal(labels_by_key.p, "Prompt Workspace")
+  assert_nil(labels_by_key.p)
   assert_equal(labels_by_key.d, "Delete Workspace")
 end
 
@@ -1448,7 +1557,7 @@ end
 do
   local sent_prompt
   local notifications = {}
-  local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder" }
+  local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "idle" }
   local controller = mission_control_mod.new({
     notify = function(message)
       table.insert(notifications, message)
@@ -1470,6 +1579,37 @@ do
   assert_true(controller:open_workspace_prompt(entry))
   assert_equal(sent_prompt, "  /plan  ")
   assert_contains(notifications[#notifications], "Sent prompt to Builder")
+end
+
+do
+  local notifications = {}
+  local prompted = false
+  local sent = false
+  local controller = mission_control_mod.new({
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    ui = {
+      single_line_prompt = function()
+        prompted = true
+        return true
+      end,
+    },
+    send_prompt_to_workspace = function()
+      sent = true
+      return true, nil
+    end,
+  })
+
+  assert_false(controller:open_workspace_prompt({
+    name = "alpha-reviewer",
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "inactive",
+  }))
+  assert_false(prompted)
+  assert_false(sent)
+  assert_equal(notifications[#notifications], "workspace is inactive")
 end
 
 do

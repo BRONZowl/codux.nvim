@@ -1042,21 +1042,22 @@ function M:ensure_workspace_remote(entry)
 
   local session = self:current_tmux_session()
   if not session then
-    return nil, "no tmux session running"
+    return nil, "workspace is inactive"
   end
 
   local window_name = entry.tmux_window or entry.window_name or M.workspace_window_name(safe_name)
   local window_id = self:tmux_window_id(session, window_name)
-  if window_id then
-    entry.window_id = window_id
-    entry.nvim_server = entry.nvim_server or self:workspace_server_path(root, safe_name)
-    return entry, nil
+  if not window_id then
+    return nil, "workspace is inactive"
   end
 
-  return self:prepare_workspace(safe_name, {
-    require_existing = true,
-    project_root = root,
-  })
+  if self:status_for_window(window_id) ~= "active" then
+    return nil, "workspace is inactive"
+  end
+
+  entry.window_id = window_id
+  entry.nvim_server = entry.nvim_server or self:workspace_server_path(root, safe_name)
+  return entry, nil
 end
 
 function M:send_prompt_to_workspace(entry, prompt, opts)

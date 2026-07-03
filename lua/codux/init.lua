@@ -58,7 +58,6 @@ local defaults = {
     diff = "<leader>zg",
     workspace = "<leader>zw",
     workspaces = "<leader>zW",
-    mission = "<leader>zm",
     missions = "<leader>zM",
     mode = "<leader>zp",
   },
@@ -1558,7 +1557,7 @@ function M.setup(opts)
   set_mapping("n", mappings.workspace, M.open_workspace_prompt, "create codux workspace")
   set_mapping("n", mappings.workspaces, M.open_workspaces, "current codux workspaces")
   set_mapping("n", mappings.mission, M.open_mission_prompt, "create codux mission")
-  set_mapping("n", mappings.missions, M.open_missions, "current codux missions")
+  set_mapping("n", mappings.missions, M.open_missions, "mission control")
   local action_desc = which_key_controller:mode_action_desc()
   if action_desc then
     set_mapping("n", mappings.mode, M.toggle_plan_mode, action_desc)

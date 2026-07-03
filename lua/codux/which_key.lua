@@ -402,7 +402,7 @@ function M:update_terminal_mode_mapping()
 end
 
 function M:normal_entries(mappings)
-  local entries = {
+  local candidates = {
     { lhs = mappings.open, desc = "open codex" },
     { lhs = mappings.open_auto, desc = "codex autopilot" },
     { lhs = mappings.open_danger, desc = "codex danger zone" },
@@ -413,10 +413,16 @@ function M:normal_entries(mappings)
     { lhs = mappings.workspace, desc = "create codux workspace" },
     { lhs = mappings.workspaces, desc = "current codux workspaces" },
     { lhs = mappings.mission, desc = "create codux mission" },
-    { lhs = mappings.missions, desc = "current codux missions" },
+    { lhs = mappings.missions, desc = "mission control" },
   }
+  local entries = {}
+  for _, entry in ipairs(candidates) do
+    if type(entry.lhs) == "string" and entry.lhs ~= "" then
+      table.insert(entries, entry)
+    end
+  end
   local action_desc = self:mode_action_desc()
-  if action_desc then
+  if action_desc and type(mappings.mode) == "string" and mappings.mode ~= "" then
     table.insert(entries, { lhs = mappings.mode, desc = action_desc })
   end
 
