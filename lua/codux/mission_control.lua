@@ -39,6 +39,14 @@ local function available_dimension(total, margin)
   return math.max(1, total - margin)
 end
 
+local function bordered_float_outer_height(content_height)
+  return math.max(1, tonumber(content_height) or 1) + 2
+end
+
+local function next_bordered_float_row(row, content_height)
+  return math.max(0, tonumber(row) or 0) + bordered_float_outer_height(content_height)
+end
+
 local function entry_key(entry)
   entry = type(entry) == "table" and entry or {}
   return tostring(entry.safe_name or entry.name or entry.mission_role or "")
@@ -413,15 +421,19 @@ function M:dashboard_config(line_count, opts)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local max_width = available_dimension(total_width, 4)
   local width = math.min(max_width, math.max(80, math.min(160, math.floor(total_width * 0.92))))
+  local search_reserve = opts.reserve_search_input and bordered_float_outer_height(1) or 0
   local command_height = opts.reserve_command_bar and #self:dashboard_command_lines(width) or 0
-  local command_reserve = command_height > 0 and (command_height + 1) or 0
   local preview_mode = opts.preview_mode or self:dashboard_preview_mode(opts.selected_item)
   local preview_height = opts.reserve_output_panel and self:dashboard_preview_height(total_height, command_height, preview_mode)
     or 0
-  local output_reserve = preview_height > 0 and (preview_height + 1 + command_reserve) or command_reserve
-  local max_height = math.max(1, available_dimension(total_height, 4) - output_reserve)
+  local command_reserve = command_height > 0 and bordered_float_outer_height(command_height) or 0
+  local preview_reserve = preview_height > 0 and bordered_float_outer_height(preview_height) or 0
+  local output_reserve = search_reserve + command_reserve + preview_reserve
+  local max_height = output_reserve > 0 and math.max(1, total_height - output_reserve - 2)
+    or available_dimension(total_height, 4)
   local height = math.min(max_height, math.max(8, line_count or 1))
-  local layout_height = math.max(1, total_height - output_reserve)
+  local stack_height = bordered_float_outer_height(height) + output_reserve
+  local stack_top = math.max(0, math.floor((total_height - stack_height) / 2))
 
   return {
     relative = "editor",
@@ -434,7 +446,36 @@ function M:dashboard_config(line_count, opts)
     width = width,
     height = height,
     col = math.max(0, math.floor((total_width - width) / 2)),
-    row = math.max(0, math.floor((layout_height - height) / 2)),
+    row = stack_top + search_reserve,
+  }
+end
+
+function M:dashboard_search_config()
+  local dashboard_config = {}
+  if self.is_valid_win(self.state.mission_dashboard_win) then
+    local ok, config = pcall(self.get_window_config, self.state.mission_dashboard_win)
+    dashboard_config = ok and type(config) == "table" and config or {}
+  end
+  local width_ok, window_width = pcall(function()
+    return self:window_width()
+  end)
+  local dashboard_width = width_ok and window_width or nil
+  dashboard_width = dashboard_width or dashboard_config.width or self:dashboard_config(1).width
+  local dashboard_col = type(dashboard_config.col) == "number" and dashboard_config.col or 0
+  local dashboard_row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
+  local height = 1
+
+  return {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = " Codux mission: ",
+    title_pos = "center",
+    width = math.max(20, dashboard_width),
+    height = height,
+    col = math.max(0, dashboard_col),
+    row = math.max(0, dashboard_row - bordered_float_outer_height(height)),
+    zindex = 60,
   }
 end
 
@@ -458,7 +499,7 @@ function M:dashboard_command_config(line_count)
     width = dashboard_width,
     height = math.max(1, tonumber(line_count) or 1),
     col = math.max(0, dashboard_col),
-    row = math.max(0, dashboard_row + dashboard_height + 1),
+    row = next_bordered_float_row(dashboard_row, dashboard_height),
     zindex = 54,
     focusable = false,
   }
@@ -484,9 +525,9 @@ function M:dashboard_output_config(line_count, opts)
     or nil
   command_height = command_height or #self:dashboard_command_lines(dashboard_width)
   local row = command_config and type(command_config.row) == "number" and command_height
-      and (command_config.row + command_height + 1)
-    or (dashboard_row + dashboard_height + 1)
-  local available_below = total_height - row
+      and next_bordered_float_row(command_config.row, command_height)
+    or next_bordered_float_row(dashboard_row, dashboard_height)
+  local available_below = total_height - row - 2
   local preview_mode = opts.preview_mode or self:dashboard_preview_mode(opts.selected_item)
   local desired_height = self:dashboard_preview_height(total_height, command_height, preview_mode)
   local height = math.min(desired_height, math.max(1, available_below))
@@ -516,6 +557,7 @@ function M:resize_dashboard_stack(line_count, opts)
   local dashboard_config = self:dashboard_config(line_count, {
     reserve_command_bar = true,
     reserve_output_panel = true,
+    reserve_search_input = self.is_valid_win(self.state.mission_dashboard_search_win),
     selected_item = opts.selected_item,
     preview_mode = opts.preview_mode,
   })
@@ -524,6 +566,9 @@ function M:resize_dashboard_stack(line_count, opts)
     return false
   end
 
+  if self.is_valid_win(self.state.mission_dashboard_search_win) then
+    ok = self.set_window_config(self.state.mission_dashboard_search_win, self:dashboard_search_config()) and ok
+  end
   if self.is_valid_win(self.state.mission_dashboard_command_bar_win) then
     local command_lines = self:dashboard_command_lines(dashboard_config.width)
     ok = self.set_window_config(self.state.mission_dashboard_command_bar_win, self:dashboard_command_config(#command_lines))
@@ -1859,6 +1904,7 @@ function M:open_search_input(opts)
   end
 
   if self.is_valid_win(self.state.mission_dashboard_search_win) then
+    pcall(self.set_window_config, self.state.mission_dashboard_search_win, self:dashboard_search_config())
     if focus then
       return self.set_current_win(self.state.mission_dashboard_search_win)
     end
@@ -1878,23 +1924,7 @@ function M:open_search_input(opts)
   end
   mark_internal_buffer(self.is_loaded_buf, bufnr)
 
-  local dashboard_config = self.get_window_config(self.state.mission_dashboard_win)
-  local width = math.max(20, self:window_width() or 58)
-  local col = type(dashboard_config.col) == "number" and dashboard_config.col or 0
-  local row = math.max(0, (type(dashboard_config.row) == "number" and dashboard_config.row or 0) - 3)
-
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, focus, {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = " Codux mission: ",
-    title_pos = "center",
-    width = width,
-    height = 1,
-    col = col,
-    row = row,
-    zindex = 60,
-  })
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, focus, self:dashboard_search_config())
   if not win_ok then
     self.ui.delete_buffer(bufnr)
     self.notify("Failed to open Codux mission search", vim.log.levels.ERROR)
@@ -2711,6 +2741,7 @@ function M:open_dashboard(root)
   local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:dashboard_config(#lines, {
     reserve_command_bar = true,
     reserve_output_panel = true,
+    reserve_search_input = true,
     selected_item = initial_selected_item,
   }))
   if not win_ok then

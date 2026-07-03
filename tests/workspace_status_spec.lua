@@ -694,6 +694,65 @@ end
 
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
+  local old_create_augroup = vim.api.nvim_create_augroup
+  local old_create_autocmd = vim.api.nvim_create_autocmd
+  local search_config
+  vim.api.nvim_open_win = function(_, _, config)
+    search_config = config
+    return 20
+  end
+  vim.api.nvim_create_augroup = function()
+    return 91
+  end
+  vim.api.nvim_create_autocmd = function() end
+
+  local controller = mission_control_mod.new({
+    namespace = 99,
+    state = {
+      mission_dashboard_win = 10,
+    },
+    is_valid_win = function(win)
+      return win == 10 or win == 20
+    end,
+    is_loaded_buf = function()
+      return true
+    end,
+    get_window_config = function()
+      return { col = 5, row = 10, width = 88, height = 8 }
+    end,
+    get_window_width = function()
+      return 88
+    end,
+    ui = {
+      create_scratch_buffer = function()
+        return 31
+      end,
+      printable_prompt_keys = function()
+        return {}
+      end,
+      set_lines = function() end,
+      close_window = function() end,
+      delete_buffer = function() end,
+      set_window_options = function() end,
+    },
+    bind_close_keys = function() end,
+    set_buffer_keymap = function() end,
+  })
+
+  assert_true(controller:open_search_input())
+  assert_equal(search_config.title, " Codux mission: ")
+  assert_equal(search_config.width, 88)
+  assert_equal(search_config.height, 1)
+  assert_equal(search_config.col, 5)
+  assert_equal(search_config.row, 7)
+
+  vim.api.nvim_open_win = old_open_win
+  vim.api.nvim_create_augroup = old_create_augroup
+  vim.api.nvim_create_autocmd = old_create_autocmd
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
   local window_config
   vim.api.nvim_open_win = function(_, _, config)
     window_config = config
@@ -1315,8 +1374,9 @@ if type(vim.api) == "table" then
   local reserved_output_config = controller:dashboard_output_config(2)
   assert_equal(reserved_dashboard_config.height, 12)
   assert_equal(reserved_output_config.height, 1)
-  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
-  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+  assert_equal(reserved_command_config.row, reserved_dashboard_config.row + reserved_dashboard_config.height + 2)
+  assert_equal(reserved_output_config.row, reserved_command_config.row + reserved_command_config.height + 2)
+  assert_true(reserved_output_config.row + reserved_output_config.height + 2 <= vim.o.lines - vim.o.cmdheight)
 
   reserved_dashboard_config = controller:dashboard_config(18, {
     reserve_command_bar = true,
@@ -1329,8 +1389,9 @@ if type(vim.api) == "table" then
   })
   assert_equal(reserved_dashboard_config.height, 12)
   assert_equal(reserved_output_config.height, 1)
-  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
-  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+  assert_equal(reserved_command_config.row, reserved_dashboard_config.row + reserved_dashboard_config.height + 2)
+  assert_equal(reserved_output_config.row, reserved_command_config.row + reserved_command_config.height + 2)
+  assert_true(reserved_output_config.row + reserved_output_config.height + 2 <= vim.o.lines - vim.o.cmdheight)
 
   assert_equal(controller:dashboard_preview_mode({ kind = "role", entry = { status = "inactive" } }), "compact")
   assert_equal(controller:dashboard_preview_mode({ kind = "role", entry = {} }), "compact")
@@ -1349,8 +1410,9 @@ if type(vim.api) == "table" then
   })
   assert_equal(reserved_dashboard_config.height, 12)
   assert_equal(reserved_output_config.height, 1)
-  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
-  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+  assert_equal(reserved_command_config.row, reserved_dashboard_config.row + reserved_dashboard_config.height + 2)
+  assert_equal(reserved_output_config.row, reserved_command_config.row + reserved_command_config.height + 2)
+  assert_true(reserved_output_config.row + reserved_output_config.height + 2 <= vim.o.lines - vim.o.cmdheight)
 
   reserved_dashboard_config = controller:dashboard_config(18, {
     reserve_command_bar = true,
@@ -1363,8 +1425,9 @@ if type(vim.api) == "table" then
   })
   assert_equal(reserved_dashboard_config.height, 1)
   assert_equal(reserved_output_config.height, 12)
-  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
-  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+  assert_equal(reserved_command_config.row, reserved_dashboard_config.row + reserved_dashboard_config.height + 2)
+  assert_equal(reserved_output_config.row, reserved_command_config.row + reserved_command_config.height + 2)
+  assert_true(reserved_output_config.row + reserved_output_config.height + 2 <= vim.o.lines - vim.o.cmdheight)
 
   for _, status in ipairs({ "idle", "question" }) do
     reserved_dashboard_config = controller:dashboard_config(18, {
@@ -1378,8 +1441,9 @@ if type(vim.api) == "table" then
     })
     assert_equal(reserved_dashboard_config.height, 1)
     assert_equal(reserved_output_config.height, 12)
-    assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
-    assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+    assert_equal(reserved_command_config.row, reserved_dashboard_config.row + reserved_dashboard_config.height + 2)
+    assert_equal(reserved_output_config.row, reserved_command_config.row + reserved_command_config.height + 2)
+    assert_true(reserved_output_config.row + reserved_output_config.height + 2 <= vim.o.lines - vim.o.cmdheight)
   end
 
   vim.o.columns = 140
@@ -1395,8 +1459,9 @@ if type(vim.api) == "table" then
   })
   assert_equal(reserved_output_config.height, 28)
   assert_true(reserved_dashboard_config.height >= 1)
-  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
-  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+  assert_equal(reserved_command_config.row, reserved_dashboard_config.row + reserved_dashboard_config.height + 2)
+  assert_equal(reserved_output_config.row, reserved_command_config.row + reserved_command_config.height + 2)
+  assert_true(reserved_output_config.row + reserved_output_config.height + 2 <= vim.o.lines - vim.o.cmdheight)
 
   vim.o.columns = 42
   vim.o.lines = 12
@@ -1410,8 +1475,8 @@ if type(vim.api) == "table" then
     selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
   })
   assert_equal(reserved_output_config.height, 1)
-  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
-  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+  assert_equal(reserved_command_config.row, reserved_dashboard_config.row + reserved_dashboard_config.height + 2)
+  assert_equal(reserved_output_config.row, reserved_command_config.row + reserved_command_config.height + 2)
   controller.is_valid_win = old_is_valid_win
   controller.get_window_config = old_get_window_config
   controller.get_window_height = old_get_window_height
@@ -1458,8 +1523,9 @@ if type(vim.api) == "table" then
     assert_equal(configs[91].height, 12)
     assert_equal(configs[92].height, 4)
     assert_equal(configs[93].height, 1)
-    assert_equal(configs[92].row, configs[91].row + configs[91].height + 1)
-    assert_equal(configs[93].row, configs[92].row + configs[92].height + 1)
+    assert_equal(configs[92].row, configs[91].row + configs[91].height + 2)
+    assert_equal(configs[93].row, configs[92].row + configs[92].height + 2)
+    assert_true(configs[93].row + configs[93].height + 2 <= vim.o.lines - vim.o.cmdheight)
     assert_equal(configs[92].width, configs[91].width)
     assert_equal(configs[93].width, configs[91].width)
 
@@ -1471,10 +1537,73 @@ if type(vim.api) == "table" then
     assert_equal(configs[91].height, 1)
     assert_equal(configs[92].height, 4)
     assert_equal(configs[93].height, 12)
-    assert_equal(configs[92].row, configs[91].row + configs[91].height + 1)
-    assert_equal(configs[93].row, configs[92].row + configs[92].height + 1)
+    assert_equal(configs[92].row, configs[91].row + configs[91].height + 2)
+    assert_equal(configs[93].row, configs[92].row + configs[92].height + 2)
+    assert_true(configs[93].row + configs[93].height + 2 <= vim.o.lines - vim.o.cmdheight)
     assert_equal(configs[92].width, configs[91].width)
     assert_equal(configs[93].width, configs[91].width)
+  end
+
+  do
+    local configs = {
+      [91] = { relative = "editor", row = 0, col = 0, width = 128, height = 8 },
+      [92] = { relative = "editor", row = 0, col = 0, width = 128, height = 4 },
+      [93] = { relative = "editor", row = 0, col = 0, width = 128, height = 6 },
+      [94] = { relative = "editor", row = 0, col = 0, width = 128, height = 1 },
+    }
+    local calls = {}
+    local resize_controller = mission_control_mod.new({
+      state = {
+        mission_dashboard_win = 91,
+        mission_dashboard_command_bar_win = 92,
+        mission_dashboard_output_win = 93,
+        mission_dashboard_search_win = 94,
+      },
+      is_valid_win = function(win)
+        return win == 91 or win == 92 or win == 93 or win == 94
+      end,
+      get_window_config = function(win)
+        return configs[win] or {}
+      end,
+      get_window_height = function(win)
+        return configs[win] and configs[win].height or nil
+      end,
+      get_window_width = function(win)
+        return configs[win] and configs[win].width or nil
+      end,
+      set_window_config = function(win, config)
+        configs[win] = config
+        table.insert(calls, win)
+        return true
+      end,
+    })
+
+    vim.o.columns = 140
+    vim.o.lines = 40
+    assert_true(resize_controller:resize_dashboard_stack(20, {
+      selected_item = { kind = "mission", mission = { name = "Alpha" } },
+    }))
+    assert_equal(table.concat(calls, ","), "91,94,92,93")
+    local compact_dashboard_row = configs[91].row
+    local compact_search_row = configs[94].row
+    assert_equal(configs[94].row, configs[91].row - 3)
+    assert_equal(configs[94].width, configs[91].width)
+    assert_equal(configs[92].row, configs[91].row + configs[91].height + 2)
+    assert_equal(configs[93].row, configs[92].row + configs[92].height + 2)
+    assert_true(configs[93].row + configs[93].height + 2 <= vim.o.lines - vim.o.cmdheight)
+
+    calls = {}
+    assert_true(resize_controller:resize_dashboard_stack(20, {
+      selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
+    }))
+    assert_equal(table.concat(calls, ","), "91,94,92,93")
+    assert_true(configs[91].row < compact_dashboard_row)
+    assert_true(configs[94].row < compact_search_row)
+    assert_equal(configs[94].row, configs[91].row - 3)
+    assert_equal(configs[94].width, configs[91].width)
+    assert_equal(configs[92].row, configs[91].row + configs[91].height + 2)
+    assert_equal(configs[93].row, configs[92].row + configs[92].height + 2)
+    assert_true(configs[93].row + configs[93].height + 2 <= vim.o.lines - vim.o.cmdheight)
   end
 
   do
