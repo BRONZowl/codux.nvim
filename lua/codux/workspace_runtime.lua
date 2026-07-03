@@ -83,6 +83,17 @@ local function inactive_like_status(status)
   return status == "inactive"
 end
 
+local mission_control_filetypes = {
+  ["codux-missions"] = true,
+  ["codux-missions-search"] = true,
+  ["codux-missions-command"] = true,
+  ["codux-missions-actions"] = true,
+  ["codux-mission-preview"] = true,
+  ["codux-mission-objective-preview"] = true,
+  ["codux-mission-objective"] = true,
+  ["codux-mission-workspace-prompt"] = true,
+}
+
 local function prepend_command(command, args)
   local result = { command }
   for _, arg in ipairs(args or {}) do
@@ -2426,6 +2437,7 @@ function M:start_mission(name, opts)
 
   local started = 0
   local failed = 0
+  local started_workspaces = {}
   for _, entry in ipairs(type(mission.roles) == "table" and mission.roles or {}) do
     local workspace_name = entry.name or entry.safe_name
     if type(workspace_name) ~= "string" or workspace_name == "" then
@@ -2437,6 +2449,7 @@ function M:start_mission(name, opts)
         permission_profile = entry.permission_profile or "auto",
         require_existing = true,
         project_root = entry.project_root or root,
+        restart_inactive = opts.restart_inactive == true,
       })
       if workspace then
         local ok = true
@@ -2444,8 +2457,14 @@ function M:start_mission(name, opts)
         if workspace.initial_mode == "plan" then
           ok, plan_error = self:ensure_workspace_plan_mode(workspace)
         end
+        if ok and opts.prompt_roles == true then
+          local role = mission_mod.role_from_entry(entry)
+          local prompt = entry.initial_prompt or mission_mod.role_prompt(mission.name or name, mission.objective, role)
+          ok, plan_error = self:send_prompt_to_workspace(workspace, prompt)
+        end
         if ok then
           started = started + 1
+          table.insert(started_workspaces, workspace)
         else
           failed = failed + 1
           local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
@@ -2485,6 +2504,14 @@ function M:start_mission(name, opts)
 
   if self.state.workspace_manager_project_root then
     self.render_workspace_manager()
+  end
+
+  if opts.focus_first == true and failed == 0 and started_workspaces[1] then
+    local workspace = started_workspaces[1]
+    if not self:switch_tmux_window(workspace.window_id) then
+      self.notify("Failed to switch to Codux mission role " .. tostring(workspace.mission_role or workspace.name), vim.log.levels.ERROR)
+      return false
+    end
   end
 
   return failed == 0
@@ -2587,8 +2614,22 @@ function M:nvim_command(workspace)
   return table.concat(parts, " ")
 end
 
-function M:ensure_tmux_window(session, root, window_name, command)
+function M:ensure_tmux_window(session, root, window_name, command, opts)
+  opts = type(opts) == "table" and opts or {}
   local existing = self:tmux_window_id(session, window_name)
+  if existing then
+    if opts.restart_inactive and inactive_like_status(self:status_for_window(existing)) then
+      if not self:kill_tmux_window(existing) then
+        return nil, false
+      end
+    else
+      return existing, false
+    end
+  end
+
+  if existing and opts.restart_inactive then
+    existing = self:tmux_window_id(session, window_name)
+  end
   if existing then
     return existing, false
   end
@@ -2793,8 +2834,9 @@ function M:prepare_workspace(name, opts)
     self:resolve_workspace_resume_session(workspace)
   end
 
-  local window_id, created =
-    self:ensure_tmux_window(session, workspace.project_root, workspace.window_name, self:nvim_command(workspace))
+  local window_id, created = self:ensure_tmux_window(session, workspace.project_root, workspace.window_name, self:nvim_command(workspace), {
+    restart_inactive = opts.restart_inactive == true,
+  })
   if not window_id then
     if creating_worktree then
       self:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
@@ -3117,6 +3159,7 @@ function M:target_sync_allowed(event, current_filetype)
     or filetype == "codux-workspace-create"
     or filetype == "codux-workspace-create-footer"
     or filetype == "codux-workspace-instruction"
+    or mission_control_filetypes[filetype]
   then
     return false
   end

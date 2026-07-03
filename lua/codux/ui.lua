@@ -257,6 +257,9 @@ function M.single_line_prompt(opts, callback, deps)
     notify("Failed to create Codux prompt", vim.log.levels.ERROR)
     return false
   end
+  if type(opts.on_create_buffer) == "function" then
+    pcall(opts.on_create_buffer, bufnr)
+  end
 
   local win_ok, created_win = pcall(vim.api.nvim_open_win, bufnr, true, {
     relative = "editor",

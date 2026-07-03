@@ -74,6 +74,21 @@ local function disable_completion(is_loaded_buf, bufnr)
   return true
 end
 
+local mission_control_filetypes = {
+  ["codux-missions"] = true,
+  ["codux-missions-search"] = true,
+  ["codux-missions-command"] = true,
+  ["codux-missions-actions"] = true,
+  ["codux-mission-preview"] = true,
+  ["codux-mission-objective-preview"] = true,
+  ["codux-mission-objective"] = true,
+  ["codux-mission-workspace-prompt"] = true,
+}
+
+local function mark_internal_buffer(is_loaded_buf, bufnr)
+  return disable_completion(is_loaded_buf, bufnr)
+end
+
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
   local controller = {
@@ -377,7 +392,7 @@ function M:open_objective_editor(name, default_objective, opts)
     linebreak = true,
     winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
   })
-  disable_completion(self.is_loaded_buf, bufnr)
+  mark_internal_buffer(self.is_loaded_buf, bufnr)
   pcall(vim.cmd, "stopinsert")
 
   local closed = false
@@ -453,6 +468,7 @@ function M:open_preview(mission)
     self.notify("Failed to create Codux mission preview", vim.log.levels.ERROR)
     return false
   end
+  mark_internal_buffer(self.is_loaded_buf, bufnr)
 
   self.ui.set_lines(bufnr, preview_lines)
   pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
@@ -950,6 +966,7 @@ function M:view_mission_objective(mission)
     self.notify("Failed to create Codux mission objective preview", vim.log.levels.ERROR)
     return false
   end
+  mark_internal_buffer(self.is_loaded_buf, bufnr)
 
   local lines = vim.split(tostring(mission.objective or "No objective"), "\n", { plain = true })
   if #lines == 0 then
@@ -1301,6 +1318,7 @@ function M:open_search_input(opts)
     self.notify("Failed to create Codux mission search", vim.log.levels.ERROR)
     return false
   end
+  mark_internal_buffer(self.is_loaded_buf, bufnr)
 
   local dashboard_config = self.get_window_config(self.state.mission_dashboard_win)
   local width = math.max(20, self:window_width() or 58)
@@ -1413,22 +1431,15 @@ function M:close_dashboard()
   self.ui.delete_buffer(self.state.mission_dashboard_command_buf)
   self.ui.delete_buffer(self.state.mission_dashboard_buf)
 
-  local dashboard_filetypes = {
-    ["codux-missions"] = true,
-    ["codux-missions-search"] = true,
-    ["codux-missions-command"] = true,
-    ["codux-missions-actions"] = true,
-  }
-
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     local bufnr = self.window_buffer(win)
-    if self.is_loaded_buf(bufnr) and dashboard_filetypes[self.buffer_filetype(bufnr)] then
+    if self.is_loaded_buf(bufnr) and mission_control_filetypes[self.buffer_filetype(bufnr)] then
       self.ui.close_window(win)
     end
   end
 
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if self.is_loaded_buf(bufnr) and dashboard_filetypes[self.buffer_filetype(bufnr)] then
+    if self.is_loaded_buf(bufnr) and mission_control_filetypes[self.buffer_filetype(bufnr)] then
       self.ui.delete_buffer(bufnr)
     end
   end
@@ -1500,6 +1511,7 @@ function M:open_command_sink()
   if not bufnr then
     return false
   end
+  mark_internal_buffer(self.is_loaded_buf, bufnr)
 
   local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, {
     relative = "editor",
@@ -1669,7 +1681,7 @@ function M:edit_selected_mission(mission)
       local ok = self.update_mission_objective(mission.name, objective, root)
       if ok ~= false then
         vim.schedule(function()
-          self:open_dashboard()
+          self:open_dashboard(root)
         end)
       end
       return ok
@@ -1709,13 +1721,28 @@ function M:start_selected_mission(mission)
     self.notify("No Codux mission selected", vim.log.levels.WARN)
     return false
   end
-  local ok = self.start_mission(mission.name or mission.mission_id, root)
-  self:render_dashboard()
+  local ok = self.start_mission(mission.name or mission.mission_id, root, {
+    restart_inactive = true,
+    prompt_roles = true,
+    focus_first = true,
+  })
+  if ok then
+    self:close_dashboard()
+  else
+    self:render_dashboard()
+  end
   return ok
 end
 
+function M:action_palette_target()
+  if self.state.mission_dashboard_action_kind == "workspace" then
+    return self.state.mission_dashboard_action_workspace
+  end
+  return self.state.mission_dashboard_action_mission
+end
+
 function M:run_action(action, target)
-  local workspace = self.state.mission_dashboard_action_workspace or target
+  local workspace = target or self.state.mission_dashboard_action_workspace
   if action == "open_workspace" then
     workspace = workspace or self:selected_role_workspace_or_notify()
     if not workspace then
@@ -1757,7 +1784,7 @@ function M:run_action(action, target)
     return self:delete_role_workspace(workspace)
   end
 
-  local mission = self.state.mission_dashboard_action_mission or target or self:selected_mission_name_or_notify()
+  local mission = target or self.state.mission_dashboard_action_mission or self:selected_mission_name_or_notify()
   if not mission then
     return false
   end
@@ -1799,7 +1826,7 @@ function M:run_highlighted_action()
   if not action_item then
     return false
   end
-  return self:run_action(action_item.action, self.state.mission_dashboard_action_mission)
+  return self:run_action(action_item.action, self:action_palette_target())
 end
 
 function M:move_action_cursor(delta)
@@ -1842,6 +1869,7 @@ function M:open_action_palette_for(target, kind)
     self.notify("Failed to create Codux " .. label .. " actions", vim.log.levels.ERROR)
     return false
   end
+  mark_internal_buffer(self.is_loaded_buf, bufnr)
 
   self.state.mission_dashboard_action_buf = bufnr
   self.state.mission_dashboard_action_items = action_items
@@ -1948,6 +1976,9 @@ function M:open_workspace_prompt(entry)
     prompt = "Prompt " .. tostring(label) .. ": ",
     filetype = "codux-mission-workspace-prompt",
     zindex = 80,
+    on_create_buffer = function(bufnr)
+      mark_internal_buffer(self.is_loaded_buf, bufnr)
+    end,
   }, function(input)
     if input == nil then
       return
@@ -2056,9 +2087,9 @@ function M:bind_dashboard_commands(bufnr)
   end, "Create Codux Workspace")
 end
 
-function M:open_dashboard()
+function M:open_dashboard(root)
   self:close_dashboard()
-  local root = self.project_root()
+  root = root or self.project_root()
   local lines, items, selectable_rows, best_match_row = self:dashboard_lines(root)
   local bufnr = self.ui.create_scratch_buffer({
     bufhidden = "wipe",
@@ -2069,6 +2100,7 @@ function M:open_dashboard()
     self.notify("Failed to create Codux missions dashboard", vim.log.levels.ERROR)
     return false
   end
+  mark_internal_buffer(self.is_loaded_buf, bufnr)
 
   self.ui.set_lines(bufnr, lines, { modifiable = true })
   self:highlight_dashboard(bufnr, lines, items)

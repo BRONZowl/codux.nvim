@@ -1167,8 +1167,10 @@ mission_controller = mission_control_mod.new({
   workspace_branch_state = function(entry)
     return workspace_runtime:workspace_branch_state(entry)
   end,
-  start_mission = function(name, root)
-    return M.start_mission(name, { project_root = root })
+  start_mission = function(name, root, opts)
+    opts = type(opts) == "table" and vim.deepcopy(opts) or {}
+    opts.project_root = root
+    return M.start_mission(name, opts)
   end,
   close_mission = function(name, root)
     return M.close_mission(name, { project_root = root })

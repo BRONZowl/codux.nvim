@@ -755,6 +755,39 @@ do
 end
 
 do
+  local current_cursor = { 1, 0 }
+  local ran_action
+  local entry = { name = "alpha-builder", safe_name = "alpha-builder" }
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_action_win = 30,
+      mission_dashboard_action_buf = 31,
+      mission_dashboard_action_items = workspace_ui.role_workspace_action_items(entry),
+      mission_dashboard_action_workspace = entry,
+      mission_dashboard_action_kind = "workspace",
+    },
+    is_valid_win = function(win)
+      return win == 30
+    end,
+    get_window_cursor = function()
+      return current_cursor
+    end,
+    ui = {
+      close_window = function() end,
+      delete_buffer = function() end,
+    },
+    open_saved_workspace = function(name)
+      ran_action = "open:" .. tostring(name)
+      return true
+    end,
+  })
+  function controller:close_dashboard() end
+
+  assert_true(controller:run_highlighted_action())
+  assert_equal(ran_action, "open:alpha-builder")
+end
+
+do
   local calls = {}
   local entry = { name = "alpha-builder", safe_name = "alpha-builder" }
   local old_confirm = vim.fn.confirm
@@ -799,6 +832,93 @@ do
   assert_contains(calls[4], "confirm:Delete Codux workspace alpha-builder?")
   assert_equal(calls[5], "delete:alpha-builder")
   vim.fn.confirm = old_confirm
+end
+
+do
+  local captured = {}
+  local closed = false
+  local rendered = false
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_project_root = "/repo",
+    },
+    start_mission = function(name, root, opts)
+      captured = { name = name, root = root, opts = opts }
+      return true
+    end,
+  })
+  function controller:close_dashboard()
+    closed = true
+  end
+  function controller:render_dashboard()
+    rendered = true
+  end
+
+  assert_true(controller:start_selected_mission({ name = "Alpha" }))
+  assert_equal(captured.name, "Alpha")
+  assert_equal(captured.root, "/repo")
+  assert_true(captured.opts.restart_inactive)
+  assert_true(captured.opts.prompt_roles)
+  assert_true(captured.opts.focus_first)
+  assert_true(closed)
+  assert_false(rendered)
+end
+
+do
+  local closed = false
+  local rendered = false
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_project_root = "/repo",
+    },
+    start_mission = function()
+      return false
+    end,
+  })
+  function controller:close_dashboard()
+    closed = true
+  end
+  function controller:render_dashboard()
+    rendered = true
+  end
+
+  assert_false(controller:start_selected_mission({ name = "Alpha" }))
+  assert_false(closed)
+  assert_true(rendered)
+end
+
+do
+  local old_schedule = vim.schedule
+  local saved_root
+  local reopened_root
+  local on_save
+  vim.schedule = function(callback)
+    return callback()
+  end
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_project_root = "/repo",
+    },
+    update_mission_objective = function(_, _, root)
+      saved_root = root
+      return true
+    end,
+  })
+  function controller:close_dashboard() end
+  function controller:open_objective_editor(_, _, opts)
+    on_save = opts.on_save
+    return true
+  end
+  function controller:open_dashboard(root)
+    reopened_root = root
+    return true
+  end
+
+  assert_true(controller:edit_selected_mission({ name = "Alpha", objective = "old" }))
+  assert_true(on_save("Alpha", "new"))
+  assert_equal(saved_root, "/repo")
+  assert_equal(reopened_root, "/repo")
+  vim.schedule = old_schedule
 end
 
 if type(vim.api) == "table" then
@@ -1727,6 +1847,29 @@ do
 end
 
 do
+  local runtime = runtime_mod.new({
+    state = {
+      workspace = {
+        safe_name = "review",
+      },
+    },
+  })
+
+  assert_false(runtime:target_sync_allowed("BufEnter", function()
+    return "codux-missions"
+  end))
+  assert_false(runtime:target_sync_allowed("BufEnter", function()
+    return "codux-missions-actions"
+  end))
+  assert_false(runtime:target_sync_allowed("BufEnter", function()
+    return "codux-mission-workspace-prompt"
+  end))
+  assert_true(runtime:target_sync_allowed("BufEnter", function()
+    return "lua"
+  end))
+end
+
+do
   with_workspace_prepare_env(function()
     local commands = {}
     local runtime = workspace_prepare_runtime({
@@ -2604,6 +2747,70 @@ do
   assert_true(runtime:start_mission("Alpha", { project_root = "/repo" }))
   assert_equal(calls[1].opts.initial_mode, "plan")
   assert_equal(calls[2].name, "ensure_plan")
+end
+
+do
+  local calls = {}
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    render_workspace_manager = function() end,
+  })
+  function runtime:mission_for_name(root, name)
+    assert_equal(root, "/repo")
+    assert_equal(name, "Alpha")
+    return {
+      name = "Alpha",
+      objective = "Build it",
+      roles = {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          mission_role = "Builder",
+          project_root = "/repo",
+        },
+      },
+    }
+  end
+  function runtime:prepare_workspace(name, opts)
+    table.insert(calls, { name = name, opts = opts })
+    assert_true(opts.restart_inactive)
+    return {
+      name = name,
+      safe_name = name,
+      project_root = "/repo",
+      window_id = "@1",
+      status = "idle",
+      initial_mode = opts.initial_mode,
+    }, nil
+  end
+  function runtime:ensure_workspace_plan_mode(workspace)
+    table.insert(calls, { name = "ensure_plan", workspace = workspace })
+    return true, nil
+  end
+  function runtime:send_prompt_to_workspace(workspace, prompt)
+    table.insert(calls, { name = "send_prompt", workspace = workspace, prompt = prompt })
+    return true, nil
+  end
+  function runtime:switch_tmux_window(window_id)
+    table.insert(calls, { name = "focus", window_id = window_id })
+    return true
+  end
+
+  assert_true(runtime:start_mission("Alpha", {
+    project_root = "/repo",
+    restart_inactive = true,
+    prompt_roles = true,
+    focus_first = true,
+  }))
+  assert_equal(calls[1].name, "alpha-builder")
+  assert_equal(calls[2].name, "ensure_plan")
+  assert_equal(calls[3].name, "send_prompt")
+  assert_contains(calls[3].prompt, "Start your Mission Control role now.")
+  assert_contains(calls[3].prompt, "Role: Builder")
+  assert_equal(calls[4].name, "focus")
+  assert_equal(calls[4].window_id, "@1")
 end
 
 do
@@ -5185,6 +5392,79 @@ do
     local target_path, target_type = runtime_mod.normalize_workspace_target("/repo", "directory", "/fallback")
     assert_equal(target_path, "/repo")
     assert_equal(target_type, "directory")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local killed = false
+    local created = false
+    local store = workspace_store({
+      state_data = {
+        projects = {
+          ["/repo"] = {
+            workspaces = {
+              review = review_workspace_record({
+                name = "review",
+                safe_name = "review",
+                project_root = "/repo",
+                tmux_window = "review",
+              }),
+            },
+          },
+        },
+      },
+      read_instruction_file = function()
+        return "existing instructions"
+      end,
+    })
+    local runtime = workspace_prepare_runtime({
+      store = store.store,
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          if created then
+            return "@2\treview\n", 0
+          end
+          if not killed then
+            return "@1\treview\n", 0
+          end
+          return "", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "bash\n", 0
+        end
+        if command == "tmux kill-window -t @1" then
+          killed = true
+          return "", 0
+        end
+        if command:find("tmux new%-window", 1, false) == 1 then
+          created = true
+          return "", 0
+        end
+        if command == "tmux list-panes -t @2 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local workspace, error_message = runtime:prepare_workspace("review", {
+      allow_existing = true,
+      require_existing = true,
+      project_root = "/repo",
+      restart_inactive = true,
+    })
+    assert_nil(error_message)
+    assert_equal(workspace.window_id, "@2")
+    assert_true(killed)
+    assert_true(created)
+    assert_contains(table.concat(commands, "\n"), "tmux kill-window -t @1")
   end)
 end
 
