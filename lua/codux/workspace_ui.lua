@@ -262,6 +262,7 @@ end
 function M.role_workspace_action_items()
   return {
     { key = "o", action = "open_workspace", label = "Open Workspace" },
+    { key = "p", action = "prompt_workspace", label = "Prompt Workspace" },
     { key = "e", action = "edit_instructions", label = "Edit Instructions" },
     { key = "x", action = "close_workspace", label = "Close Workspace" },
     { key = "d", action = "delete_workspace", label = "Delete Workspace" },

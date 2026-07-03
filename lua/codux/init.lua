@@ -898,7 +898,17 @@ function M.open_workspace_session(workspace, initial_prompt, opts)
   return terminal:start_terminal(visible, initial_prompt, command, workspace, profile, {
     hidden = not visible,
     capture_workspace_session = workspace ~= nil,
+    initial_mode = workspace and workspace.initial_mode,
   })
+end
+
+function M._v5.remote_terminal_snapshot(max_lines)
+  max_lines = math.max(1, tonumber(max_lines) or 14)
+  return terminal:terminal_snapshot(max_lines) or ""
+end
+
+function M._v5.remote_send_to_codex(message)
+  return terminal:send_to_codex(tostring(message or "")) and "ok" or "failed"
 end
 
 function M.open_hidden(initial_prompt)
@@ -1098,6 +1108,16 @@ mission_controller = mission_control_mod.new({
   delete_saved_workspace = delete_saved_workspace,
   close_saved_workspace_window = function(entry)
     return M._v5.close_saved_workspace_window(entry)
+  end,
+  workspace_terminal_snapshot = function(entry, opts)
+    return workspace_runtime:workspace_terminal_snapshot(entry, opts)
+  end,
+  send_prompt_to_workspace = function(entry, prompt)
+    local ok, error_message = workspace_runtime:send_prompt_to_workspace(entry, prompt)
+    if not ok and error_message then
+      return false, error_message
+    end
+    return ok
   end,
   project_root = workspace_manager_project_root,
   set_buffer_keymap = M._v5.set_buffer_keymap,

@@ -98,11 +98,6 @@ M.DEFAULT_ROLES = {
     safe_name = "reviewer",
     focus = "Review the branch for bugs, regressions, edge cases, and test gaps.",
   },
-  {
-    name = "QA",
-    safe_name = "qa",
-    focus = "Run or design the verification pass and report concrete failures.",
-  },
 }
 
 function M.workspace_name(safe_mission_name, role)
@@ -140,7 +135,7 @@ function M.role_prompt(mission_name, objective, role)
     "Objective:",
     trim(objective),
     "",
-    "First pass: ground yourself in the repo, identify your role-specific next steps, then execute within this workspace. Report blockers and handoff notes clearly.",
+    "First pass: stay in plan mode, ground yourself in the repo, and identify your role-specific next steps before executing. Report blockers and handoff notes clearly.",
   }, "\n")
 end
 

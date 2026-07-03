@@ -145,10 +145,12 @@ do
   assert_equal(mission.name, "Blow Socks Off")
   assert_equal(mission.safe_name, "blow-socks-off")
   assert_equal(mission.mission_id, "mission:blow-socks-off")
-  assert_equal(#mission.roles, 4)
+  assert_equal(#mission.roles, 3)
   assert_equal(mission.roles[1].workspace_name, "blow-socks-off-architect")
+  assert_equal(mission.roles[3].workspace_name, "blow-socks-off-reviewer")
   assert_contains(mission.roles[1].instruction, "Mission: Blow Socks Off")
   assert_contains(mission.roles[1].initial_prompt, "Start your Mission Control role now.")
+  assert_contains(mission.roles[1].initial_prompt, "stay in plan mode")
 end
 
 do
@@ -254,28 +256,53 @@ do
         },
       }, nil
     end,
+    workspace_terminal_snapshot = function(entry, opts)
+      assert_equal(opts.max_lines, 8)
+      if entry.safe_name == "alpha-builder" then
+        return "builder output", nil
+      end
+      if entry.safe_name == "alpha-reviewer" then
+        return "reviewer output", nil
+      end
+      return "", "missing output"
+    end,
   })
   local lines, items = controller:dashboard_lines("/repo")
   assert_equal(lines[1], "Mission Control")
   assert_contains(table.concat(lines, "\n"), "2 roles")
   assert_contains(table.concat(lines, "\n"), "Alpha")
+  assert_contains(table.concat(lines, "\n"), "Output: Builder")
+  assert_contains(table.concat(lines, "\n"), "builder output")
   assert_contains(table.concat(lines, "\n"), "objective  Build the dashboard")
-  assert_equal(items[4].kind, "mission")
-  assert_equal(items[7].kind, "role")
-  assert_equal(items[7].entry.safe_name, "alpha-builder")
+  assert_equal(items[7].kind, "mission")
+  assert_equal(items[10].kind, "role")
+  assert_equal(items[10].entry.safe_name, "alpha-builder")
 
   local filtered_lines, filtered_items, filtered_rows, best_match_row =
     controller:dashboard_lines("/repo", { query = "rev" })
   assert_contains(table.concat(filtered_lines, "\n"), "Alpha")
-  assert_equal(filtered_items[8].kind, "role")
-  assert_equal(filtered_items[8].entry.safe_name, "alpha-reviewer")
-  assert_equal(best_match_row, 8)
-  assert_equal(table.concat(filtered_rows, ","), "4,7,8")
+  assert_equal(filtered_items[11].kind, "role")
+  assert_equal(filtered_items[11].entry.safe_name, "alpha-reviewer")
+  assert_equal(best_match_row, 11)
+  assert_equal(table.concat(filtered_rows, ","), "7,10,11")
 
   local mission_lines, mission_items, _, mission_best_row = controller:dashboard_lines("/repo", { query = "alp" })
   assert_contains(table.concat(mission_lines, "\n"), "Alpha")
-  assert_equal(mission_items[4].kind, "mission")
-  assert_equal(mission_best_row, 4)
+  assert_equal(mission_items[7].kind, "mission")
+  assert_equal(mission_best_row, 7)
+
+  local reviewer_lines = controller:dashboard_lines("/repo", {
+    selected_item = {
+      kind = "role",
+      entry = {
+        safe_name = "alpha-reviewer",
+        mission_role = "Reviewer",
+        status = "question",
+      },
+    },
+  })
+  assert_contains(table.concat(reviewer_lines, "\n"), "Output: Reviewer")
+  assert_contains(table.concat(reviewer_lines, "\n"), "reviewer output")
 
   local no_match_lines, no_match_items, no_match_rows = controller:dashboard_lines("/repo", { query = "zzz" })
   assert_contains(table.concat(no_match_lines, "\n"), "No matching Codux missions")
@@ -401,6 +428,7 @@ do
   assert_equal(bound.k, "Previous Codux Mission")
   assert_equal(bound["<CR>"], "Open Codux Mission Role")
   assert_equal(bound["<Tab>"], "Search/List Codux Missions")
+  assert_equal(bound.p, "Prompt Codux Mission Role")
   assert_equal(bound.e, "Edit Codux Mission Objective")
   assert_equal(bound.x, "Close Codux Mission")
   assert_equal(bound.d, "Delete Codux Mission")
@@ -522,7 +550,9 @@ if type(vim.api) == "table" then
   local preview_config = controller:preview_config(20)
   local dashboard_config = controller:dashboard_config(20)
   assert_contains(dashboard_config.footer, "m menu")
-  assert_contains(dashboard_config.footer, "x close")
+  assert_contains(dashboard_config.footer, "p prompt")
+  assert_contains(dashboard_config.footer, "output above")
+  assert_contains(dashboard_config.footer, "e/x/d mission")
   assert_true(objective_config.width <= 38)
   assert_true(preview_config.width <= 38)
   assert_true(dashboard_config.width <= 38)
@@ -714,6 +744,9 @@ local function default_state_record(_, workspace)
     mission_name = workspace.mission_name,
     mission_role = workspace.mission_role,
     mission_objective = workspace.mission_objective,
+    nvim_server = workspace.nvim_server,
+    initial_mode = workspace.initial_mode,
+    codex_mode = workspace.codex_mode,
   }
 end
 
@@ -1291,6 +1324,40 @@ do
 end
 
 do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local runtime = workspace_prepare_runtime({
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n", 0
+        end
+        if command:find("^nvim %-%-server /tmp/review%.sock %-%-remote%-expr", 1, false) then
+          return "ok\n", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local ok, error_message = runtime:send_prompt_to_workspace({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+      nvim_server = "/tmp/review.sock",
+    }, "  /plan  ", { attempts = 1 })
+    assert_nil(error_message)
+    assert_true(ok)
+    local command_text = table.concat(commands, "\n")
+    assert_contains(command_text, "remote_send_to_codex")
+    assert_contains(command_text, "  /plan  ")
+  end)
+end
+
+do
   assert_equal(workspace_ui.manager_mode_label({ status = "inactive", codex_mode = "plan" }), "--")
   assert_equal(workspace_ui.manager_mode_label({ status = "idle", codex_mode = "plan" }), "plan")
 end
@@ -1343,13 +1410,66 @@ do
   end
 
   assert_equal(by_key.o, "open_workspace")
+  assert_equal(by_key.p, "prompt_workspace")
   assert_equal(by_key.e, "edit_instructions")
   assert_equal(by_key.x, "close_workspace")
   assert_equal(by_key.d, "delete_workspace")
   assert_nil(by_key.r)
   assert_nil(by_key.X)
   assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Open Workspace")
+  assert_equal(labels_by_key.p, "Prompt Workspace")
   assert_equal(labels_by_key.d, "Delete Workspace")
+end
+
+do
+  local controller = mission_control_mod.new({
+    workspace_terminal_snapshot = function(entry, opts)
+      assert_equal(entry.safe_name, "alpha-builder")
+      assert_equal(opts.max_lines, 8)
+      return "first line\nlatest line", nil
+    end,
+  })
+  local lines = controller:output_lines({
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+  })
+  assert_contains(table.concat(lines, "\n"), "Output: Builder")
+  assert_contains(table.concat(lines, "\n"), "latest line")
+
+  local inactive = controller:output_lines({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "inactive",
+  })
+  assert_contains(table.concat(inactive, "\n"), "workspace is not active")
+end
+
+do
+  local sent_prompt
+  local notifications = {}
+  local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder" }
+  local controller = mission_control_mod.new({
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    ui = {
+      single_line_prompt = function(opts, callback)
+        assert_contains(opts.prompt, "Builder")
+        callback("  /plan  ")
+        return true
+      end,
+    },
+    send_prompt_to_workspace = function(workspace, prompt)
+      assert_equal(workspace.safe_name, "alpha-builder")
+      sent_prompt = prompt
+      return true, nil
+    end,
+  })
+
+  assert_true(controller:open_workspace_prompt(entry))
+  assert_equal(sent_prompt, "  /plan  ")
+  assert_contains(notifications[#notifications], "Sent prompt to Builder")
 end
 
 do
@@ -3313,7 +3433,12 @@ do
     assert_equal(builder.mission_role, "Builder")
     assert_equal(architect.mission_objective, "Build it")
     assert_equal(builder.mission_objective, "Build it")
+    assert_equal(architect.initial_mode, "plan")
+    assert_equal(builder.initial_mode, "plan")
+    assert_equal(architect.codex_mode, "plan")
+    assert_equal(builder.codex_mode, "plan")
     assert_contains(table.concat(commands, "\n"), "git -C /repo status --porcelain")
+    assert_contains(table.concat(commands, "\n"), "--listen")
     assert_contains(table.concat(commands, "\n"), "Start your Mission Control role now.")
   end)
 end
@@ -3329,12 +3454,16 @@ do
       mission_name = "Mission",
       mission_role = "Builder",
       mission_objective = "Build it",
+      nvim_server = "/tmp/codux/mission-builder.sock",
+      initial_mode = "plan",
     })
 
     assert_contains(lua, 'mission_id="mission:mission"')
     assert_contains(lua, 'mission_name="Mission"')
     assert_contains(lua, 'mission_role="Builder"')
     assert_contains(lua, 'mission_objective="Build it"')
+    assert_contains(lua, 'nvim_server="/tmp/codux/mission-builder.sock"')
+    assert_contains(lua, 'initial_mode="plan"')
   end)
 end
 
@@ -3794,7 +3923,8 @@ do
     assert_nil(error_message)
     assert_equal(workspace.target_path, "/repo")
     assert_equal(workspace.target_type, "directory")
-    assert_contains(new_window_command, "'nvim' '.'")
+    assert_contains(new_window_command, "'nvim' --listen")
+    assert_contains(new_window_command, "/codux/repo-review.sock' '.'")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.target_path, "/repo")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.target_type, "directory")
   end)
@@ -3888,7 +4018,8 @@ do
     assert_nil(error_message)
     assert_equal(workspace.target_path, "/repo/file.lua")
     assert_equal(workspace.target_type, "file")
-    assert_contains(new_window_command, "'nvim' '/repo/file.lua'")
+    assert_contains(new_window_command, "'nvim' --listen")
+    assert_contains(new_window_command, "/codux/repo-review.sock' '/repo/file.lua'")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.target_path, "/repo/file.lua")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.target_type, "file")
   end)

@@ -965,6 +965,9 @@ end
 function M:start_terminal(focus, initial_prompt, command, workspace, permission_profile, opts)
   opts = opts or {}
   local hidden = opts.hidden == true
+  local initial_mode = opts.initial_mode == "plan" and "plan" or nil
+  local apply_initial_mode = initial_mode == "plan" and type(initial_prompt) == "string" and initial_prompt ~= ""
+  local prompt_after_mode = apply_initial_mode
 
   if self:terminal_running() then
     if focus and not hidden then
@@ -1019,7 +1022,7 @@ function M:start_terminal(focus, initial_prompt, command, workspace, permission_
 
   local job_id
   local session_capture_mtime = os.time() - 2
-  local term_command = self.command_util.with_prompt(command, initial_prompt)
+  local term_command = self.command_util.with_prompt(command, prompt_after_mode and nil or initial_prompt)
   local term_options = {
     on_exit = function(_, code)
       local expected_exit = self.state.exiting_jobs[job_id] == true
@@ -1075,9 +1078,27 @@ function M:start_terminal(focus, initial_prompt, command, workspace, permission_
   if self:valid_win() then
     pcall(vim.api.nvim_set_option_value, "wrap", true, { win = self.state.win })
   end
-  self:set_mode("execute")
+  self:set_mode(apply_initial_mode and "plan" or "execute")
   self.start_token_monitor_timer()
   self:set_codex_working(type(initial_prompt) == "string" and initial_prompt ~= "")
+  if apply_initial_mode then
+    local function send_startup_sequence()
+      if self:terminal_running() then
+        pcall(vim.fn.chansend, self.state.job_id, "\27[Z")
+        if prompt_after_mode then
+          local paste = "\27[200~" .. initial_prompt .. "\27[201~\r"
+          pcall(vim.fn.chansend, self.state.job_id, paste)
+          self:mark_terminal_prompt_submission()
+          self:invalidate_terminal_prompt_tracking()
+        end
+      end
+    end
+    if type(vim.defer_fn) == "function" then
+      vim.defer_fn(send_startup_sequence, 250)
+    else
+      send_startup_sequence()
+    end
+  end
   if opts.capture_workspace_session == true and workspace ~= nil then
     self.capture_workspace_session(workspace, session_capture_mtime)
   end
@@ -1224,6 +1245,22 @@ function M:send_to_codex(message)
   self:invalidate_terminal_prompt_tracking()
   self:set_codex_working(true)
   return true
+end
+
+function M:terminal_snapshot(max_lines)
+  if not self:valid_buf() then
+    return ""
+  end
+
+  max_lines = math.max(1, tonumber(max_lines) or 14)
+  local line_count = vim.api.nvim_buf_line_count(self.state.buf)
+  local start_line = math.max(0, line_count - max_lines)
+  local lines = buffer_lines(self.state.buf, start_line, line_count)
+  if type(lines) ~= "table" then
+    return ""
+  end
+
+  return table.concat(lines, "\n")
 end
 
 function M:health_info()

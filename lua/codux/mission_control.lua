@@ -102,6 +102,14 @@ function M.new(opts)
     close_saved_workspace_window = type(opts.close_saved_workspace_window) == "function"
         and opts.close_saved_workspace_window
       or noop,
+    workspace_terminal_snapshot = type(opts.workspace_terminal_snapshot) == "function" and opts.workspace_terminal_snapshot
+      or function()
+        return nil, "workspace monitor unavailable"
+      end,
+    send_prompt_to_workspace = type(opts.send_prompt_to_workspace) == "function" and opts.send_prompt_to_workspace
+      or function()
+        return false, "workspace prompt unavailable"
+      end,
     update_mission_objective = type(opts.update_mission_objective) == "function"
         and opts.update_mission_objective
       or noop,
@@ -278,7 +286,7 @@ function M:dashboard_config(line_count)
     border = "rounded",
     title = " codux mission dashboard ",
     title_pos = "center",
-    footer = " Enter open | m menu | e objective | x close | d delete | n new | r refresh | q close ",
+    footer = " Enter open | j/k role | p prompt | output above | m menu | e/x/d mission | n new | r refresh | q close ",
     footer_pos = "center",
     width = width,
     height = height,
@@ -506,6 +514,14 @@ function M:dashboard_lines(root, opts)
     )
   )
 
+  local output_entry = opts.output_entry
+  if type(output_entry) ~= "table" then
+    output_entry = self:dashboard_output_entry(opts.selected_item, missions)
+  end
+  for _, line in ipairs(self:output_lines(output_entry)) do
+    table.insert(lines, line)
+  end
+
   for mission_index, mission in ipairs(missions) do
     table.insert(lines, "")
     local counts = self.mission.status_counts(mission)
@@ -556,6 +572,63 @@ function M:dashboard_lines(root, opts)
   end
 
   return lines, items, selectable_rows, best_match_row
+end
+
+function M:dashboard_output_entry(item, missions)
+  if type(item) == "table" then
+    if item.kind == "role" and type(item.entry) == "table" then
+      return item.entry
+    end
+    if item.kind == "mission" and type(item.mission) == "table" and type(item.mission.roles) == "table" then
+      return item.mission.roles[1]
+    end
+  end
+
+  if type(missions) == "table" then
+    for _, mission in ipairs(missions) do
+      if type(mission) == "table" and type(mission.roles) == "table" and type(mission.roles[1]) == "table" then
+        return mission.roles[1]
+      end
+    end
+  end
+  return nil
+end
+
+function M:output_lines(entry)
+  local lines = {
+    "",
+  }
+  if type(entry) ~= "table" then
+    table.insert(lines, "Output: select a mission or role to view workspace output")
+    return lines
+  end
+
+  local role = entry.mission_role or entry.name or entry.safe_name or "workspace"
+  table.insert(lines, "Output: " .. tostring(role))
+  if entry.status == "inactive" then
+    table.insert(lines, "  workspace is not active")
+    return lines
+  end
+
+  local output, error_message = self.workspace_terminal_snapshot(entry, { max_lines = 8 })
+  output = trim(output)
+  if output == "" then
+    table.insert(lines, "  " .. tostring(error_message or "no terminal output available"))
+    return lines
+  end
+
+  local width = math.max(20, (self:window_width() or 80) - 4)
+  local output_lines = vim.split(output, "\n", { plain = true })
+  local start = math.max(1, #output_lines - 7)
+  for index = start, #output_lines do
+    local line = self.workspace_ui.truncate_display_tail(output_lines[index], width)
+    table.insert(lines, "  " .. line)
+  end
+  return lines
+end
+
+function M:monitor_lines(entry)
+  return self:output_lines(entry)
 end
 
 function M:mission_for_name(root, name)
@@ -695,7 +768,11 @@ function M:render_dashboard()
 
   local root = self.state.mission_dashboard_project_root or self.project_root()
   local query = tostring(self.state.mission_dashboard_query or "")
-  local lines, items, selectable_rows, best_match_row = self:dashboard_lines(root, { query = query })
+  local selected = self:selected_item()
+  local lines, items, selectable_rows, best_match_row = self:dashboard_lines(root, {
+    query = query,
+    selected_item = selected,
+  })
   self.state.mission_dashboard_items = items
   self.state.mission_dashboard_selectable_rows = selectable_rows
   self.state.mission_dashboard_best_match_row = best_match_row
@@ -1000,6 +1077,7 @@ function M:open_search_input()
 end
 
 function M:close_dashboard()
+  self:stop_monitor_timer()
   self:close_action_palette()
   self.ui.close_window(self.state.mission_dashboard_search_win)
   self.ui.close_window(self.state.mission_dashboard_command_win)
@@ -1048,6 +1126,39 @@ function M:close_dashboard()
   self.state.mission_dashboard_focus_match = false
   self.state.mission_dashboard_search_confirmed = false
   self.state.mission_dashboard_project_root = nil
+  return true
+end
+
+function M:stop_monitor_timer()
+  local timer = self.state.mission_dashboard_monitor_timer
+  self.state.mission_dashboard_monitor_timer = nil
+  if timer then
+    pcall(timer.stop, timer)
+    pcall(timer.close, timer)
+  end
+end
+
+function M:start_monitor_timer()
+  if self.state.mission_dashboard_monitor_timer then
+    return true
+  end
+
+  local loop = vim.uv or vim.loop
+  local timer = loop and type(loop.new_timer) == "function" and loop.new_timer() or nil
+  if not timer then
+    return false
+  end
+
+  self.state.mission_dashboard_monitor_timer = timer
+  local function tick()
+    if not self.is_valid_win(self.state.mission_dashboard_win) or not self.is_loaded_buf(self.state.mission_dashboard_buf) then
+      self:stop_monitor_timer()
+      return
+    end
+    self:render_dashboard()
+  end
+  local scheduled_tick = type(vim.schedule_wrap) == "function" and vim.schedule_wrap(tick) or tick
+  timer:start(1000, 1000, scheduled_tick)
   return true
 end
 
@@ -1240,6 +1351,14 @@ function M:run_action(action, target)
     self:close_action_palette()
     return self:open_role_workspace(workspace)
   end
+  if action == "prompt_workspace" then
+    workspace = workspace or self:selected_role_workspace_or_notify()
+    if not workspace then
+      return false
+    end
+    self:close_action_palette()
+    return self:open_workspace_prompt(workspace)
+  end
   if action == "edit_instructions" then
     workspace = workspace or self:selected_role_workspace_or_notify()
     if not workspace then
@@ -1426,6 +1545,46 @@ function M:open_role_workspace(entry)
   return self.open_saved_workspace(entry.name or entry.safe_name, entry.project_root)
 end
 
+function M:open_workspace_prompt(entry)
+  entry = type(entry) == "table" and entry or self:selected_role_workspace_or_notify()
+  if not entry then
+    return false
+  end
+
+  local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
+  local prompt_fn = self.ui.single_line_prompt
+  if type(prompt_fn) ~= "function" then
+    self.notify("Codux prompt input is unavailable", vim.log.levels.ERROR)
+    return false
+  end
+
+  return prompt_fn({
+    prompt = "Prompt " .. tostring(label) .. ": ",
+    filetype = "codux-mission-workspace-prompt",
+    zindex = 80,
+  }, function(input)
+    if input == nil then
+      return
+    end
+    if trim(input) == "" then
+      self.notify("Prompt is required", vim.log.levels.WARN)
+      return
+    end
+
+    local ok, error_message = self.send_prompt_to_workspace(entry, input)
+    if ok then
+      self.notify("Sent prompt to " .. tostring(label))
+      self:render_dashboard()
+    else
+      self.notify(error_message or "Failed to send prompt", vim.log.levels.ERROR)
+    end
+  end, {
+    notify = self.notify,
+    set_buffer_keymap = self.set_buffer_keymap,
+    bind_close_keys = self.bind_close_keys,
+  })
+end
+
 function M:delete_role_workspace(entry)
   if type(entry) ~= "table" then
     return false
@@ -1489,6 +1648,9 @@ function M:bind_dashboard_commands(bufnr)
   self.set_buffer_keymap(bufnr, "n", "m", function()
     return self:open_action_palette()
   end, "Open Codux Mission Menu")
+  self.set_buffer_keymap(bufnr, "n", "p", function()
+    return self:open_workspace_prompt()
+  end, "Prompt Codux Mission Role")
   self.set_buffer_keymap(bufnr, "n", "e", function()
     return self:edit_selected_mission()
   end, "Edit Codux Mission Objective")
@@ -1545,6 +1707,7 @@ function M:open_dashboard()
 
   self:bind_dashboard_commands(bufnr)
   self:open_command_sink()
+  self:start_monitor_timer()
   if #selectable_rows > 0 then
     pcall(vim.api.nvim_win_set_cursor, win, { selectable_rows[1], 0 })
   end

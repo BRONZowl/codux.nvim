@@ -91,6 +91,27 @@ local function prepend_command(command, args)
   return result
 end
 
+local function path_token(value)
+  value = tostring(value or ""):gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
+  if value == "" then
+    return "workspace"
+  end
+  return value:sub(1, 96)
+end
+
+local function vimscript_string(value)
+  value = tostring(value or "")
+  value = value:gsub("\\", "\\\\")
+  value = value:gsub('"', '\\"')
+  value = value:gsub("\n", "\\n")
+  value = value:gsub("\r", "\\r")
+  return '"' .. value .. '"'
+end
+
+local function luaeval_expr(lua_expression)
+  return "luaeval(" .. vimscript_string(lua_expression) .. ")"
+end
+
 local function default_current_buffer()
   return vim.api.nvim_get_current_buf()
 end
@@ -303,6 +324,10 @@ end
 
 function M:tmux_system(args)
   return self.system(prepend_command(self:tmux_cmd(), args))
+end
+
+function M:nvim_system(args)
+  return self.system(prepend_command(self:nvim_cmd(), args))
 end
 
 function M:git_output(root, ...)
@@ -947,6 +972,118 @@ function M:dashboard_workspace_status(record, window_id)
   return "idle"
 end
 
+function M:workspace_server_dir()
+  local base = nil
+  if type(vim.fn.stdpath) == "function" then
+    local ok, value = pcall(vim.fn.stdpath, "run")
+    if ok and type(value) == "string" and value ~= "" then
+      base = value
+    end
+  end
+  if not base and type(vim.fn.tempname) == "function" then
+    local ok, value = pcall(vim.fn.tempname)
+    if ok and type(value) == "string" and value ~= "" then
+      base = vim.fn.fnamemodify(value, ":h")
+    end
+  end
+  base = base or "/tmp"
+  local directory = base .. "/codux"
+  pcall(vim.fn.mkdir, directory, "p")
+  return directory
+end
+
+function M:workspace_server_path(root, safe_name)
+  return self:workspace_server_dir() .. "/" .. path_token(root) .. "-" .. path_token(safe_name) .. ".sock"
+end
+
+function M:remote_luaeval(server, lua_expression, opts)
+  opts = type(opts) == "table" and opts or {}
+  if type(server) ~= "string" or server == "" then
+    return nil, "workspace server is unavailable"
+  end
+
+  local attempts = math.max(1, tonumber(opts.attempts) or 1)
+  local last_output = nil
+  for attempt = 1, attempts do
+    local output, code = self:nvim_system({ "--server", server, "--remote-expr", luaeval_expr(lua_expression) })
+    if code == 0 then
+      return trim(output), nil
+    end
+    last_output = trim(output)
+    if attempt < attempts then
+      pcall(vim.fn.sleep, tostring(tonumber(opts.sleep_ms) or 100) .. "m")
+    end
+  end
+
+  return nil, last_output ~= "" and last_output or "workspace is not reachable"
+end
+
+function M:workspace_terminal_snapshot(entry, opts)
+  opts = type(opts) == "table" and opts or {}
+  entry = type(entry) == "table" and entry or {}
+  local server = entry.nvim_server
+  if type(server) ~= "string" or server == "" then
+    server = self:workspace_server_path(entry.project_root, entry.safe_name or entry.name)
+  end
+  local max_lines = math.max(1, tonumber(opts.max_lines) or 14)
+  return self:remote_luaeval(server, "require('codux')._v5.remote_terminal_snapshot(" .. tostring(max_lines) .. ")", opts)
+end
+
+function M:ensure_workspace_remote(entry)
+  entry = type(entry) == "table" and entry or {}
+  local safe_name = entry.safe_name or entry.name
+  local root = entry.project_root
+  if type(safe_name) ~= "string" or safe_name == "" then
+    return nil, "workspace name is required"
+  end
+  if type(root) ~= "string" or root == "" then
+    return nil, "workspace root is required"
+  end
+
+  local session = self:current_tmux_session()
+  if not session then
+    return nil, "no tmux session running"
+  end
+
+  local window_name = entry.tmux_window or entry.window_name or M.workspace_window_name(safe_name)
+  local window_id = self:tmux_window_id(session, window_name)
+  if window_id then
+    entry.window_id = window_id
+    entry.nvim_server = entry.nvim_server or self:workspace_server_path(root, safe_name)
+    return entry, nil
+  end
+
+  return self:prepare_workspace(safe_name, {
+    require_existing = true,
+    project_root = root,
+  })
+end
+
+function M:send_prompt_to_workspace(entry, prompt, opts)
+  opts = type(opts) == "table" and opts or {}
+  prompt = tostring(prompt or "")
+  if trim(prompt) == "" then
+    return false, "Prompt is required"
+  end
+
+  local workspace, ensure_error = self:ensure_workspace_remote(entry)
+  if not workspace then
+    return false, ensure_error or "workspace not found"
+  end
+
+  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
+  local output, remote_error = self:remote_luaeval(
+    server,
+    "require('codux')._v5.remote_send_to_codex(" .. self:lua_string(prompt) .. ")",
+    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
+  )
+  if output == "ok" then
+    return true, nil
+  end
+
+  return false, remote_error or output or "Failed to send prompt"
+end
+
 function M:normalize_codex_mode(mode)
   return normalize_codex_mode(mode)
 end
@@ -1356,6 +1493,8 @@ function M:entries_for_project(root)
                 resolved_instruction = record.resolved_instruction,
                 window_name = window_name,
                 tmux_target = M.tmux_target(session, window_name) or record.tmux_target,
+                nvim_server = record.nvim_server or self:workspace_server_path(record_root, entry_safe_name),
+                initial_mode = record.initial_mode,
                 codex_status = record.codex_status or "idle",
                 codex_mode = codex_mode,
                 permission_profile = record.permission_profile or "default",
@@ -1389,6 +1528,8 @@ function M:entries_for_project(root)
           git_branch = "",
           window_name = window_name,
           tmux_target = M.tmux_target(session, window_name),
+          nvim_server = self:workspace_server_path(record.project_root or root, entry_safe_name),
+          initial_mode = record.initial_mode,
           codex_status = "idle",
           permission_profile = record.permission_profile or "default",
           codex_session_captured_at = record.codex_session_captured_at,
@@ -2220,9 +2361,11 @@ function M:bootstrap_lua(workspace)
   local mission_role = workspace.mission_role or ""
   local mission_objective = workspace.mission_objective or ""
   local window_name = workspace.window_name or ""
+  local nvim_server = workspace.nvim_server or ""
   local custom_instruction = workspace.custom_instruction or ""
   local resolved_instruction = workspace.resolved_instruction or ""
   local initial_prompt = workspace.initial_prompt or ""
+  local initial_mode = workspace.initial_mode or ""
   local open_visible = workspace.open_visible == true
   local codex_session_id = workspace.codex_session_id or ""
   local codex_session_path = workspace.codex_session_path or ""
@@ -2238,7 +2381,7 @@ function M:bootstrap_lua(workspace)
     "local profile=" .. self:lua_string(profile),
     "local prompt=" .. self:lua_string(initial_prompt),
     "local show_codux=" .. tostring(show_codux),
-    "local workspace={name=" .. self:lua_string(name) .. ",safe_name=" .. self:lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. self:lua_string(branch) .. ",workspace_kind=" .. self:lua_string(workspace_kind) .. ",git_common_dir=" .. self:lua_string(git_common_dir) .. ",worktree_path=" .. self:lua_string(worktree_path) .. ",worktree_branch=" .. self:lua_string(worktree_branch) .. ",worktree_base=" .. self:lua_string(worktree_base) .. ",worktree_base_commit=" .. self:lua_string(worktree_base_commit) .. ",mission_id=" .. self:lua_string(mission_id) .. ",mission_name=" .. self:lua_string(mission_name) .. ",mission_role=" .. self:lua_string(mission_role) .. ",mission_objective=" .. self:lua_string(mission_objective) .. ",window_name=" .. self:lua_string(window_name) .. ",custom_instruction=" .. self:lua_string(custom_instruction) .. ",resolved_instruction=" .. self:lua_string(resolved_instruction) .. ",permission_profile=profile,codex_status=" .. self:lua_string(codex_status) .. ",status=" .. self:lua_string(status) .. ",codex_session_id=" .. self:lua_string(codex_session_id) .. ",codex_session_path=" .. self:lua_string(codex_session_path) .. ",codex_session_captured_at=" .. self:lua_string(codex_session_captured_at) .. ",open_visible=" .. tostring(open_visible) .. "}",
+    "local workspace={name=" .. self:lua_string(name) .. ",safe_name=" .. self:lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. self:lua_string(branch) .. ",workspace_kind=" .. self:lua_string(workspace_kind) .. ",git_common_dir=" .. self:lua_string(git_common_dir) .. ",worktree_path=" .. self:lua_string(worktree_path) .. ",worktree_branch=" .. self:lua_string(worktree_branch) .. ",worktree_base=" .. self:lua_string(worktree_base) .. ",worktree_base_commit=" .. self:lua_string(worktree_base_commit) .. ",mission_id=" .. self:lua_string(mission_id) .. ",mission_name=" .. self:lua_string(mission_name) .. ",mission_role=" .. self:lua_string(mission_role) .. ",mission_objective=" .. self:lua_string(mission_objective) .. ",window_name=" .. self:lua_string(window_name) .. ",nvim_server=" .. self:lua_string(nvim_server) .. ",custom_instruction=" .. self:lua_string(custom_instruction) .. ",resolved_instruction=" .. self:lua_string(resolved_instruction) .. ",initial_mode=" .. self:lua_string(initial_mode) .. ",permission_profile=profile,codex_status=" .. self:lua_string(codex_status) .. ",status=" .. self:lua_string(status) .. ",codex_session_id=" .. self:lua_string(codex_session_id) .. ",codex_session_path=" .. self:lua_string(codex_session_path) .. ",codex_session_captured_at=" .. self:lua_string(codex_session_captured_at) .. ",open_visible=" .. tostring(open_visible) .. "}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
@@ -2278,6 +2421,8 @@ function M:nvim_command(workspace)
     "env",
     table.concat(env, " "),
     vim.fn.shellescape(self:nvim_cmd()),
+    "--listen",
+    vim.fn.shellescape(workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name)),
     vim.fn.shellescape(nvim_target),
     "-c",
     vim.fn.shellescape("lua " .. self:bootstrap_lua(workspace)),
@@ -2386,6 +2531,7 @@ function M:prepare_workspace(name, opts)
   if initial_prompt == "" then
     initial_prompt = nil
   end
+  local initial_mode = normalize_codex_mode(opts.initial_mode)
   local permission_profile = opts.permission_profile == "auto" and "auto"
     or opts.permission_profile == "danger" and "danger"
     or opts.permission_profile == "default" and "default"
@@ -2446,8 +2592,10 @@ function M:prepare_workspace(name, opts)
     mission_role = opts.mission_role,
     mission_objective = opts.mission_objective,
     window_name = M.workspace_window_name(safe_name_or_error),
+    nvim_server = self:workspace_server_path(root, safe_name_or_error),
     custom_instruction = custom_instruction,
     resolved_instruction = resolved_instruction,
+    initial_mode = initial_mode,
     permission_profile = permission_profile,
     codex_status = "idle",
     status = "idle",
@@ -2471,6 +2619,8 @@ function M:prepare_workspace(name, opts)
   workspace.safe_name = workspace.safe_name or safe_name_or_error
   workspace.window_name = M.workspace_window_name(workspace.safe_name)
   workspace.tmux_target = M.tmux_target(session, workspace.window_name)
+  workspace.nvim_server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name)
+  workspace.initial_mode = initial_mode or workspace.initial_mode
   local saved_workspace = type(existing) == "table" or (opts.require_existing and file_instruction ~= nil)
   workspace.open_visible = not saved_workspace
 
@@ -2519,6 +2669,7 @@ function M:prepare_workspace(name, opts)
   if created and workspace.initial_prompt then
     workspace.status = "active"
     workspace.codex_status = "working"
+    workspace.codex_mode = workspace.initial_mode == "plan" and "plan" or workspace.codex_mode
   elseif workspace.status ~= "active" then
     if workspace.status == "question" then
       workspace.codex_status = "question"
@@ -2556,6 +2707,7 @@ function M:create_workspace(name, opts)
     custom_instruction = opts.custom_instruction,
     resolved_instruction = opts.resolved_instruction,
     initial_prompt = opts.initial_prompt,
+    initial_mode = opts.initial_mode,
     permission_profile = opts.permission_profile,
     mission_id = opts.mission_id,
     mission_name = opts.mission_name,
@@ -2664,6 +2816,7 @@ function M:create_mission(mission_or_name, objective, opts)
       custom_instruction = role.instruction,
       resolved_instruction = role.instruction,
       initial_prompt = role.initial_prompt,
+      initial_mode = "plan",
       permission_profile = "auto",
       mission_id = mission.mission_id,
       mission_name = mission.name,

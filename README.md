@@ -129,11 +129,12 @@
 
 <p>
   Use <code>:CoduxMissionCreate</code> or <code>&lt;leader&gt;zm</code> to launch Mission Control.
-  Codux prompts for one mission objective, previews a default crew of architect, builder, reviewer, and QA roles, then creates a clean Git worktree workspace for each role and starts each agent with workspace-auto permissions.
+  Codux prompts for one mission objective, previews a default crew of architect, builder, and reviewer roles, then creates a clean Git worktree workspace for each role and starts each agent in plan mode with workspace-auto permissions.
   Mission role workspaces keep their mission metadata in Codux workspace state, and <code>:CoduxMissions</code> or <code>&lt;leader&gt;zM</code> opens a mission dashboard with mission status, objective preview, role status, and workspace jump actions.
   Codux opens a <code>Codux mission:</code> search field above the mission dashboard; type a fuzzy mission, role, or workspace name to filter the dashboard while keeping each matching mission block visible.
   Press <code>&lt;Tab&gt;</code> to switch between mission search and the dashboard list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted mission or role, then use <code>j</code>/<code>k</code> to move through selectable mission and role rows.
-  From the mission dashboard, press <code>&lt;CR&gt;</code> to open a role, <code>m</code> to open a mission menu when a mission row is highlighted or a workspace menu when a role row is highlighted, <code>e</code> to edit the mission objective across all role instructions, <code>x</code> to close all role windows, <code>d</code> to delete the whole mission after a destructive confirmation, <code>n</code> to create another mission, or <code>r</code> to refresh.
+  The dashboard shows a live output panel near the top; it follows the highlighted role, or the first role in the highlighted mission.
+  From the mission dashboard, press <code>&lt;CR&gt;</code> to open a role, <code>p</code> to send a prompt or command to the highlighted role workspace, <code>m</code> to open a mission menu when a mission row is highlighted or a workspace menu when a role row is highlighted, <code>e</code> to edit the mission objective across all role instructions, <code>x</code> to close all role windows, <code>d</code> to delete the whole mission after a destructive confirmation, <code>n</code> to create another mission, or <code>r</code> to refresh.
   Command equivalents are <code>:CoduxMissionEdit &lt;mission&gt;</code>, <code>:CoduxMissionClose &lt;mission&gt;</code>, and <code>:CoduxMissionDelete &lt;mission&gt;</code>.
 </p>
 
