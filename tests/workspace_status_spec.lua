@@ -1313,12 +1313,84 @@ if type(vim.api) == "table" then
   end
   reserved_command_config = controller:dashboard_command_config(3)
   local reserved_output_config = controller:dashboard_output_config(2)
+  assert_equal(reserved_dashboard_config.height, 5)
+  assert_equal(reserved_output_config.height, 8)
+  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
+  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+
+  vim.o.columns = 140
+  vim.o.lines = 40
+  reserved_dashboard_config = controller:dashboard_config(20, {
+    reserve_command_bar = true,
+    reserve_output_panel = true,
+  })
+  reserved_command_config = controller:dashboard_command_config(3)
+  reserved_output_config = controller:dashboard_output_config(2)
+  assert_equal(reserved_output_config.height, 13)
+  assert_true(reserved_dashboard_config.height >= 5)
+  assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
+  assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
+
+  vim.o.columns = 42
+  vim.o.lines = 12
+  reserved_dashboard_config = controller:dashboard_config(20, {
+    reserve_command_bar = true,
+    reserve_output_panel = true,
+  })
+  reserved_command_config = controller:dashboard_command_config(3)
+  reserved_output_config = controller:dashboard_output_config(2)
+  assert_equal(reserved_output_config.height, 1)
   assert_true(reserved_command_config.row > reserved_dashboard_config.row + reserved_dashboard_config.height)
   assert_true(reserved_output_config.row > reserved_command_config.row + reserved_command_config.height)
   controller.is_valid_win = old_is_valid_win
   controller.get_window_config = old_get_window_config
   controller.get_window_height = old_get_window_height
   controller.get_window_width = old_get_window_width
+
+  do
+    local configs = {
+      [91] = { relative = "editor", row = 0, col = 0, width = 80, height = 8 },
+      [92] = { relative = "editor", row = 0, col = 0, width = 80, height = 4 },
+      [93] = { relative = "editor", row = 0, col = 0, width = 80, height = 6 },
+    }
+    local calls = {}
+    local resize_controller = mission_control_mod.new({
+      state = {
+        mission_dashboard_win = 91,
+        mission_dashboard_command_bar_win = 92,
+        mission_dashboard_output_win = 93,
+      },
+      is_valid_win = function(win)
+        return win == 91 or win == 92 or win == 93
+      end,
+      get_window_config = function(win)
+        return configs[win] or {}
+      end,
+      get_window_height = function(win)
+        return configs[win] and configs[win].height or nil
+      end,
+      get_window_width = function(win)
+        return configs[win] and configs[win].width or nil
+      end,
+      set_window_config = function(win, config)
+        configs[win] = config
+        table.insert(calls, win)
+        return true
+      end,
+    })
+
+    vim.o.columns = 120
+    vim.o.lines = 24
+    assert_true(resize_controller:resize_dashboard_stack(18))
+    assert_equal(table.concat(calls, ","), "91,92,93")
+    assert_equal(configs[91].height, 5)
+    assert_equal(configs[92].height, 4)
+    assert_equal(configs[93].height, 8)
+    assert_equal(configs[92].row, configs[91].row + configs[91].height + 1)
+    assert_equal(configs[93].row, configs[92].row + configs[92].height + 1)
+    assert_equal(configs[92].width, configs[91].width)
+    assert_equal(configs[93].width, configs[91].width)
+  end
 
   local codux = require("codux")
   codux.setup({ token_monitor = false })

@@ -135,6 +135,9 @@ function M.new(opts)
       local ok, config = pcall(vim.api.nvim_win_get_config, win)
       return ok and type(config) == "table" and config or {}
     end,
+    set_window_config = type(opts.set_window_config) == "function" and opts.set_window_config or function(win, config)
+      return pcall(vim.api.nvim_win_set_config, win, config)
+    end,
     get_window_height = type(opts.get_window_height) == "function" and opts.get_window_height or function(win)
       local ok, height = pcall(vim.api.nvim_win_get_height, win)
       return ok and type(height) == "number" and height or nil
@@ -367,17 +370,34 @@ function M:preview_config(line_count)
   }
 end
 
+function M:dashboard_preview_height(total_height, command_height)
+  total_height = math.max(1, tonumber(total_height) or (vim.o.lines - vim.o.cmdheight))
+  command_height = math.max(0, tonumber(command_height) or 0)
+
+  local target = math.min(18, math.max(8, math.floor(total_height * 0.35)))
+  local reserved_gaps = (command_height > 0 and 1 or 0) + 1
+  local content_capacity = available_dimension(total_height, 4)
+  local preferred_dashboard_height = 5
+  local preferred_available = content_capacity - command_height - reserved_gaps - preferred_dashboard_height
+  if preferred_available >= 1 then
+    return math.min(target, preferred_available)
+  end
+
+  local compact_available = content_capacity - command_height - reserved_gaps - 1
+  return math.min(target, math.max(1, compact_available))
+end
+
 function M:dashboard_config(line_count, opts)
   opts = type(opts) == "table" and opts or {}
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local max_width = available_dimension(total_width, 4)
-  local command_reserve = opts.reserve_command_bar and (#self:dashboard_command_lines(max_width) + 1) or 0
-  local output_reserve = opts.reserve_output_panel
-      and (math.min(12, math.max(6, math.floor(total_height * 0.25))) + 1 + command_reserve)
-    or 0
-  local max_height = math.max(1, available_dimension(total_height, 4) - output_reserve)
   local width = math.min(max_width, math.max(80, math.min(160, math.floor(total_width * 0.92))))
+  local command_height = opts.reserve_command_bar and #self:dashboard_command_lines(width) or 0
+  local command_reserve = command_height > 0 and (command_height + 1) or 0
+  local preview_height = opts.reserve_output_panel and self:dashboard_preview_height(total_height, command_height) or 0
+  local output_reserve = preview_height > 0 and (preview_height + 1 + command_reserve) or command_reserve
+  local max_height = math.max(1, available_dimension(total_height, 4) - output_reserve)
   local height = math.min(max_height, math.max(8, line_count or 1))
   local layout_height = math.max(1, total_height - output_reserve)
 
@@ -433,17 +453,18 @@ function M:dashboard_output_config(line_count)
       and dashboard_config.col
     or math.max(0, math.floor((math.max(1, vim.o.columns) - dashboard_width) / 2))
   local dashboard_row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
-  local desired_height = math.min(12, math.max(6, (line_count or 1) + 1))
   local command_config = self.is_valid_win(self.state.mission_dashboard_command_bar_win)
       and self.get_window_config(self.state.mission_dashboard_command_bar_win)
     or nil
   local command_height = self.is_valid_win(self.state.mission_dashboard_command_bar_win)
       and self.get_window_height(self.state.mission_dashboard_command_bar_win)
     or nil
+  command_height = command_height or #self:dashboard_command_lines(dashboard_width)
   local row = command_config and type(command_config.row) == "number" and command_height
       and (command_config.row + command_height + 1)
     or (dashboard_row + dashboard_height + 1)
   local available_below = total_height - row
+  local desired_height = self:dashboard_preview_height(total_height, command_height)
   local height = math.min(desired_height, math.max(1, available_below))
 
   return {
@@ -460,6 +481,31 @@ function M:dashboard_output_config(line_count)
     row = math.max(0, row),
     zindex = 55,
   }
+end
+
+function M:resize_dashboard_stack(line_count)
+  if not self.is_valid_win(self.state.mission_dashboard_win) then
+    return false
+  end
+
+  local dashboard_config = self:dashboard_config(line_count, {
+    reserve_command_bar = true,
+    reserve_output_panel = true,
+  })
+  local ok = self.set_window_config(self.state.mission_dashboard_win, dashboard_config)
+  if not ok then
+    return false
+  end
+
+  if self.is_valid_win(self.state.mission_dashboard_command_bar_win) then
+    local command_lines = self:dashboard_command_lines(dashboard_config.width)
+    ok = self.set_window_config(self.state.mission_dashboard_command_bar_win, self:dashboard_command_config(#command_lines))
+      and ok
+  end
+  if self.is_valid_win(self.state.mission_dashboard_output_win) then
+    ok = self.set_window_config(self.state.mission_dashboard_output_win, self:dashboard_output_config(line_count)) and ok
+  end
+  return ok
 end
 
 function M:open_objective_editor(name, default_objective, opts)
@@ -1584,6 +1630,7 @@ function M:render_dashboard()
   self.state.mission_dashboard_selectable_rows = selectable_rows
   self.state.mission_dashboard_best_match_row = best_match_row
 
+  self:resize_dashboard_stack(#lines)
   self.ui.set_lines(self.state.mission_dashboard_buf, lines, { modifiable = true })
   self:highlight_dashboard(self.state.mission_dashboard_buf, lines, items)
   self:render_command_bar()
@@ -1891,6 +1938,10 @@ end
 
 function M:close_dashboard()
   self:stop_monitor_timer()
+  if self.state.mission_dashboard_resize_augroup then
+    pcall(vim.api.nvim_del_augroup_by_id, self.state.mission_dashboard_resize_augroup)
+    self.state.mission_dashboard_resize_augroup = nil
+  end
   self:close_action_palette()
   self:close_output_panel()
   self:close_command_bar()
@@ -1944,6 +1995,7 @@ function M:close_dashboard()
   self.state.mission_dashboard_focus_match = false
   self.state.mission_dashboard_search_confirmed = false
   self.state.mission_dashboard_project_root = nil
+  self.state.mission_dashboard_resize_augroup = nil
   return true
 end
 
@@ -2642,6 +2694,18 @@ function M:open_dashboard(root)
   self.state.mission_dashboard_query = ""
   self.state.mission_dashboard_focus_match = false
   self.state.mission_dashboard_search_confirmed = false
+  self.state.mission_dashboard_resize_augroup = vim.api.nvim_create_augroup(
+    "codux-mission-dashboard-" .. tostring(bufnr),
+    { clear = true }
+  )
+  vim.api.nvim_create_autocmd("VimResized", {
+    group = self.state.mission_dashboard_resize_augroup,
+    callback = function()
+      if self.is_valid_win(self.state.mission_dashboard_win) and self.is_loaded_buf(self.state.mission_dashboard_buf) then
+        self:render_dashboard()
+      end
+    end,
+  })
 
   self:bind_dashboard_commands(bufnr)
   self:open_command_bar()
