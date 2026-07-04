@@ -1,6 +1,7 @@
 local M = {}
 M.__index = M
 
+local action_palette_mod = require("codux.action_palette")
 local mission_mod = require("codux.mission")
 local ui = require("codux.ui")
 local output_panel = require("codux.mission_output_panel")
@@ -208,6 +209,84 @@ function M.new(opts)
   }
 
   return setmetatable(controller, M)
+end
+
+function M:action_palette_controller()
+  return action_palette_mod.new({
+    state = self.state,
+    ui = self.ui,
+    is_valid_win = self.is_valid_win,
+    is_loaded_buf = self.is_loaded_buf,
+    get_window_cursor = self.get_window_cursor,
+    set_window_cursor = self.set_window_cursor,
+    set_buffer_keymap = self.set_buffer_keymap,
+    bind_close_keys = self.bind_close_keys,
+    notify = self.notify,
+    namespace = self.namespace,
+    win_key = "mission_dashboard_action_win",
+    buf_key = "mission_dashboard_action_buf",
+    items_key = "mission_dashboard_action_items",
+    create_buffer_options = {
+      bufhidden = "wipe",
+      filetype = "codux-missions-actions",
+      buftype = "nofile",
+      swapfile = false,
+      modifiable = false,
+    },
+    items = function(target, kind)
+      if kind == "workspace" then
+        return self.workspace_ui.role_workspace_action_items(target)
+      end
+      return self.workspace_ui.mission_action_items(target)
+    end,
+    line_for = function(item, width, target, kind)
+      if kind == "workspace" then
+        return self.workspace_ui.role_workspace_action_line(item, width)
+      end
+      return self.workspace_ui.mission_action_line(item, width)
+    end,
+    width = function()
+      return self:action_palette_width()
+    end,
+    window_config = function(target, item_count, kind)
+      return self:action_palette_config(target, item_count, kind)
+    end,
+    target = function()
+      return self:action_palette_target()
+    end,
+    assign_open_state = function(palette, target, kind, action_items, bufnr)
+      palette.state.mission_dashboard_action_buf = bufnr
+      palette.state.mission_dashboard_action_items = action_items
+      palette.state.mission_dashboard_action_mission = kind == "workspace" and nil or target
+      palette.state.mission_dashboard_action_workspace = kind == "workspace" and target or nil
+      palette.state.mission_dashboard_action_kind = kind
+    end,
+    clear_state = function(palette)
+      palette.state.mission_dashboard_action_win = nil
+      palette.state.mission_dashboard_action_buf = nil
+      palette.state.mission_dashboard_action_items = {}
+      palette.state.mission_dashboard_action_mission = nil
+      palette.state.mission_dashboard_action_workspace = nil
+      palette.state.mission_dashboard_action_kind = nil
+    end,
+    action_label = function(_, kind)
+      return kind == "workspace" and "Workspace" or "Mission"
+    end,
+    create_error = function(_, kind)
+      local label = kind == "workspace" and "workspace" or "mission"
+      return "Failed to create Codux " .. label .. " actions"
+    end,
+    open_error = function(_, kind)
+      local label = kind == "workspace" and "workspace" or "mission"
+      return "Failed to open Codux " .. label .. " actions"
+    end,
+    after_create_buffer = function(bufnr)
+      ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
+    end,
+    run_action = function(action, target)
+      return self:run_action(action, target)
+    end,
+  })
 end
 
 function M:window_height()
@@ -1919,15 +1998,7 @@ function M:selected_mission_or_notify()
 end
 
 function M:close_action_palette()
-  self.ui.close_window(self.state.mission_dashboard_action_win)
-  self.ui.delete_buffer(self.state.mission_dashboard_action_buf)
-  self.state.mission_dashboard_action_win = nil
-  self.state.mission_dashboard_action_buf = nil
-  self.state.mission_dashboard_action_items = {}
-  self.state.mission_dashboard_action_mission = nil
-  self.state.mission_dashboard_action_workspace = nil
-  self.state.mission_dashboard_action_kind = nil
-  return true
+  return self:action_palette_controller():close()
 end
 
 function M:action_palette_width()
@@ -1964,55 +2035,7 @@ function M:action_palette_config(target, item_count, kind)
 end
 
 function M:render_action_palette()
-  if not self.is_loaded_buf(self.state.mission_dashboard_action_buf) then
-    return false
-  end
-
-  local width = self:action_palette_width()
-  local lines = {}
-  local action_kind = self.state.mission_dashboard_action_kind
-  for _, item in ipairs(self.state.mission_dashboard_action_items or {}) do
-    local line = action_kind == "workspace" and self.workspace_ui.role_workspace_action_line(item, width)
-      or self.workspace_ui.mission_action_line(item, width)
-    table.insert(lines, line)
-  end
-
-  self.ui.set_lines(self.state.mission_dashboard_action_buf, lines, { modifiable = true })
-  pcall(vim.api.nvim_buf_clear_namespace, self.state.mission_dashboard_action_buf, self.namespace, 0, -1)
-  for index, item in ipairs(self.state.mission_dashboard_action_items or {}) do
-    local key = tostring(item.key or "")
-    if key ~= "" then
-      local label_start = #key + 2
-      pcall(
-        vim.api.nvim_buf_add_highlight,
-        self.state.mission_dashboard_action_buf,
-        self.namespace,
-        "WhichKey",
-        index - 1,
-        0,
-        #key
-      )
-      pcall(
-        vim.api.nvim_buf_add_highlight,
-        self.state.mission_dashboard_action_buf,
-        self.namespace,
-        "Normal",
-        index - 1,
-        #key,
-        label_start
-      )
-      pcall(
-        vim.api.nvim_buf_add_highlight,
-        self.state.mission_dashboard_action_buf,
-        self.namespace,
-        "Normal",
-        index - 1,
-        label_start,
-        -1
-      )
-    end
-  end
-  return true
+  return self:action_palette_controller():render(nil, self.state.mission_dashboard_action_kind)
 end
 
 function M:edit_selected_mission(mission)
@@ -2168,39 +2191,11 @@ function M:run_action(action, target)
 end
 
 function M:run_highlighted_action()
-  if not self.is_valid_win(self.state.mission_dashboard_action_win) then
-    return false
-  end
-
-  local cursor = self.get_window_cursor(self.state.mission_dashboard_action_win)
-  if not cursor then
-    return false
-  end
-
-  local action_item = self.state.mission_dashboard_action_items[cursor[1]]
-  if not action_item then
-    return false
-  end
-  return self:run_action(action_item.action, self:action_palette_target())
+  return self:action_palette_controller():run_highlighted()
 end
 
 function M:move_action_cursor(delta)
-  if not self.is_valid_win(self.state.mission_dashboard_action_win) then
-    return false
-  end
-
-  local count = #self.state.mission_dashboard_action_items
-  if count == 0 then
-    return false
-  end
-
-  local cursor = self.get_window_cursor(self.state.mission_dashboard_action_win)
-  if not cursor then
-    return false
-  end
-  local row = ((cursor[1] - 1 + delta) % count) + 1
-  self.set_window_cursor(self.state.mission_dashboard_action_win, { row, 0 })
-  return true
+  return self:action_palette_controller():move_cursor(delta)
 end
 
 function M:open_action_palette_for(target, kind)
@@ -2209,78 +2204,7 @@ function M:open_action_palette_for(target, kind)
     return false
   end
 
-  self:close_action_palette()
-  local action_items = kind == "workspace" and self.workspace_ui.role_workspace_action_items(target)
-    or self.workspace_ui.mission_action_items(target)
-  local bufnr = self.ui.create_scratch_buffer({
-    bufhidden = "wipe",
-    filetype = "codux-missions-actions",
-    buftype = "nofile",
-    swapfile = false,
-    modifiable = false,
-  })
-  if not bufnr then
-    local label = kind == "workspace" and "workspace" or "mission"
-    self.notify("Failed to create Codux " .. label .. " actions", vim.log.levels.ERROR)
-    return false
-  end
-  ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
-
-  self.state.mission_dashboard_action_buf = bufnr
-  self.state.mission_dashboard_action_items = action_items
-  self.state.mission_dashboard_action_mission = kind == "workspace" and nil or target
-  self.state.mission_dashboard_action_workspace = kind == "workspace" and target or nil
-  self.state.mission_dashboard_action_kind = kind
-  self:render_action_palette()
-
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:action_palette_config(target, #action_items, kind))
-  if not win_ok then
-    self:close_action_palette()
-    local label = kind == "workspace" and "workspace" or "mission"
-    self.notify("Failed to open Codux " .. label .. " actions", vim.log.levels.ERROR)
-    return false
-  end
-
-  self.state.mission_dashboard_action_win = win
-  self.ui.set_window_options(win, {
-    number = false,
-    relativenumber = false,
-    signcolumn = "no",
-    winfixbuf = true,
-    cursorline = true,
-    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
-  })
-
-  local action_label = kind == "workspace" and "Workspace" or "Mission"
-  self.bind_close_keys(bufnr, function()
-    return self:close_action_palette()
-  end, "Close Codux " .. action_label .. " Actions", "n", { escape = true, q = true })
-  self.set_buffer_keymap(bufnr, "n", "<CR>", function()
-    return self:run_highlighted_action()
-  end, "Run Codux " .. action_label .. " Action")
-  self.set_buffer_keymap(bufnr, "n", "j", function()
-    return self:move_action_cursor(1)
-  end, "Next Codux " .. action_label .. " Action", { nowait = true })
-  self.set_buffer_keymap(bufnr, "n", "<Down>", function()
-    return self:move_action_cursor(1)
-  end, "Next Codux " .. action_label .. " Action", { nowait = true })
-  self.set_buffer_keymap(bufnr, "n", "k", function()
-    return self:move_action_cursor(-1)
-  end, "Previous Codux " .. action_label .. " Action", { nowait = true })
-  self.set_buffer_keymap(bufnr, "n", "<Up>", function()
-    return self:move_action_cursor(-1)
-  end, "Previous Codux " .. action_label .. " Action", { nowait = true })
-
-  for _, action_item in ipairs(action_items) do
-    local bound_action = action_item.action
-    local bound_label = action_item.label
-    self.set_buffer_keymap(bufnr, "n", action_item.key, function()
-      return self:run_action(bound_action, target)
-    end, bound_label .. " Codux " .. action_label, { nowait = true })
-  end
-
-  pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
-  return true
+  return self:action_palette_controller():open(target, kind)
 end
 
 function M:selected_mission_name_or_notify()

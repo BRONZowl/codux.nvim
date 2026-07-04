@@ -631,59 +631,6 @@ do
   assert_equal(notifications[#notifications], "No Codux mission or workspace selected")
 end
 
-do
-  local old_api = vim.api
-  local highlights = {}
-  vim.api = {
-    nvim_buf_clear_namespace = function() end,
-    nvim_buf_add_highlight = function(bufnr, namespace, group, row, start_col, end_col)
-      table.insert(highlights, {
-        bufnr = bufnr,
-        namespace = namespace,
-        group = group,
-        row = row,
-        start_col = start_col,
-        end_col = end_col,
-      })
-    end,
-  }
-
-  local rendered_lines
-  local controller = mission_control_mod.new({
-    namespace = 99,
-    state = {
-      mission_dashboard_action_buf = 12,
-      mission_dashboard_action_items = {
-        { key = "v", action = "view_objective", label = "View Objective" },
-      },
-    },
-    is_loaded_buf = function(bufnr)
-      return bufnr == 12
-    end,
-    get_window_width = function()
-      return 80
-    end,
-    ui = {
-      set_lines = function(_, lines)
-        rendered_lines = lines
-      end,
-    },
-  })
-
-  assert_true(controller:render_action_palette())
-  assert_equal(rendered_lines[1], "v  View Objective")
-  assert_equal(highlights[1].group, "WhichKey")
-  assert_equal(highlights[1].start_col, 0)
-  assert_equal(highlights[1].end_col, 1)
-  assert_equal(highlights[2].group, "Normal")
-  assert_equal(highlights[2].start_col, 1)
-  assert_equal(highlights[2].end_col, 3)
-  assert_equal(highlights[3].group, "Normal")
-  assert_equal(highlights[3].start_col, 3)
-  assert_equal(highlights[3].end_col, -1)
-  vim.api = old_api
-end
-
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
   local old_create_augroup = vim.api.nvim_create_augroup

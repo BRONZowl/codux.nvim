@@ -1,6 +1,7 @@
 local M = {}
 M.__index = M
 
+local action_palette_mod = require("codux.action_palette")
 local ui = require("codux.ui")
 local workspace_ui = require("codux.workspace_ui")
 
@@ -102,6 +103,50 @@ function M:ns()
     return self.namespace
   end
   return self.state.workspace_manager_ns
+end
+
+function M:action_palette_controller()
+  return action_palette_mod.new({
+    state = self.state,
+    ui = self.ui,
+    is_valid_win = self.is_valid_win,
+    is_loaded_buf = self.is_loaded_buf,
+    set_buffer_keymap = self.set_buffer_keymap,
+    bind_close_keys = self.bind_close_keys,
+    notify = self.notify,
+    namespace = function()
+      return self:ns()
+    end,
+    win_key = "workspace_manager_action_win",
+    buf_key = "workspace_manager_action_buf",
+    items_key = "workspace_manager_action_items",
+    target_key = "workspace_manager_action_workspace",
+    create_buffer_options = {
+      bufhidden = "wipe",
+      filetype = "codux-workspaces-actions",
+      buftype = "nofile",
+      swapfile = false,
+      modifiable = false,
+    },
+    items = function(item)
+      return self.workspace_ui.manager_action_items(item)
+    end,
+    line_for = function(item, width)
+      return self.workspace_ui.manager_action_line(item, width)
+    end,
+    width = function()
+      return self:action_palette_width()
+    end,
+    window_config = function(item, item_count)
+      return self:action_palette_config(item, item_count)
+    end,
+    action_label = "Workspace",
+    create_error = "Failed to create Codux workspace actions",
+    open_error = "Failed to open Codux workspace actions",
+    run_action = function(action, item)
+      return self:run_action(action, item)
+    end,
+  })
 end
 
 function M:stop_refresh_timer()
@@ -703,13 +748,7 @@ function M:selected_or_notify()
 end
 
 function M:close_action_palette()
-  self.ui.close_window(self.state.workspace_manager_action_win)
-  self.ui.delete_buffer(self.state.workspace_manager_action_buf)
-  self.state.workspace_manager_action_win = nil
-  self.state.workspace_manager_action_buf = nil
-  self.state.workspace_manager_action_items = {}
-  self.state.workspace_manager_action_workspace = nil
-  return true
+  return self:action_palette_controller():close()
 end
 
 function M:action_palette_width()
@@ -743,53 +782,7 @@ function M:action_palette_config(item, item_count)
 end
 
 function M:render_action_palette()
-  if not self.is_loaded_buf(self.state.workspace_manager_action_buf) then
-    return false
-  end
-
-  local width = self:action_palette_width()
-  local lines = {}
-  for _, item in ipairs(self.state.workspace_manager_action_items or {}) do
-    table.insert(lines, self.workspace_ui.manager_action_line(item, width))
-  end
-
-  self.ui.set_lines(self.state.workspace_manager_action_buf, lines, { modifiable = true })
-  local ns = self:ns()
-  pcall(vim.api.nvim_buf_clear_namespace, self.state.workspace_manager_action_buf, ns, 0, -1)
-  for index, item in ipairs(self.state.workspace_manager_action_items or {}) do
-    local key = tostring(item.key or "")
-    if key ~= "" then
-      local label_start = #key + 2
-      pcall(
-        vim.api.nvim_buf_add_highlight,
-        self.state.workspace_manager_action_buf,
-        ns,
-        "WhichKey",
-        index - 1,
-        0,
-        #key
-      )
-      pcall(
-        vim.api.nvim_buf_add_highlight,
-        self.state.workspace_manager_action_buf,
-        ns,
-        "Normal",
-        index - 1,
-        #key,
-        label_start
-      )
-      pcall(
-        vim.api.nvim_buf_add_highlight,
-        self.state.workspace_manager_action_buf,
-        ns,
-        "Normal",
-        index - 1,
-        label_start,
-        -1
-      )
-    end
-  end
-  return true
+  return self:action_palette_controller():render()
 end
 
 function M:run_action(action, item)
@@ -822,39 +815,11 @@ function M:run_action(action, item)
 end
 
 function M:run_highlighted_action()
-  if not self.is_valid_win(self.state.workspace_manager_action_win) then
-    return false
-  end
-
-  local ok, cursor = pcall(vim.api.nvim_win_get_cursor, self.state.workspace_manager_action_win)
-  if not ok then
-    return false
-  end
-
-  local action_item = self.state.workspace_manager_action_items[cursor[1]]
-  if not action_item then
-    return false
-  end
-  return self:run_action(action_item.action, self.state.workspace_manager_action_workspace)
+  return self:action_palette_controller():run_highlighted()
 end
 
 function M:move_action_cursor(delta)
-  if not self.is_valid_win(self.state.workspace_manager_action_win) then
-    return false
-  end
-
-  local count = #self.state.workspace_manager_action_items
-  if count == 0 then
-    return false
-  end
-
-  local ok, cursor = pcall(vim.api.nvim_win_get_cursor, self.state.workspace_manager_action_win)
-  if not ok then
-    return false
-  end
-  local row = ((cursor[1] - 1 + delta) % count) + 1
-  pcall(vim.api.nvim_win_set_cursor, self.state.workspace_manager_action_win, { row, 0 })
-  return true
+  return self:action_palette_controller():move_cursor(delta)
 end
 
 function M:open_action_palette()
@@ -863,71 +828,7 @@ function M:open_action_palette()
     return false
   end
 
-  self:close_action_palette()
-  local action_items = self.workspace_ui.manager_action_items(item)
-  local bufnr = self.ui.create_scratch_buffer({
-    bufhidden = "wipe",
-    filetype = "codux-workspaces-actions",
-    buftype = "nofile",
-    swapfile = false,
-    modifiable = false,
-  })
-  if not bufnr then
-    self.notify("Failed to create Codux workspace actions", vim.log.levels.ERROR)
-    return false
-  end
-
-  self.state.workspace_manager_action_buf = bufnr
-  self.state.workspace_manager_action_items = action_items
-  self.state.workspace_manager_action_workspace = item
-  self:render_action_palette()
-
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:action_palette_config(item, #action_items))
-  if not win_ok then
-    self:close_action_palette()
-    self.notify("Failed to open Codux workspace actions", vim.log.levels.ERROR)
-    return false
-  end
-
-  self.state.workspace_manager_action_win = win
-  self.ui.set_window_options(win, {
-    number = false,
-    relativenumber = false,
-    signcolumn = "no",
-    winfixbuf = true,
-    cursorline = true,
-    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
-  })
-
-  self.bind_close_keys(bufnr, function()
-    return self:close_action_palette()
-  end, "Close Codux Workspace Actions", "n", { escape = true, q = true })
-  self.set_buffer_keymap(bufnr, "n", "<CR>", function()
-    return self:run_highlighted_action()
-  end, "Run Codux Workspace Action")
-  self.set_buffer_keymap(bufnr, "n", "j", function()
-    return self:move_action_cursor(1)
-  end, "Next Codux Workspace Action", { nowait = true })
-  self.set_buffer_keymap(bufnr, "n", "<Down>", function()
-    return self:move_action_cursor(1)
-  end, "Next Codux Workspace Action", { nowait = true })
-  self.set_buffer_keymap(bufnr, "n", "k", function()
-    return self:move_action_cursor(-1)
-  end, "Previous Codux Workspace Action", { nowait = true })
-  self.set_buffer_keymap(bufnr, "n", "<Up>", function()
-    return self:move_action_cursor(-1)
-  end, "Previous Codux Workspace Action", { nowait = true })
-
-  for _, action_item in ipairs(action_items) do
-    local bound_action = action_item.action
-    local bound_label = action_item.label
-    self.set_buffer_keymap(bufnr, "n", action_item.key, function()
-      return self:run_action(bound_action, item)
-    end, bound_label .. " Codux Workspace", { nowait = true })
-  end
-
-  pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
-  return true
+  return self:action_palette_controller():open(item)
 end
 
 function M:open_selected_workspace(item)
