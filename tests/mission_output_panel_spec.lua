@@ -310,17 +310,18 @@ if type(vim.api) == "table" then
     end,
   })
 
-  assert_equal(controller:selected_output_entry().safe_name, "alpha-reviewer")
+  assert_nil(controller:selected_output_entry())
   assert_true(controller:render_output_panel())
-  assert_true(preview_called)
-  assert_contains(table.concat(rendered_lines, "\n"), "Output: Reviewer")
-  assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-reviewer")
-  assert_equal(controller.state.mission_dashboard_output_job, 77)
+  assert_false(preview_called)
+  assert_equal(table.concat(rendered_lines, "\n"), "Output: select a workspace row to preview its Codux session")
+  assert_nil(controller.state.mission_dashboard_output_entry)
+  assert_nil(controller.state.mission_dashboard_output_job)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 
 if type(vim.api) == "table" then
   local bufnr = vim.api.nvim_create_buf(false, true)
+  local rendered_lines
   local preview_entry
   local controller = mission_control_mod.new({
     state = {
@@ -350,7 +351,8 @@ if type(vim.api) == "table" then
       return win == 11 or win == 13
     end,
     ui = {
-      set_lines = function()
+      set_lines = function(_, lines)
+        rendered_lines = lines
         return true
       end,
     },
@@ -366,10 +368,11 @@ if type(vim.api) == "table" then
     end,
   })
 
-  assert_equal(controller:selected_output_entry().safe_name, "alpha-reviewer")
+  assert_nil(controller:selected_output_entry())
   assert_true(controller:render_output_panel())
-  assert_equal(preview_entry.safe_name, "alpha-reviewer")
-  assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-reviewer")
+  assert_nil(preview_entry)
+  assert_equal(table.concat(rendered_lines, "\n"), "Output: select a workspace row to preview its Codux session")
+  assert_nil(controller.state.mission_dashboard_output_entry)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 
@@ -415,11 +418,11 @@ if type(vim.api) == "table" then
     end,
   })
 
-  assert_equal(controller:selected_output_entry().safe_name, "alpha-builder")
+  assert_nil(controller:selected_output_entry())
   assert_true(controller:render_output_panel())
   assert_false(preview_called)
-  assert_equal(table.concat(rendered_lines, "\n"), "Output: workspace inactive")
-  assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-builder")
+  assert_equal(table.concat(rendered_lines, "\n"), "Output: select a workspace row to preview its Codux session")
+  assert_nil(controller.state.mission_dashboard_output_entry)
   assert_nil(controller.state.mission_dashboard_output_job)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end

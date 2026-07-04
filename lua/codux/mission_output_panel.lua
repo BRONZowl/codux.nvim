@@ -38,35 +38,10 @@ local function role_cache_key(entry)
   }, "\0")
 end
 
-local function mission_default_output_entry(mission)
-  mission = type(mission) == "table" and mission or {}
-  local fallback = nil
-  local active = nil
-  local idle = nil
-  for _, entry in ipairs(mission.roles or {}) do
-    if type(entry) == "table" then
-      fallback = fallback or entry
-      local status = tostring(entry.status or "")
-      if status == "question" then
-        return entry
-      end
-      if status == "active" then
-        active = active or entry
-      elseif status == "idle" then
-        idle = idle or entry
-      end
-    end
-  end
-  return active or idle or fallback
-end
-
 function Output:dashboard_output_entry(item)
   if type(item) == "table" then
     if item.kind == "role" and type(item.entry) == "table" then
       return item.entry
-    end
-    if item.kind == "mission" then
-      return mission_default_output_entry(item.mission)
     end
   end
   return nil

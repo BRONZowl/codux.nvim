@@ -741,6 +741,115 @@ if type(vim.api) == "table" then
 end
 
 if type(vim.api) == "table" then
+  local old_mouse = vim.o.mouse
+  local old_open_win = vim.api.nvim_open_win
+  local old_create_augroup = vim.api.nvim_create_augroup
+  local old_create_autocmd = vim.api.nvim_create_autocmd
+  local old_schedule = vim.schedule
+  local output_entry = "unset"
+  local search_opened = false
+  vim.o.mouse = "a"
+  vim.api.nvim_open_win = function()
+    return 20
+  end
+  vim.api.nvim_create_augroup = function()
+    return 91
+  end
+  vim.api.nvim_create_autocmd = function() end
+  vim.schedule = function(callback)
+    return callback()
+  end
+
+  local controller = mission_control_mod.new({
+    namespace = 99,
+    state = {},
+    is_valid_win = function(win)
+      return win == 20
+    end,
+    is_loaded_buf = function(bufnr)
+      return bufnr == 31
+    end,
+    get_window_config = function()
+      return { col = 0, row = 0, width = 80, height = 8 }
+    end,
+    get_window_height = function()
+      return 8
+    end,
+    get_window_width = function()
+      return 80
+    end,
+    ui = {
+      create_scratch_buffer = function()
+        return 31
+      end,
+      set_lines = function() end,
+      close_window = function() end,
+      delete_buffer = function() end,
+      set_window_options = function() end,
+    },
+    set_buffer_keymap = function() end,
+    set_window_cursor = function()
+      return true
+    end,
+  })
+  function controller:dashboard_lines()
+    return {
+      "1 mission | 1 role | active 1 | question 0 | idle 0",
+      "",
+      "Alpha",
+      "role",
+      "Builder",
+    }, {
+      [3] = {
+        kind = "mission",
+        mission = {
+          name = "Alpha",
+          roles = {
+            { safe_name = "alpha-builder", mission_role = "Builder", status = "active" },
+          },
+        },
+      },
+      [5] = {
+        kind = "role",
+        entry = { safe_name = "alpha-builder", mission_role = "Builder", status = "active" },
+      },
+    }, { 3, 5 }, nil
+  end
+  function controller:highlight_dashboard() end
+  function controller:bind_dashboard_commands() end
+  function controller:open_command_bar()
+    return true
+  end
+  function controller:open_output_panel(entry)
+    output_entry = entry
+    return true
+  end
+  function controller:open_command_sink()
+    return true
+  end
+  function controller:start_monitor_timer()
+    return true
+  end
+  function controller:open_search_input()
+    search_opened = true
+    return true
+  end
+
+  assert_true(controller:open_dashboard("/repo"))
+  assert_equal(controller.state.mission_dashboard_selected_row, 3)
+  assert_nil(output_entry)
+  assert_true(search_opened)
+  controller:close_dashboard()
+  assert_equal(vim.o.mouse, "a")
+
+  vim.api.nvim_open_win = old_open_win
+  vim.api.nvim_create_augroup = old_create_augroup
+  vim.api.nvim_create_autocmd = old_create_autocmd
+  vim.schedule = old_schedule
+  vim.o.mouse = old_mouse
+end
+
+if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
   local old_win_set_cursor = vim.api.nvim_win_set_cursor
   local window_options
