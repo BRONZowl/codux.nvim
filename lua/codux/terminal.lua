@@ -1540,6 +1540,46 @@ function M:send_to_codex(message)
   return true
 end
 
+function M:select_codex_question_option(option, with_note)
+  option = trim(option)
+  if option == "" or not self:terminal_running() then
+    return false
+  end
+
+  local suffix = with_note == true and "\t" or "\r"
+  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, option .. suffix)
+  if not send_ok or sent == 0 then
+    self.notify("Failed to answer Codex question", vim.log.levels.ERROR)
+    return false
+  end
+
+  self:invalidate_terminal_prompt_tracking()
+  if with_note ~= true then
+    self:mark_terminal_prompt_submission()
+    self:set_codex_working(true)
+  end
+  return true
+end
+
+function M:submit_codex_question_note(note)
+  note = tostring(note or "")
+  if trim(note) == "" or not self:terminal_running() then
+    return false
+  end
+
+  local paste = "\27[200~" .. note .. "\27[201~\r"
+  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, paste)
+  if not send_ok or sent == 0 then
+    self.notify("Failed to send Codex question note", vim.log.levels.ERROR)
+    return false
+  end
+
+  self:mark_terminal_prompt_submission()
+  self:invalidate_terminal_prompt_tracking()
+  self:set_codex_working(true)
+  return true
+end
+
 function M:terminal_snapshot(max_lines)
   if not self:valid_buf() then
     return ""

@@ -1085,6 +1085,14 @@ function M._v5.remote_send_to_codex(message)
   return terminal:send_to_codex(tostring(message or "")) and "ok" or "failed"
 end
 
+function M._v5.remote_select_codex_question_option(option, with_note)
+  return terminal:select_codex_question_option(tostring(option or ""), with_note == true) and "ok" or "failed"
+end
+
+function M._v5.remote_submit_codex_question_note(note)
+  return terminal:submit_codex_question_note(tostring(note or "")) and "ok" or "failed"
+end
+
 function M._v5.remote_interrupt_codex_session()
   return terminal:interrupt_codex_session() and "ok" or "failed"
 end
@@ -1343,6 +1351,20 @@ mission_controller = mission_control_mod.new({
   end,
   send_prompt_to_workspace = function(entry, prompt)
     local ok, error_message = workspace_runtime:send_prompt_to_workspace(entry, prompt)
+    if not ok and error_message then
+      return false, error_message
+    end
+    return ok
+  end,
+  select_workspace_question_option = function(entry, option, opts)
+    local ok, error_message = workspace_runtime:select_workspace_question_option(entry, option, opts)
+    if not ok and error_message then
+      return false, error_message
+    end
+    return ok
+  end,
+  submit_workspace_question_note = function(entry, note, opts)
+    local ok, error_message = workspace_runtime:submit_workspace_question_note(entry, note, opts)
     if not ok and error_message then
       return false, error_message
     end

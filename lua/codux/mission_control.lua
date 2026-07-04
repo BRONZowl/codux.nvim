@@ -28,6 +28,7 @@ end
 local dashboard_command_items = {
   { key = "Tab", label = "search" },
   { key = "m", label = "menu" },
+  { key = "a", label = "answer" },
   { key = "p", label = "prompt" },
   { key = "i", label = "interrupt" },
   { key = "s", label = "mode" },
@@ -79,6 +80,10 @@ local mission_control_filetypes = {
   ["codux-missions-output"] = true,
   ["codux-mission-preview"] = true,
   ["codux-mission-preview-sink"] = true,
+  ["codux-mission-question-answer"] = true,
+  ["codux-mission-question-answer-sink"] = true,
+  ["codux-mission-question-note"] = true,
+  ["codux-mission-question-option"] = true,
   ["codux-mission-objective-preview"] = true,
   ["codux-mission-objective"] = true,
   ["codux-mission-workspace-prompt"] = true,
@@ -167,6 +172,16 @@ function M.new(opts)
     send_prompt_to_workspace = type(opts.send_prompt_to_workspace) == "function" and opts.send_prompt_to_workspace
       or function()
         return false, "workspace prompt unavailable"
+      end,
+    select_workspace_question_option = type(opts.select_workspace_question_option) == "function"
+        and opts.select_workspace_question_option
+      or function()
+        return false, "workspace answer unavailable"
+      end,
+    submit_workspace_question_note = type(opts.submit_workspace_question_note) == "function"
+        and opts.submit_workspace_question_note
+      or function()
+        return false, "workspace note unavailable"
       end,
     interrupt_workspace = type(opts.interrupt_workspace) == "function" and opts.interrupt_workspace or function()
       return false, "workspace interrupt unavailable"
@@ -2158,6 +2173,14 @@ function M:run_workspace_action(action, target)
     self:close_action_palette()
     return self:open_workspace_prompt(workspace)
   end
+  if action == "answer_question" then
+    workspace = workspace or self:selected_role_workspace_or_notify()
+    if not workspace then
+      return false
+    end
+    self:close_action_palette()
+    return self:open_workspace_question_answer(workspace)
+  end
   if action == "edit_instructions" then
     workspace = workspace or self:selected_role_workspace_or_notify()
     if not workspace then
@@ -2293,6 +2316,130 @@ function M:open_workspace_prompt(entry)
   end
 
   return self:open_workspace_prompt_input(entry, label, self.send_prompt_to_workspace, "Sent prompt to ")
+end
+
+function M:workspace_question_pending(entry)
+  entry = type(entry) == "table" and entry or {}
+  return entry.status == "question" or entry.codex_status == "question"
+end
+
+function M:open_workspace_question_answer(entry)
+  entry = type(entry) == "table" and entry or self:selected_role_workspace_or_notify()
+  if not entry then
+    return false
+  end
+  if not self:workspace_question_pending(entry) then
+    self.notify("workspace is not waiting for an answer", vim.log.levels.WARN)
+    return false
+  end
+
+  local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
+  return ui.key_choice_menu({
+    title = " Answer " .. tostring(label) .. " ",
+    filetype = "codux-mission-question-answer",
+    zindex = 85,
+    choices = {
+      { key = "o", action = "option", label = "option", desc = "Send Codux Plan Option" },
+      { key = "n", action = "option_note", label = "option + note", desc = "Send Codux Plan Option With Note" },
+    },
+    create_error = "Failed to create Codux answer menu",
+    open_error = "Failed to open Codux answer menu",
+    cancel_desc = "Cancel Codux Answer",
+  }, function(choice)
+    if type(choice) ~= "table" then
+      return
+    end
+    if choice.action == "option_note" then
+      self:open_question_option_input(entry, label, true)
+      return
+    end
+    self:open_question_option_input(entry, label, false)
+  end, {
+    notify = self.notify,
+    create_scratch_buffer = self.ui.create_scratch_buffer,
+    set_lines = self.ui.set_lines,
+    set_window_options = self.ui.set_window_options,
+    close_window = self.ui.close_window,
+    delete_buffer = self.ui.delete_buffer,
+    set_buffer_keymap = self.set_buffer_keymap,
+    bind_close_keys = self.bind_close_keys,
+  })
+end
+
+function M:open_question_option_input(entry, label, with_note)
+  local prompt_fn = self.ui.single_line_prompt
+  if type(prompt_fn) ~= "function" then
+    self.notify("Codux prompt input is unavailable", vim.log.levels.ERROR)
+    return false
+  end
+
+  label = label or (entry and (entry.mission_role or entry.name or entry.safe_name)) or "workspace"
+  return prompt_fn({
+    prompt = "Plan option " .. tostring(label) .. ": ",
+    filetype = "codux-mission-question-option",
+    zindex = 86,
+    on_create_buffer = function(bufnr)
+      ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
+    end,
+  }, function(input)
+    local option = trim(input)
+    if option == "" then
+      self.notify("Option number is required", vim.log.levels.WARN)
+      return
+    end
+
+    local ok, error_message = self.select_workspace_question_option(entry, option, { with_note = with_note == true })
+    if not ok then
+      self.notify(error_message or "Failed to answer question", vim.log.levels.ERROR)
+      return
+    end
+    if with_note == true then
+      self:open_question_note_input(entry, label)
+      return
+    end
+    self.notify("Answered question for " .. tostring(label))
+    self:render_dashboard()
+  end, {
+    notify = self.notify,
+    set_buffer_keymap = self.set_buffer_keymap,
+    bind_close_keys = self.bind_close_keys,
+  })
+end
+
+function M:open_question_note_input(entry, label)
+  local prompt_fn = self.ui.single_line_prompt
+  if type(prompt_fn) ~= "function" then
+    self.notify("Codux prompt input is unavailable", vim.log.levels.ERROR)
+    return false
+  end
+
+  label = label or (entry and (entry.mission_role or entry.name or entry.safe_name)) or "workspace"
+  return prompt_fn({
+    prompt = "Note " .. tostring(label) .. ": ",
+    filetype = "codux-mission-question-note",
+    zindex = 86,
+    on_create_buffer = function(bufnr)
+      ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
+    end,
+  }, function(input)
+    local note = trim(input)
+    if note == "" then
+      self.notify("Note is required", vim.log.levels.WARN)
+      return
+    end
+
+    local ok, error_message = self.submit_workspace_question_note(entry, note)
+    if ok then
+      self.notify("Sent note to " .. tostring(label))
+      self:render_dashboard()
+    else
+      self.notify(error_message or "Failed to send question note", vim.log.levels.ERROR)
+    end
+  end, {
+    notify = self.notify,
+    set_buffer_keymap = self.set_buffer_keymap,
+    bind_close_keys = self.bind_close_keys,
+  })
 end
 
 function M:open_workspace_prompt_input(entry, label, submit_fn, success_prefix)
@@ -2448,6 +2595,9 @@ function M:bind_dashboard_commands(bufnr)
   self.set_buffer_keymap(bufnr, "n", "m", function()
     return self:open_action_palette()
   end, "Open Codux Mission Menu")
+  self.set_buffer_keymap(bufnr, "n", "a", function()
+    return self:open_workspace_question_answer()
+  end, "Answer Codux Mission Role Question")
   self.set_buffer_keymap(bufnr, "n", "p", function()
     return self:open_workspace_prompt()
   end, "Prompt Codux Mission Role")

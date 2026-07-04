@@ -6,6 +6,7 @@ local assert_false = h.assert_false
 local assert_contains = h.assert_contains
 
 local mission_control_mod = require("codux.mission_control")
+local ui_mod = require("codux.ui")
 local workspace_ui = require("codux.workspace_ui")
 
 local function mission_role_entry(mission_name, role)
@@ -1400,6 +1401,7 @@ do
   assert_equal(bound.k, "Previous Codux Mission")
   assert_nil(bound["<CR>"])
   assert_equal(bound["<Tab>"], "Search/List Codux Missions")
+  assert_equal(bound.a, "Answer Codux Mission Role Question")
   assert_equal(bound.p, "Prompt Codux Mission Role")
   assert_equal(bound.i, "Interrupt Codux Mission Role")
   assert_equal(bound.s, "Switch Codux Mission Role Mode")
@@ -1970,6 +1972,148 @@ do
   assert_true(controller:open_workspace_prompt(entry))
   assert_equal(sent_prompt, "  /plan  ")
   assert_contains(notifications[#notifications], "Sent prompt to Builder")
+end
+
+do
+  local old_key_choice_menu = ui_mod.key_choice_menu
+  local selected
+  local notifications = {}
+  local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "question" }
+  ui_mod.key_choice_menu = function(opts, callback)
+    assert_contains(opts.title, "Builder")
+    assert_equal(opts.choices[1].key, "o")
+    assert_equal(opts.choices[2].key, "n")
+    callback({ action = "option" })
+    return true
+  end
+  local controller = mission_control_mod.new({
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    ui = {
+      single_line_prompt = function(opts, callback)
+        assert_contains(opts.prompt, "Plan option Builder")
+        callback(" 2 ")
+        return true
+      end,
+    },
+    select_workspace_question_option = function(workspace, option, opts)
+      selected = { workspace = workspace, option = option, with_note = type(opts) == "table" and opts.with_note }
+      return true, nil
+    end,
+  })
+  function controller:render_dashboard()
+    return true
+  end
+
+  assert_true(controller:open_workspace_question_answer(entry))
+  assert_equal(selected.workspace.safe_name, "alpha-builder")
+  assert_equal(selected.option, "2")
+  assert_false(selected.with_note)
+  assert_contains(notifications[#notifications], "Answered question for Builder")
+  ui_mod.key_choice_menu = old_key_choice_menu
+end
+
+do
+  local old_key_choice_menu = ui_mod.key_choice_menu
+  local prompts = {}
+  local calls = {}
+  local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", codex_status = "question" }
+  ui_mod.key_choice_menu = function(_, callback)
+    callback({ action = "option_note" })
+    return true
+  end
+  local controller = mission_control_mod.new({
+    notify = function(message)
+      table.insert(calls, "notify:" .. tostring(message))
+    end,
+    ui = {
+      single_line_prompt = function(opts, callback)
+        table.insert(prompts, opts.prompt)
+        if #prompts == 1 then
+          callback("3")
+        else
+          callback("ship this plan")
+        end
+        return true
+      end,
+    },
+    select_workspace_question_option = function(workspace, option, opts)
+      table.insert(calls, "select:" .. tostring(workspace.safe_name) .. ":" .. option .. ":" .. tostring(opts.with_note))
+      return true, nil
+    end,
+    submit_workspace_question_note = function(workspace, note)
+      table.insert(calls, "note:" .. tostring(workspace.safe_name) .. ":" .. note)
+      return true, nil
+    end,
+  })
+  function controller:render_dashboard()
+    table.insert(calls, "render")
+    return true
+  end
+
+  assert_true(controller:open_workspace_question_answer(entry))
+  assert_contains(prompts[1], "Plan option Builder")
+  assert_contains(prompts[2], "Note Builder")
+  assert_equal(calls[1], "select:alpha-builder:3:true")
+  assert_equal(calls[2], "note:alpha-builder:ship this plan")
+  assert_equal(calls[3], "notify:Sent note to Builder")
+  assert_equal(calls[4], "render")
+  ui_mod.key_choice_menu = old_key_choice_menu
+end
+
+do
+  local old_key_choice_menu = ui_mod.key_choice_menu
+  local notifications = {}
+  local opened_picker = false
+  local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "idle" }
+  ui_mod.key_choice_menu = function()
+    opened_picker = true
+    return true
+  end
+  local controller = mission_control_mod.new({
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+  })
+
+  assert_false(controller:open_workspace_question_answer(entry))
+  assert_false(opened_picker)
+  assert_contains(notifications[#notifications], "not waiting for an answer")
+  ui_mod.key_choice_menu = old_key_choice_menu
+end
+
+do
+  local calls = {}
+  local notifications = {}
+  local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "question" }
+  local controller = mission_control_mod.new({
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    ui = {
+      single_line_prompt = function(_, callback)
+        callback("   ")
+        return true
+      end,
+    },
+    select_workspace_question_option = function()
+      table.insert(calls, "select")
+      return true, nil
+    end,
+    submit_workspace_question_note = function()
+      table.insert(calls, "note")
+      return true, nil
+    end,
+  })
+
+  assert_true(controller:open_question_option_input(entry, "Builder", false))
+  assert_contains(notifications[#notifications], "Option number is required")
+  assert_equal(#calls, 0)
+
+  assert_true(controller:open_question_note_input(entry, "Builder"))
+  assert_contains(notifications[#notifications], "Note is required")
+  assert_equal(#calls, 0)
 end
 
 do

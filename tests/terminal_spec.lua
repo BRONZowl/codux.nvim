@@ -549,4 +549,43 @@ do
   vim.fn.chansend = old_chansend
 end
 
+do
+  local sent = {}
+  local old_chansend = vim.fn.chansend
+  vim.fn.chansend = function(job_id, value)
+    assert_equal(job_id, 42)
+    table.insert(sent, value)
+    return 1
+  end
+
+  local controller = terminal_mod.new({})
+  controller.state.job_id = 42
+  function controller:terminal_running()
+    return true
+  end
+  function controller:valid_buf()
+    return true
+  end
+  function controller:mark_terminal_prompt_submission()
+    table.insert(sent, "mark")
+  end
+  function controller:set_codex_working(working)
+    self.state.codex_working = working == true
+  end
+
+  assert_true(controller:select_codex_question_option("2", false))
+  assert_equal(sent[1], "2\r")
+  assert_equal(sent[2], "mark")
+  assert_true(controller.state.codex_working)
+
+  assert_true(controller:select_codex_question_option("3", true))
+  assert_equal(sent[3], "3\t")
+
+  assert_true(controller:submit_codex_question_note("ship it"))
+  assert_equal(sent[4], "\27[200~ship it\27[201~\r")
+  assert_equal(sent[5], "mark")
+
+  vim.fn.chansend = old_chansend
+end
+
 print("terminal_spec.lua: ok")

@@ -91,6 +91,10 @@ local mission_control_filetypes = {
   ["codux-missions-actions"] = true,
   ["codux-missions-output"] = true,
   ["codux-mission-preview"] = true,
+  ["codux-mission-question-answer"] = true,
+  ["codux-mission-question-answer-sink"] = true,
+  ["codux-mission-question-note"] = true,
+  ["codux-mission-question-option"] = true,
   ["codux-mission-objective-preview"] = true,
   ["codux-mission-objective"] = true,
   ["codux-mission-workspace-prompt"] = true,
@@ -1259,6 +1263,70 @@ function M:send_prompt_to_workspace(entry, prompt, opts)
   end
 
   return false, remote_error or output or "Failed to send prompt"
+end
+
+function M:select_workspace_question_option(entry, option, opts)
+  opts = type(opts) == "table" and opts or {}
+  option = trim(option)
+  if option == "" then
+    return false, "Option number is required"
+  end
+
+  local workspace, ensure_error = self:ensure_workspace_remote(entry)
+  if not workspace then
+    return false, ensure_error or "workspace not found"
+  end
+
+  local plan_ok, plan_error = self:ensure_workspace_plan_mode(workspace, {
+    attempts = opts.plan_attempts or opts.attempts,
+    sleep_ms = opts.plan_sleep_ms or opts.sleep_ms,
+    remote_attempts = opts.remote_attempts,
+    remote_sleep_ms = opts.remote_sleep_ms,
+  })
+  if not plan_ok then
+    return false, plan_error or "Failed to switch workspace to plan mode"
+  end
+
+  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
+  local output, remote_error = self:remote_luaeval(
+    server,
+    "require('codux')._v5.remote_select_codex_question_option("
+      .. self:lua_string(option)
+      .. ", "
+      .. tostring(opts.with_note == true)
+      .. ")",
+    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
+  )
+  if output == "ok" then
+    return true, nil
+  end
+
+  return false, remote_error or output or "Failed to answer question"
+end
+
+function M:submit_workspace_question_note(entry, note, opts)
+  opts = type(opts) == "table" and opts or {}
+  note = tostring(note or "")
+  if trim(note) == "" then
+    return false, "Note is required"
+  end
+
+  local workspace, ensure_error = self:ensure_workspace_remote(entry)
+  if not workspace then
+    return false, ensure_error or "workspace not found"
+  end
+
+  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
+  local output, remote_error = self:remote_luaeval(
+    server,
+    "require('codux')._v5.remote_submit_codex_question_note(" .. self:lua_string(note) .. ")",
+    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
+  )
+  if output == "ok" then
+    return true, nil
+  end
+
+  return false, remote_error or output or "Failed to send question note"
 end
 
 function M:interrupt_workspace(entry, opts)

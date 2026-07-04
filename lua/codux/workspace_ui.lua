@@ -291,13 +291,17 @@ function M.mission_action_line(item, width)
   return M.manager_action_line(item, width)
 end
 
-function M.role_workspace_action_items()
-  return {
-    { key = "e", action = "edit_instructions", label = "Edit Instructions" },
-    { key = "x", action = "close_workspace", label = "Close Workspace" },
-    { key = "d", action = "delete_workspace", label = "Delete Workspace" },
-    { key = "w", action = "create_workspace", label = "Create Workspace" },
-  }
+function M.role_workspace_action_items(entry)
+  entry = type(entry) == "table" and entry or {}
+  local items = {}
+  if entry.status == "question" or entry.codex_status == "question" then
+    table.insert(items, { key = "a", action = "answer_question", label = "Answer Question" })
+  end
+  table.insert(items, { key = "e", action = "edit_instructions", label = "Edit Instructions" })
+  table.insert(items, { key = "x", action = "close_workspace", label = "Close Workspace" })
+  table.insert(items, { key = "d", action = "delete_workspace", label = "Delete Workspace" })
+  table.insert(items, { key = "w", action = "create_workspace", label = "Create Workspace" })
+  return items
 end
 
 function M.role_workspace_action_line(item, width)

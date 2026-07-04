@@ -134,15 +134,31 @@ do
   assert_nil(by_key.p)
   assert_nil(by_key.i)
   assert_nil(by_key.s)
+  assert_nil(by_key.a)
   assert_nil(by_key.r)
   assert_nil(by_key.X)
   assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Edit Instructions")
   assert_nil(labels_by_key.p)
   assert_nil(labels_by_key.i)
   assert_nil(labels_by_key.s)
+  assert_nil(labels_by_key.a)
   assert_nil(labels_by_key.o)
   assert_equal(labels_by_key.d, "Delete Workspace")
   assert_equal(labels_by_key.w, "Create Workspace")
+end
+
+do
+  local actions = workspace_ui.role_workspace_action_items({ status = "question", codex_status = "question" })
+  local by_key = {}
+  local labels_by_key = {}
+  for _, action in ipairs(actions) do
+    by_key[action.key] = action.action
+    labels_by_key[action.key] = action.label
+  end
+
+  assert_equal(by_key.a, "answer_question")
+  assert_equal(labels_by_key.a, "Answer Question")
+  assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Answer Question")
 end
 
 do

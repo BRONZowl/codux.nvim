@@ -590,6 +590,12 @@ do
   assert_false(runtime:target_sync_allowed("BufEnter", function()
     return "codux-mission-workspace-prompt"
   end))
+  assert_false(runtime:target_sync_allowed("BufEnter", function()
+    return "codux-mission-question-option"
+  end))
+  assert_false(runtime:target_sync_allowed("BufEnter", function()
+    return "codux-mission-question-note"
+  end))
   assert_true(runtime:target_sync_allowed("BufEnter", function()
     return "lua"
   end))
@@ -636,6 +642,125 @@ do
     assert_contains(command_text, "  /plan  ")
     assert_contains(command_text, expected_server)
     assert_equal(command_text:find(runtime:workspace_server_path("/repo", "review"), 1, true), nil)
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local expected_server = "/tmp/stale-review.sock"
+    local runtime = workspace_prepare_runtime({
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        if expected_server and command:find("nvim --server " .. expected_server .. " --remote-expr", 1, true) then
+          return "ok\n", 0
+        end
+        return "", 1
+      end,
+    })
+    local ok, error_message = runtime:select_workspace_question_option({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+      nvim_server = "/tmp/stale-review.sock",
+    }, "2", { attempts = 1 })
+    assert_nil(error_message)
+    assert_true(ok)
+    local command_text = table.concat(commands, "\n")
+    local ensure_index = command_text:find("remote_ensure_plan_mode", 1, true)
+    local answer_index = command_text:find("remote_select_codex_question_option", 1, true)
+    assert_true(type(ensure_index) == "number")
+    assert_true(type(answer_index) == "number")
+    assert_true(ensure_index < answer_index)
+    assert_contains(command_text, '\\"2\\"')
+    assert_contains(command_text, "false")
+    assert_contains(command_text, expected_server)
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local expected_server = "/tmp/stale-review.sock"
+    local runtime = workspace_prepare_runtime({
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        if expected_server and command:find("nvim --server " .. expected_server .. " --remote-expr", 1, true) then
+          return "ok\n", 0
+        end
+        return "", 1
+      end,
+    })
+    local ok, error_message = runtime:select_workspace_question_option({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+      nvim_server = "/tmp/stale-review.sock",
+    }, "3", { attempts = 1, with_note = true })
+    assert_nil(error_message)
+    assert_true(ok)
+    local command_text = table.concat(commands, "\n")
+    assert_contains(command_text, "remote_select_codex_question_option")
+    assert_contains(command_text, '\\"3\\"')
+    assert_contains(command_text, "true")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local expected_server = "/tmp/stale-review.sock"
+    local runtime = workspace_prepare_runtime({
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        if expected_server and command:find("nvim --server " .. expected_server .. " --remote-expr", 1, true) then
+          return "ok\n", 0
+        end
+        return "", 1
+      end,
+    })
+    local ok, error_message = runtime:submit_workspace_question_note({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+      nvim_server = "/tmp/stale-review.sock",
+    }, "ship it", { attempts = 1 })
+    assert_nil(error_message)
+    assert_true(ok)
+    local command_text = table.concat(commands, "\n")
+    assert_contains(command_text, "remote_submit_codex_question_note")
+    assert_contains(command_text, "ship it")
+    assert_equal(command_text:find("remote_ensure_plan_mode", 1, true), nil)
   end)
 end
 
