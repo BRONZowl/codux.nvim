@@ -3,6 +3,7 @@ local assert_equal = h.assert_equal
 local assert_false = h.assert_false
 local assert_nil = h.assert_nil
 local assert_true = h.assert_true
+local assert_contains = h.assert_contains
 
 local ui = require("codux.ui")
 
@@ -48,14 +49,33 @@ do
 end
 
 do
+  local old_api = vim.api
   local rendered_lines
   local window_config
+  local sink_config
   local window_options
+  local sink_options
   local keymaps = {}
   local close_key
-  local deleted_buf
-  local closed_win
+  local deleted_bufs = {}
+  local closed_wins = {}
   local selected_choice
+  local cursor_highlight
+  local create_count = 0
+
+  if type(vim.api) == "table" then
+    vim.api = {}
+    for key, value in pairs(old_api) do
+      vim.api[key] = value
+    end
+  else
+    vim.api = {}
+  end
+  vim.api.nvim_set_hl = function(_, name, opts)
+    if name == "CoduxKeyChoiceCursor" then
+      cursor_highlight = opts
+    end
+  end
 
   assert_true(ui.key_choice_menu({
     title = " Codex permission profile ",
@@ -70,8 +90,13 @@ do
     selected_choice = choice
   end, {
     create_scratch_buffer = function(options)
-      assert_equal(options.filetype, "codux-open-profile")
-      return 42
+      create_count = create_count + 1
+      if create_count == 1 then
+        assert_equal(options.filetype, "codux-open-profile")
+        return 42
+      end
+      assert_equal(options.filetype, "codux-open-profile-sink")
+      return 43
     end,
     set_lines = function(bufnr, lines)
       assert_equal(bufnr, 42)
@@ -79,17 +104,27 @@ do
       return true
     end,
     open_win = function(bufnr, enter, config)
-      assert_equal(bufnr, 42)
+      if bufnr == 42 then
+        assert_false(enter)
+        window_config = config
+        return 84
+      end
+      assert_equal(bufnr, 43)
       assert_true(enter)
-      window_config = config
-      return 84
+      sink_config = config
+      return 85
     end,
     set_window_options = function(win, options)
-      assert_equal(win, 84)
-      window_options = options
+      if win == 84 then
+        window_options = options
+      elseif win == 85 then
+        sink_options = options
+      else
+        error("unexpected window " .. tostring(win))
+      end
     end,
     bind_close_keys = function(bufnr, close_fn, desc, modes, opts)
-      assert_equal(bufnr, 42)
+      assert_equal(bufnr, 43)
       assert_equal(desc, "Cancel Codux Open")
       assert_equal(modes, "n")
       assert_true(opts.escape)
@@ -97,15 +132,15 @@ do
       close_key = close_fn
     end,
     set_buffer_keymap = function(bufnr, mode, lhs, rhs, desc, opts)
-      assert_equal(bufnr, 42)
+      assert_equal(bufnr, 43)
       assert_equal(mode, "n")
       keymaps[lhs] = { rhs = rhs, desc = desc, opts = opts }
     end,
     close_window = function(win)
-      closed_win = win
+      table.insert(closed_wins, win)
     end,
     delete_buffer = function(bufnr)
-      deleted_buf = bufnr
+      table.insert(deleted_bufs, bufnr)
     end,
   }))
 
@@ -114,16 +149,30 @@ do
   assert_equal(rendered_lines[3], "f - full")
   assert_equal(window_config.title, " Codex permission profile ")
   assert_equal(window_config.height, 3)
-  assert_equal(window_options.winhighlight, "FloatBorder:WhichKey,FloatTitle:WhichKey")
+  assert_false(window_config.focusable)
+  assert_equal(sink_config.width, 1)
+  assert_equal(sink_config.height, 1)
+  assert_equal(sink_config.focusable, true)
+  assert_equal(sink_options.signcolumn, "no")
+  assert_contains(window_options.winhighlight, "FloatBorder:WhichKey")
+  assert_contains(window_options.winhighlight, "FloatTitle:WhichKey")
+  assert_contains(window_options.winhighlight, "Cursor:CoduxKeyChoiceCursor")
+  assert_contains(window_options.winhighlight, "CursorIM:CoduxKeyChoiceCursor")
+  assert_equal(cursor_highlight.fg, "NONE")
+  assert_equal(cursor_highlight.bg, "NONE")
+  assert_equal(cursor_highlight.blend, 100)
   assert_equal(keymaps.d.desc, "Open Codex Default")
   assert_true(keymaps.d.opts.nowait)
   assert_equal(keymaps.a.desc, "Open Codex Auto")
   assert_equal(keymaps.f.desc, "Open Codex Full Access")
   assert_true(keymaps.a.rhs())
   assert_equal(selected_choice.profile, "auto")
-  assert_equal(closed_win, 84)
-  assert_equal(deleted_buf, 42)
+  assert_equal(closed_wins[1], 84)
+  assert_equal(closed_wins[2], 85)
+  assert_equal(deleted_bufs[1], 42)
+  assert_equal(deleted_bufs[2], 43)
   assert_false(close_key())
+  vim.api = old_api
 end
 
 do
@@ -139,13 +188,13 @@ do
     selected_choice = choice
   end, {
     create_scratch_buffer = function()
-      return 43
+      return 44
     end,
     set_lines = function()
       return true
     end,
-    open_win = function()
-      return 85
+    open_win = function(bufnr)
+      return bufnr + 100
     end,
     set_window_options = function() end,
     bind_close_keys = function(_, close_fn)

@@ -274,6 +274,8 @@ function M.key_choice_menu(opts, callback, deps)
 
   local closed = false
   local win
+  local sink_win
+  local sink_bufnr
   local bufnr = create_scratch_buffer({
     bufhidden = "wipe",
     buftype = "nofile",
@@ -292,7 +294,9 @@ function M.key_choice_menu(opts, callback, deps)
     end
     closed = true
     close_window(win)
+    close_window(sink_win)
     delete_buffer(bufnr)
+    delete_buffer(sink_bufnr)
     callback(choice)
     return true
   end
@@ -300,7 +304,7 @@ function M.key_choice_menu(opts, callback, deps)
   set_lines(bufnr, lines, { modifiable = true })
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local height = math.max(1, #lines)
-  local win_ok, winid = pcall(open_win, bufnr, true, {
+  local win_ok, winid = pcall(open_win, bufnr, false, {
     relative = "editor",
     style = "minimal",
     border = "rounded",
@@ -310,6 +314,7 @@ function M.key_choice_menu(opts, callback, deps)
     height = height,
     col = math.max(0, math.floor((vim.o.columns - width) / 2)),
     row = math.max(0, math.floor((total_height - height) / 2) - 2),
+    focusable = false,
     zindex = opts.zindex or 60,
   })
   if not win_ok then
@@ -319,22 +324,66 @@ function M.key_choice_menu(opts, callback, deps)
   end
   win = winid
 
+  if vim.api and type(vim.api.nvim_set_hl) == "function" then
+    pcall(vim.api.nvim_set_hl, 0, "CoduxKeyChoiceCursor", { fg = "NONE", bg = "NONE", blend = 100 })
+  end
   set_window_options(win, {
     number = false,
     relativenumber = false,
     signcolumn = "no",
     winfixbuf = true,
-    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
+    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey,Cursor:CoduxKeyChoiceCursor,CursorIM:CoduxKeyChoiceCursor",
   })
 
-  bind_close_keys(bufnr, function()
+  sink_bufnr = create_scratch_buffer({
+    bufhidden = "wipe",
+    buftype = "nofile",
+    filetype = (opts.filetype or "codux-key-choice") .. "-sink",
+    swapfile = false,
+    modifiable = false,
+  })
+  if not sink_bufnr then
+    close_window(win)
+    delete_buffer(bufnr)
+    notify(opts.create_error or "Failed to create Codux menu", vim.log.levels.ERROR)
+    return false
+  end
+
+  local sink_ok, sink_winid = pcall(open_win, sink_bufnr, true, {
+    relative = "editor",
+    style = "minimal",
+    border = "none",
+    width = 1,
+    height = 1,
+    col = vim.o.columns + 1,
+    row = vim.o.lines + 1,
+    focusable = true,
+    zindex = 1,
+  })
+  if not sink_ok then
+    close_window(win)
+    delete_buffer(bufnr)
+    delete_buffer(sink_bufnr)
+    notify(opts.open_error or "Failed to open Codux menu", vim.log.levels.ERROR)
+    return false
+  end
+  sink_win = sink_winid
+
+  set_window_options(sink_win, {
+    number = false,
+    relativenumber = false,
+    signcolumn = "no",
+    winfixbuf = true,
+  })
+
+  bind_close_keys(sink_bufnr, function()
     return close_menu(nil)
   end, opts.cancel_desc or "Cancel Codux Menu", "n", { escape = true, q = true })
   for _, choice in ipairs(choices) do
     local key = choice.key
     if type(key) == "string" and key ~= "" then
       local bound_choice = choice
-      set_keymap(bufnr, "n", key, function()
+      set_keymap(sink_bufnr, "n", key, function()
         return close_menu(bound_choice)
       end, tostring(choice.desc or choice.label or "Select Codux Menu Item"), { nowait = true })
     end
