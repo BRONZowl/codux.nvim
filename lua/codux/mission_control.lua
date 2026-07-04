@@ -855,7 +855,7 @@ function M:open_preview(mission)
   local function launch_mission()
     close_preview()
     if self.create_mission(mission) then
-      self:refresh_visible_dashboard()
+      self:refresh_or_open_dashboard()
     end
   end
 
@@ -1410,7 +1410,7 @@ function M:delete_saved_mission(name, root, opts)
 
   local ok = self.delete_mission(mission.name or mission.mission_id, root)
   local dashboard_root = self.state.mission_dashboard_project_root or root
-  if ok and dashboard_root == root and self.is_loaded_buf(self.state.mission_dashboard_buf) then
+  if ok and dashboard_root == root and self:dashboard_is_visible() then
     self:update_dashboard_after_mission_delete(dashboard_root)
   end
   return ok
@@ -1974,8 +1974,19 @@ function M:render_action_palette()
   return self:action_palette_controller():render(nil, self.state.mission_dashboard_action_kind)
 end
 
-function M:refresh_visible_dashboard(root)
-  if self.is_loaded_buf(self.state.mission_dashboard_buf) then
+function M:dashboard_is_visible()
+  return self.is_loaded_buf(self.state.mission_dashboard_buf)
+end
+
+function M:refresh_loaded_dashboard()
+  if not self:dashboard_is_visible() then
+    return false
+  end
+  return self:render_dashboard()
+end
+
+function M:refresh_or_open_dashboard(root)
+  if self:dashboard_is_visible() then
     return self:render_dashboard()
   end
   return self:open_dashboard(root)
@@ -1992,12 +2003,12 @@ end
 function M:update_dashboard_after_mission_delete(root)
   local remaining_count, error_message = self:mission_count(root)
   if error_message then
-    return self:refresh_visible_dashboard(root)
+    return self:refresh_loaded_dashboard(root)
   end
   if remaining_count == 0 then
     return self:close_dashboard()
   end
-  return self:refresh_visible_dashboard(root)
+  return self:refresh_loaded_dashboard(root)
 end
 
 function M:edit_selected_mission(mission)
@@ -2014,7 +2025,7 @@ function M:edit_selected_mission(mission)
       local ok = self.update_mission_objective(mission.name, objective, root)
       if ok ~= false then
         vim.schedule(function()
-          self:refresh_visible_dashboard(root)
+          self:refresh_loaded_dashboard(root)
         end)
       end
       return ok
@@ -2048,7 +2059,7 @@ function M:close_selected_mission(mission)
   end
   local ok = self.close_mission(mission.name or mission.mission_id, root)
   if ok then
-    self:refresh_visible_dashboard(root)
+    self:refresh_loaded_dashboard(root)
   end
   return ok
 end
@@ -2064,7 +2075,7 @@ function M:start_selected_mission(mission)
     restart_inactive = true,
     focus_first = false,
   })
-  self:refresh_visible_dashboard(root)
+  self:refresh_loaded_dashboard(root)
   return ok
 end
 

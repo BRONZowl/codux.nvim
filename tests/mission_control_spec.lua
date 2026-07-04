@@ -1039,6 +1039,35 @@ do
   assert_equal(calls[2], "open_prompt")
 end
 
+do
+  local events = {}
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_buf = 77,
+    },
+    is_loaded_buf = function(bufnr)
+      table.insert(events, "loaded:" .. tostring(bufnr))
+      return false
+    end,
+  })
+  function controller:render_dashboard()
+    table.insert(events, "render")
+    return "rendered"
+  end
+  function controller:open_dashboard(root)
+    table.insert(events, "open:" .. tostring(root))
+    return "opened"
+  end
+
+  assert_false(controller:refresh_loaded_dashboard("/repo"))
+  assert_equal(events[1], "loaded:77")
+  assert_nil(events[2])
+
+  assert_equal(controller:refresh_or_open_dashboard("/repo"), "opened")
+  assert_equal(events[2], "loaded:77")
+  assert_equal(events[3], "open:/repo")
+end
+
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
   local launch_callback
@@ -1077,7 +1106,7 @@ if type(vim.api) == "table" then
       return true
     end,
   })
-  function controller:refresh_visible_dashboard()
+  function controller:refresh_or_open_dashboard()
     table.insert(calls, "refresh_dashboard")
     return true
   end
@@ -1126,7 +1155,7 @@ if type(vim.api) == "table" then
       return false
     end,
   })
-  function controller:refresh_visible_dashboard()
+  function controller:refresh_or_open_dashboard()
     dashboard_refreshed = true
     return true
   end
@@ -1359,7 +1388,7 @@ do
   function controller:close_dashboard()
     closed = true
   end
-  function controller:refresh_visible_dashboard(root)
+  function controller:refresh_loaded_dashboard(root)
     refreshed_root = root
     return true
   end
@@ -1399,7 +1428,7 @@ do
     table.insert(events, "close_dashboard")
     return true
   end
-  function controller:refresh_visible_dashboard()
+  function controller:refresh_loaded_dashboard()
     table.insert(events, "refresh")
     return true
   end
@@ -1432,7 +1461,7 @@ do
     table.insert(events, "close_dashboard")
     return true
   end
-  function controller:refresh_visible_dashboard()
+  function controller:refresh_loaded_dashboard()
     table.insert(events, "refresh")
     return true
   end
@@ -1476,7 +1505,7 @@ do
     table.insert(events, "close_dashboard")
     return true
   end
-  function controller:refresh_visible_dashboard()
+  function controller:refresh_loaded_dashboard()
     table.insert(events, "refresh")
     return true
   end
@@ -1511,7 +1540,7 @@ do
     table.insert(events, "close_dashboard")
     return true
   end
-  function controller:refresh_visible_dashboard()
+  function controller:refresh_loaded_dashboard()
     table.insert(events, "refresh")
     return true
   end
@@ -1683,7 +1712,7 @@ do
   function controller:close_dashboard()
     table.insert(events, "close")
   end
-  function controller:refresh_visible_dashboard(root)
+  function controller:refresh_loaded_dashboard(root)
     table.insert(events, "refresh")
     refreshed_root = root
   end
@@ -1714,7 +1743,7 @@ do
   function controller:close_dashboard()
     table.insert(events, "close")
   end
-  function controller:refresh_visible_dashboard(root)
+  function controller:refresh_loaded_dashboard(root)
     table.insert(events, "refresh")
     refreshed_root = root
     return true
@@ -1724,6 +1753,31 @@ do
   assert_equal(events[1], "start")
   assert_equal(events[2], "refresh")
   assert_equal(refreshed_root, "/repo")
+end
+
+do
+  local events = {}
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_project_root = "/repo",
+    },
+    is_loaded_buf = function()
+      table.insert(events, "loaded")
+      return false
+    end,
+    start_mission = function()
+      table.insert(events, "start")
+      return true
+    end,
+  })
+  function controller:open_dashboard()
+    error("mission actions should not open the dashboard while refreshing")
+  end
+
+  assert_true(controller:start_selected_mission({ name = "Alpha" }))
+  assert_equal(events[1], "start")
+  assert_equal(events[2], "loaded")
+  assert_nil(events[3])
 end
 
 do
@@ -1751,7 +1805,7 @@ do
     on_save = opts.on_save
     return true
   end
-  function controller:refresh_visible_dashboard(root)
+  function controller:refresh_loaded_dashboard(root)
     refreshed_root = root
     return true
   end
