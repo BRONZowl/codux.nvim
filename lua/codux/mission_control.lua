@@ -1200,14 +1200,20 @@ function M:refresh_dashboard_token_usage(force)
   return self.refresh_token_usage(force == true)
 end
 
+function M:missions_for_root(root)
+  local entries, error_message = self.workspace_entries_for_project(root)
+  if error_message then
+    return nil, error_message
+  end
+  return self.mission.group_entries(entries)
+end
+
 function M:dashboard_lines(root, opts)
   opts = type(opts) == "table" and opts or {}
-  local entries, error_message = self.workspace_entries_for_project(root)
+  local all_missions, error_message = self:missions_for_root(root)
   if error_message then
     return { error_message }, {}, {}
   end
-
-  local all_missions = self.mission.group_entries(entries)
   local query = tostring(opts.query or "")
   local missions = self:filter_missions(all_missions, query)
   local dashboard_width = tonumber(opts.dashboard_width) or self:window_width() or self:dashboard_config(1).width
@@ -1295,12 +1301,11 @@ function M:dashboard_lines(root, opts)
 end
 
 function M:mission_for_name(root, name)
-  local entries, error_message = self.workspace_entries_for_project(root)
+  local missions, error_message = self:missions_for_root(root)
   if error_message then
     return nil, error_message
   end
 
-  local missions = self.mission.group_entries(entries)
   return self.mission.find_mission(missions, name)
 end
 
@@ -1977,11 +1982,11 @@ function M:refresh_visible_dashboard(root)
 end
 
 function M:mission_count(root)
-  local entries, error_message = self.workspace_entries_for_project(root)
+  local missions, error_message = self:missions_for_root(root)
   if error_message then
     return nil, error_message
   end
-  return #self.mission.group_entries(entries)
+  return #missions
 end
 
 function M:update_dashboard_after_mission_delete(root)

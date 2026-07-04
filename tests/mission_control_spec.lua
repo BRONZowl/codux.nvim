@@ -8,6 +8,21 @@ local assert_contains = h.assert_contains
 local mission_control_mod = require("codux.mission_control")
 local workspace_ui = require("codux.workspace_ui")
 
+local function mission_role_entry(mission_name, role)
+  mission_name = mission_name or "Alpha"
+  role = role or "Builder"
+  local mission_key = mission_name:lower()
+  local role_key = role:lower()
+  local name = mission_key .. "-" .. role_key
+  return {
+    name = name,
+    safe_name = name,
+    mission_id = "mission:" .. mission_key,
+    mission_name = mission_name,
+    mission_role = role,
+  }
+end
+
 do
   local controller = mission_control_mod.new({
     workspace_entries_for_project = function()
@@ -1358,14 +1373,7 @@ do
   assert_false(closed)
 
   refreshed_root = nil
-  remaining_entries = {
-    {
-      name = "beta-builder",
-      mission_id = "mission:beta",
-      mission_name = "Beta",
-      mission_role = "Builder",
-    },
-  }
+  remaining_entries = { mission_role_entry("Beta") }
   assert_true(controller:delete_selected_mission({ name = "Alpha" }))
   assert_equal(calls[2], "delete:Alpha:/repo")
   assert_equal(refreshed_root, "/repo")
@@ -1456,14 +1464,7 @@ do
       if deleted then
         return {}
       end
-      return {
-        {
-          name = "alpha-builder",
-          mission_id = "mission:alpha",
-          mission_name = "Alpha",
-          mission_role = "Builder",
-        },
-      }
+      return { mission_role_entry("Alpha") }
     end,
     delete_mission = function(name, root)
       deleted = true
@@ -1498,14 +1499,7 @@ do
     end,
     workspace_entries_for_project = function(root)
       assert_equal(root, "/repo")
-      return {
-        {
-          name = "alpha-builder",
-          mission_id = "mission:alpha",
-          mission_name = "Alpha",
-          mission_role = "Builder",
-        },
-      }
+      return { mission_role_entry("Alpha") }
     end,
     delete_mission = function(name, root)
       deleted = true
