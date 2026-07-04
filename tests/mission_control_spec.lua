@@ -142,6 +142,59 @@ do
 end
 
 do
+  local controller = mission_control_mod.new({
+    token_usage_label = function()
+      return "usage | 5hr 12% | wk 34%"
+    end,
+    workspace_entries_for_project = function()
+      return {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          mission_id = "mission:alpha",
+          mission_name = "Alpha",
+          mission_role = "Builder",
+          status = "idle",
+        },
+      }, nil
+    end,
+  })
+
+  local lines, items, rows = controller:dashboard_lines("/repo", { dashboard_width = 80 })
+  assert_contains(lines[1], "1 mission | 1 role | active 0 | question 0 | idle 1")
+  assert_contains(lines[2], "usage | 5hr 12% | wk 34%")
+  assert_equal(items[4].kind, "mission")
+  assert_equal(items[6].kind, "role")
+  assert_equal(table.concat(rows, ","), "4,6")
+end
+
+do
+  local controller = mission_control_mod.new({
+    token_usage_label = function()
+      return ""
+    end,
+    workspace_entries_for_project = function()
+      return {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          mission_id = "mission:alpha",
+          mission_name = "Alpha",
+          mission_role = "Builder",
+          status = "idle",
+        },
+      }, nil
+    end,
+  })
+
+  local lines, items, rows = controller:dashboard_lines("/repo", { dashboard_width = 80 })
+  assert_equal(table.concat(lines, "\n"):find("usage |", 1, true), nil)
+  assert_equal(items[3].kind, "mission")
+  assert_equal(items[5].kind, "role")
+  assert_equal(table.concat(rows, ","), "3,5")
+end
+
+do
   local controller = mission_control_mod.new({})
   local command_lines = controller:dashboard_command_lines(120)
   local command_text = table.concat(command_lines, "\n")
@@ -211,6 +264,41 @@ do
     assert_highlight("Comment", label_start, label_start + #command.label)
     search_start = pair_start + #pair
   end
+
+  vim.api = old_api
+end
+
+do
+  local old_api = vim.api
+  local highlights = {}
+  vim.api = {
+    nvim_buf_clear_namespace = function() end,
+    nvim_buf_add_highlight = function(bufnr, namespace, group, row, start_col, end_col)
+      table.insert(highlights, {
+        bufnr = bufnr,
+        namespace = namespace,
+        group = group,
+        row = row,
+        start_col = start_col,
+        end_col = end_col,
+      })
+    end,
+  }
+
+  local controller = mission_control_mod.new({ namespace = 99 })
+  controller:highlight_dashboard(12, {
+    "1 mission | 1 role | active 0 | question 0 | idle 1",
+    "usage | 5hr 12% | wk 34%",
+  }, {})
+
+  local found_usage = false
+  for _, highlight in ipairs(highlights) do
+    if highlight.group == "CoduxWhichKeyUsage" and highlight.row == 1 and highlight.start_col == 0 and highlight.end_col == -1 then
+      found_usage = true
+      break
+    end
+  end
+  assert_true(found_usage)
 
   vim.api = old_api
 end

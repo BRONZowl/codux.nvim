@@ -1182,6 +1182,7 @@ mission_controller = mission_control_mod.new({
   window_buffer = window_buffer,
   buffer_filetype = buffer_filetype,
   notify = notify,
+  token_usage_label = token_usage_label,
   create_mission = function(mission)
     return M.create_mission(mission)
   end,

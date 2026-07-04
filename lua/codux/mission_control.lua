@@ -122,6 +122,9 @@ function M.new(opts)
       return pcall(vim.api.nvim_win_set_cursor, win, cursor)
     end,
     notify = type(opts.notify) == "function" and opts.notify or noop,
+    token_usage_label = type(opts.token_usage_label) == "function" and opts.token_usage_label or function()
+      return ""
+    end,
     create_mission = type(opts.create_mission) == "function" and opts.create_mission or noop,
     create_workspace_prompt = type(opts.create_workspace_prompt) == "function" and opts.create_workspace_prompt or noop,
     workspace_entries_for_project = type(opts.workspace_entries_for_project) == "function"
@@ -948,6 +951,14 @@ function M:dashboard_command_lines(dashboard_width)
   return { center_display_line(self.workspace_ui, line, width) }
 end
 
+function M:dashboard_token_usage_line(dashboard_width)
+  local usage = tostring(self.token_usage_label() or "")
+  if usage == "" then
+    return nil
+  end
+  return center_display_line(self.workspace_ui, usage, dashboard_width)
+end
+
 function M:dashboard_lines(root, opts)
   opts = type(opts) == "table" and opts or {}
   local entries, error_message = self.workspace_entries_for_project(root)
@@ -998,6 +1009,10 @@ function M:dashboard_lines(root, opts)
       dashboard_width
     )
   )
+  local token_usage_line = self:dashboard_token_usage_line(dashboard_width)
+  if token_usage_line then
+    table.insert(lines, token_usage_line)
+  end
 
   for mission_index, mission in ipairs(missions) do
     table.insert(lines, "")
@@ -1187,6 +1202,9 @@ function M:confirm_delete_mission(mission, root)
 end
 
 function M:highlight_dashboard(bufnr, lines, items)
+  if vim.api and type(vim.api.nvim_set_hl) == "function" then
+    pcall(vim.api.nvim_set_hl, 0, "CoduxWhichKeyUsage", { fg = "#8b949e" })
+  end
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, self.namespace, 0, -1)
   pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", 0, 0, -1)
 
@@ -1194,6 +1212,8 @@ function M:highlight_dashboard(bufnr, lines, items)
     local item = items[index]
     if line == "Commands" then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKeyDesc", index - 1, 0, -1)
+    elseif line:find("usage | ", 1, true) then
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "CoduxWhichKeyUsage", index - 1, 0, -1)
     elseif line:find("^%s+Tab%s", 1, false) or line:find("^%s+O%s", 1, false) or line:find("^%s+n%s", 1, false) then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
     elseif line:find("^Output%s%s", 1, false) then
