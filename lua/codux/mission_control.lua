@@ -1211,10 +1211,14 @@ function M:dashboard_lines(root, opts)
   local selectable_rows = {}
   local best_match_row = nil
   if #all_missions == 0 then
-    return { center_display_line(self.workspace_ui, "No Codux missions", dashboard_width) }, items, selectable_rows
+    return { center_display_line(self.workspace_ui, "No Codux missions", dashboard_width) }, items, selectable_rows, nil, 0
   end
   if query ~= "" and #missions == 0 then
-    return { center_display_line(self.workspace_ui, "No matching Codux missions", dashboard_width) }, items, selectable_rows
+    return { center_display_line(self.workspace_ui, "No matching Codux missions", dashboard_width) },
+      items,
+      selectable_rows,
+      nil,
+      #all_missions
   end
 
   local total_roles = 0
@@ -1281,7 +1285,7 @@ function M:dashboard_lines(root, opts)
     best_match_row = selectable_rows[1]
   end
 
-  return lines, items, selectable_rows, best_match_row
+  return lines, items, selectable_rows, best_match_row, #all_missions
 end
 
 function M:mission_for_name(root, name)
@@ -2384,7 +2388,10 @@ end
 function M:open_dashboard(root)
   self:close_dashboard()
   root = root or self.project_root()
-  local lines, items, selectable_rows, best_match_row = self:dashboard_lines(root)
+  local lines, items, selectable_rows, best_match_row, mission_count = self:dashboard_lines(root)
+  if mission_count == 0 then
+    return self:open_prompt()
+  end
   local initial_selected_item = items[selectable_rows[1]]
   local bufnr = self.ui.create_scratch_buffer({
     bufhidden = "wipe",

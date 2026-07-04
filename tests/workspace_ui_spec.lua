@@ -70,7 +70,6 @@ do
     open_danger = "<leader>zA",
     workspace = "<leader>zw",
     workspaces = "<leader>zW",
-    mission = "<leader>zm",
     missions = "<leader>zM",
   })
   local by_lhs = {}
@@ -80,12 +79,12 @@ do
     by_desc[entry.desc] = entry.lhs
   end
 
-  assert_equal(by_desc["create codux mission"], "<leader>zm")
+  assert_nil(by_desc["create codux mission"])
   assert_nil(by_desc["create codux workspace"])
   assert_nil(by_desc["current codux workspaces"])
   assert_nil(by_desc["codex autopilot"])
   assert_nil(by_desc["codex danger zone"])
-  assert_equal(by_lhs["<leader>zm"], "create codux mission")
+  assert_nil(by_lhs["<leader>zm"])
   assert_nil(by_lhs["<leader>za"])
   assert_nil(by_lhs["<leader>zA"])
   assert_nil(by_lhs["<leader>zw"])

@@ -408,7 +408,6 @@ function M:normal_entries(mappings)
     { lhs = mappings.review_selection, desc = "send selection to codex" },
     { lhs = mappings.diagnostics, desc = "send diagnostics to codex" },
     { lhs = mappings.diff, desc = "send git diff to codex" },
-    { lhs = mappings.mission, desc = "create codux mission" },
     { lhs = mappings.missions, desc = "mission control" },
   }
   local entries = {}

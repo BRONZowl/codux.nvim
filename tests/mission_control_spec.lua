@@ -998,6 +998,32 @@ if type(vim.api) == "table" then
   vim.o.mouse = old_mouse
 end
 
+do
+  local calls = {}
+  local controller = mission_control_mod.new({
+    ui = {
+      create_scratch_buffer = function()
+        error("dashboard buffer should not be created without missions")
+      end,
+    },
+  })
+  function controller:close_dashboard()
+    table.insert(calls, "close_dashboard")
+    return true
+  end
+  function controller:dashboard_lines()
+    return { "No Codux missions" }, {}, {}, nil, 0
+  end
+  function controller:open_prompt()
+    table.insert(calls, "open_prompt")
+    return "prompt"
+  end
+
+  assert_equal(controller:open_dashboard("/repo"), "prompt")
+  assert_equal(calls[1], "close_dashboard")
+  assert_equal(calls[2], "open_prompt")
+end
+
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
   local old_win_set_cursor = vim.api.nvim_win_set_cursor
@@ -2348,7 +2374,7 @@ if type(vim.api) == "table" then
   }))
 
   local mission_map = vim.fn.maparg("<leader>zm", "n", false, true)
-  assert_equal(mission_map.desc, "create codux mission")
+  assert_true(vim.tbl_isempty(mission_map))
   local workspace_create_map = vim.fn.maparg("<leader>zw", "n", false, true)
   assert_true(vim.tbl_isempty(workspace_create_map))
   local workspaces_map = vim.fn.maparg("<leader>zW", "n", false, true)
