@@ -1556,6 +1556,15 @@ function M:output_window_buffer()
   return ok and current or nil
 end
 
+function M:unlock_output_window()
+  local win = self.state.mission_dashboard_output_win
+  if not self.is_valid_win(win) then
+    return false
+  end
+  pcall(vim.api.nvim_set_option_value, "winfixbuf", false, { win = win })
+  return true
+end
+
 function M:set_output_window_buffer(bufnr)
   local win = self.state.mission_dashboard_output_win
   if not self.is_valid_win(win) then
@@ -1580,8 +1589,8 @@ function M:set_output_window_buffer(bufnr)
   end
 
   local set_ok = pcall(vim.api.nvim_win_set_buf, win, bufnr)
-  if winfix_ok and had_winfixbuf and self.is_valid_win(win) then
-    pcall(vim.api.nvim_set_option_value, "winfixbuf", true, { win = win })
+  if winfix_ok and had_winfixbuf then
+    self:unlock_output_window()
   end
   if not set_ok then
     return false
@@ -1758,6 +1767,7 @@ function M:focus_output_panel()
   if not self.is_valid_win(self.state.mission_dashboard_output_win) then
     return false
   end
+  self:unlock_output_window()
   local ok = self.set_current_win(self.state.mission_dashboard_output_win)
   if ok and self:output_preview_running() then
     pcall(vim.cmd, "startinsert")
@@ -1811,7 +1821,7 @@ function M:open_output_panel(entry)
     number = false,
     relativenumber = false,
     signcolumn = "no",
-    winfixbuf = true,
+    winfixbuf = false,
     winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
   })
   self:start_output_preview(entry)

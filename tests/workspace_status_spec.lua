@@ -3241,8 +3241,8 @@ if type(vim.api) == "table" then
   assert_equal(controller.state.mission_dashboard_output_job, 77)
   assert_equal(vim.api.nvim_win_get_buf(win), controller.state.mission_dashboard_output_buf)
   assert_equal(visible_buf_at_termopen, controller.state.mission_dashboard_output_buf)
-  assert_true(winfixbuf_at_termopen)
-  assert_true(vim.api.nvim_get_option_value("winfixbuf", { win = win }))
+  assert_false(winfixbuf_at_termopen)
+  assert_false(vim.api.nvim_get_option_value("winfixbuf", { win = win }))
   assert_true(vim.api.nvim_win_is_valid(controller.state.mission_dashboard_output_win))
   assert_false(vim.api.nvim_buf_is_valid(old_buf))
   assert_nil(controller.state.mission_dashboard_output_replacing_buf)
@@ -3250,6 +3250,43 @@ if type(vim.api) == "table" then
   vim.api.nvim_win_close(win, true)
   if vim.api.nvim_buf_is_valid(output_buf) then
     vim.api.nvim_buf_delete(output_buf, { force = true })
+  end
+end
+
+if type(vim.api) == "table" then
+  local output_buf = vim.api.nvim_create_buf(false, true)
+  local other_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(other_buf, 0, -1, false, { "other buffer" })
+  local win = vim.api.nvim_open_win(output_buf, false, {
+    relative = "editor",
+    row = 0,
+    col = 0,
+    width = 40,
+    height = 3,
+    style = "minimal",
+  })
+  vim.api.nvim_set_option_value("winfixbuf", true, { win = win })
+
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_buf = output_buf,
+      mission_dashboard_output_win = win,
+      mission_dashboard_output_job = 77,
+    },
+  })
+
+  assert_true(controller:focus_output_panel())
+  assert_false(vim.api.nvim_get_option_value("winfixbuf", { win = win }))
+  local ok, error_message = pcall(vim.cmd, "buffer " .. tostring(other_buf))
+  assert_true(ok, tostring(error_message))
+  assert_equal(vim.api.nvim_win_get_buf(win), other_buf)
+
+  vim.api.nvim_win_close(win, true)
+  if vim.api.nvim_buf_is_valid(output_buf) then
+    vim.api.nvim_buf_delete(output_buf, { force = true })
+  end
+  if vim.api.nvim_buf_is_valid(other_buf) then
+    vim.api.nvim_buf_delete(other_buf, { force = true })
   end
 end
 
