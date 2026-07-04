@@ -801,7 +801,7 @@ do
 
   assert_true(controller:open_output_workspace())
   assert_equal(opened_name, "alpha-builder")
-  assert_true(closed)
+  assert_false(closed)
 end
 
 do

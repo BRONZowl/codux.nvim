@@ -856,7 +856,7 @@ function M:open_preview(mission)
   local function launch_mission()
     close_preview()
     if self.create_mission(mission) then
-      self:open_dashboard()
+      self:refresh_visible_dashboard()
     end
   end
 
@@ -1965,6 +1965,13 @@ function M:render_action_palette()
   return self:action_palette_controller():render(nil, self.state.mission_dashboard_action_kind)
 end
 
+function M:refresh_visible_dashboard(root)
+  if self.is_loaded_buf(self.state.mission_dashboard_buf) then
+    return self:render_dashboard()
+  end
+  return self:open_dashboard(root)
+end
+
 function M:edit_selected_mission(mission)
   local root = self.state.mission_dashboard_project_root or self.project_root()
   mission = mission or self:selected_mission()
@@ -1972,7 +1979,6 @@ function M:edit_selected_mission(mission)
     self.notify("No Codux mission selected", vim.log.levels.WARN)
     return false
   end
-  self:close_dashboard()
   return self:open_objective_editor(mission.name, mission.objective, {
     title = " Edit Codux Mission Objective ",
     footer = " Ctrl-s/:w save | Ctrl-q cancel ",
@@ -1980,7 +1986,7 @@ function M:edit_selected_mission(mission)
       local ok = self.update_mission_objective(mission.name, objective, root)
       if ok ~= false then
         vim.schedule(function()
-          self:open_dashboard(root)
+          self:refresh_visible_dashboard(root)
         end)
       end
       return ok
@@ -1998,8 +2004,11 @@ function M:delete_selected_mission(mission)
   if not self:confirm_delete_mission(mission, root) then
     return false
   end
-  self:close_dashboard()
-  return self.delete_mission(mission.name or mission.mission_id, root)
+  local ok = self.delete_mission(mission.name or mission.mission_id, root)
+  if ok then
+    self:refresh_visible_dashboard(root)
+  end
+  return ok
 end
 
 function M:close_selected_mission(mission)
@@ -2009,8 +2018,11 @@ function M:close_selected_mission(mission)
     self.notify("No Codux mission selected", vim.log.levels.WARN)
     return false
   end
-  self:close_dashboard()
-  return self.close_mission(mission.name or mission.mission_id, root)
+  local ok = self.close_mission(mission.name or mission.mission_id, root)
+  if ok then
+    self:refresh_visible_dashboard(root)
+  end
+  return ok
 end
 
 function M:start_selected_mission(mission)
@@ -2020,14 +2032,11 @@ function M:start_selected_mission(mission)
     self.notify("No Codux mission selected", vim.log.levels.WARN)
     return false
   end
-  self:close_dashboard()
   local ok = self.start_mission(mission.name or mission.mission_id, root, {
     restart_inactive = true,
-    focus_first = true,
+    focus_first = false,
   })
-  if not ok then
-    self:open_dashboard(root)
-  end
+  self:refresh_visible_dashboard(root)
   return ok
 end
 
@@ -2041,12 +2050,7 @@ end
 function M:run_action(action, target)
   local workspace = target or self.state.mission_dashboard_action_workspace
   if action == "open_workspace" then
-    workspace = workspace or self:selected_role_workspace_or_notify()
-    if not workspace then
-      return false
-    end
-    self:close_action_palette()
-    return self:open_role_workspace(workspace)
+    return false
   end
   if action == "prompt_workspace" then
     workspace = workspace or self:selected_role_workspace_or_notify()
@@ -2179,11 +2183,7 @@ function M:open_role_workspace(entry)
     return false
   end
 
-  local ok = self.open_saved_workspace(name, entry.project_root)
-  if ok then
-    self:close_dashboard()
-  end
-  return ok
+  return self.open_saved_workspace(name, entry.project_root)
 end
 
 function M:open_output_workspace()
@@ -2343,7 +2343,6 @@ function M:refresh_dashboard()
 end
 
 function M:create_new_mission()
-  self:close_dashboard()
   return self:open_prompt()
 end
 
@@ -2355,7 +2354,6 @@ function M:create_new_workspace(workspace)
     return false
   end
 
-  self:close_dashboard()
   return self.create_workspace_prompt(mission_context)
 end
 

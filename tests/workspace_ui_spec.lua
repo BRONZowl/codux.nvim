@@ -126,7 +126,7 @@ do
     labels_by_key[action.key] = action.label
   end
 
-  assert_equal(by_key.o, "open_workspace")
+  assert_nil(by_key.o)
   assert_equal(by_key.e, "edit_instructions")
   assert_equal(by_key.x, "close_workspace")
   assert_equal(by_key.d, "delete_workspace")
@@ -136,10 +136,11 @@ do
   assert_nil(by_key.s)
   assert_nil(by_key.r)
   assert_nil(by_key.X)
-  assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Open Workspace")
+  assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Edit Instructions")
   assert_nil(labels_by_key.p)
   assert_nil(labels_by_key.i)
   assert_nil(labels_by_key.s)
+  assert_nil(labels_by_key.o)
   assert_equal(labels_by_key.d, "Delete Workspace")
   assert_equal(labels_by_key.w, "Create Workspace")
 end

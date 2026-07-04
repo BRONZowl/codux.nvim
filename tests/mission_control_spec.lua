@@ -1062,8 +1062,8 @@ if type(vim.api) == "table" then
       return true
     end,
   })
-  function controller:open_dashboard()
-    table.insert(calls, "open_dashboard")
+  function controller:refresh_visible_dashboard()
+    table.insert(calls, "refresh_dashboard")
     return true
   end
 
@@ -1073,7 +1073,7 @@ if type(vim.api) == "table" then
   assert_equal(calls[1], "close_window")
   assert_equal(calls[2], "delete_buffer")
   assert_equal(calls[3], "create_mission")
-  assert_equal(calls[4], "open_dashboard")
+  assert_equal(calls[4], "refresh_dashboard")
 
   vim.api.nvim_open_win = old_open_win
 end
@@ -1081,7 +1081,7 @@ end
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
   local launch_callback
-  local dashboard_opened = false
+  local dashboard_refreshed = false
   vim.api.nvim_open_win = function()
     return 46
   end
@@ -1111,15 +1111,15 @@ if type(vim.api) == "table" then
       return false
     end,
   })
-  function controller:open_dashboard()
-    dashboard_opened = true
+  function controller:refresh_visible_dashboard()
+    dashboard_refreshed = true
     return true
   end
 
   assert_true(controller:open_preview({ name = "Alpha" }))
   assert_true(type(launch_callback) == "function")
   launch_callback()
-  assert_false(dashboard_opened)
+  assert_false(dashboard_refreshed)
 
   vim.api.nvim_open_win = old_open_win
 end
@@ -1246,6 +1246,23 @@ end
 
 do
   local closed = false
+  local prompted = false
+  local controller = mission_control_mod.new({})
+  function controller:open_prompt()
+    prompted = true
+    return true
+  end
+  function controller:close_dashboard()
+    closed = true
+  end
+
+  assert_true(controller:create_new_mission())
+  assert_true(prompted)
+  assert_false(closed)
+end
+
+do
+  local closed = false
   local context
   local controller = mission_control_mod.new({
     state = {
@@ -1267,7 +1284,7 @@ do
   end
 
   assert_true(controller:create_new_workspace())
-  assert_true(closed)
+  assert_false(closed)
   assert_equal(context.mission_id, "mission:alpha")
   assert_equal(context.mission_name, "Alpha")
   assert_equal(context.mission_objective, "Build it")
@@ -1300,6 +1317,46 @@ do
   assert_false(closed)
   assert_false(prompted)
   assert_equal(notifications[#notifications], "No Codux mission selected")
+end
+
+do
+  local closed = false
+  local refreshed_root
+  local calls = {}
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_project_root = "/repo",
+    },
+    close_mission = function(name, root)
+      table.insert(calls, "close:" .. tostring(name) .. ":" .. tostring(root))
+      return true
+    end,
+    delete_mission = function(name, root)
+      table.insert(calls, "delete:" .. tostring(name) .. ":" .. tostring(root))
+      return true
+    end,
+  })
+  function controller:close_dashboard()
+    closed = true
+  end
+  function controller:refresh_visible_dashboard(root)
+    refreshed_root = root
+    return true
+  end
+  function controller:confirm_delete_mission()
+    return true
+  end
+
+  assert_true(controller:close_selected_mission({ name = "Alpha" }))
+  assert_equal(calls[1], "close:Alpha:/repo")
+  assert_equal(refreshed_root, "/repo")
+  assert_false(closed)
+
+  refreshed_root = nil
+  assert_true(controller:delete_selected_mission({ name = "Alpha" }))
+  assert_equal(calls[2], "delete:Alpha:/repo")
+  assert_equal(refreshed_root, "/repo")
+  assert_false(closed)
 end
 
 do
@@ -1387,17 +1444,20 @@ do
       return true
     end,
   })
-  function controller:close_dashboard() end
+  local dashboard_closed = false
+  function controller:close_dashboard()
+    dashboard_closed = true
+  end
 
-  assert_true(controller:run_action("open_workspace", entry))
+  assert_false(controller:run_action("open_workspace", entry))
   assert_true(controller:run_action("edit_instructions", entry))
   assert_true(controller:run_action("close_workspace", entry))
   assert_true(controller:run_action("delete_workspace", entry))
-  assert_equal(calls[1], "open:alpha-builder")
-  assert_equal(calls[2], "edit:alpha-builder")
-  assert_equal(calls[3], "close:alpha-builder")
-  assert_contains(calls[4], "confirm:Delete Codux workspace alpha-builder?")
-  assert_equal(calls[5], "delete:alpha-builder")
+  assert_equal(calls[1], "edit:alpha-builder")
+  assert_equal(calls[2], "close:alpha-builder")
+  assert_contains(calls[3], "confirm:Delete Codux workspace alpha-builder?")
+  assert_equal(calls[4], "delete:alpha-builder")
+  assert_false(dashboard_closed)
   vim.fn.confirm = old_confirm
 end
 
@@ -1453,7 +1513,7 @@ end
 do
   local captured = {}
   local events = {}
-  local rendered = false
+  local refreshed_root
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_project_root = "/repo",
@@ -1467,8 +1527,9 @@ do
   function controller:close_dashboard()
     table.insert(events, "close")
   end
-  function controller:render_dashboard()
-    rendered = true
+  function controller:refresh_visible_dashboard(root)
+    table.insert(events, "refresh")
+    refreshed_root = root
   end
 
   assert_true(controller:start_selected_mission({ name = "Alpha" }))
@@ -1476,16 +1537,15 @@ do
   assert_equal(captured.root, "/repo")
   assert_true(captured.opts.restart_inactive)
   assert_nil(captured.opts.prompt_roles)
-  assert_true(captured.opts.focus_first)
-  assert_equal(events[1], "close")
-  assert_equal(events[2], "start")
-  assert_false(rendered)
+  assert_false(captured.opts.focus_first)
+  assert_equal(events[1], "start")
+  assert_equal(events[2], "refresh")
+  assert_equal(refreshed_root, "/repo")
 end
 
 do
   local events = {}
-  local rendered = false
-  local reopened_root
+  local refreshed_root
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_project_root = "/repo",
@@ -1498,25 +1558,23 @@ do
   function controller:close_dashboard()
     table.insert(events, "close")
   end
-  function controller:render_dashboard()
-    rendered = true
-  end
-  function controller:open_dashboard(root)
-    reopened_root = root
+  function controller:refresh_visible_dashboard(root)
+    table.insert(events, "refresh")
+    refreshed_root = root
     return true
   end
 
   assert_false(controller:start_selected_mission({ name = "Alpha" }))
-  assert_equal(events[1], "close")
-  assert_equal(events[2], "start")
-  assert_false(rendered)
-  assert_equal(reopened_root, "/repo")
+  assert_equal(events[1], "start")
+  assert_equal(events[2], "refresh")
+  assert_equal(refreshed_root, "/repo")
 end
 
 do
   local old_schedule = vim.schedule
   local saved_root
-  local reopened_root
+  local refreshed_root
+  local closed = false
   local on_save
   vim.schedule = function(callback)
     return callback()
@@ -1530,20 +1588,23 @@ do
       return true
     end,
   })
-  function controller:close_dashboard() end
+  function controller:close_dashboard()
+    closed = true
+  end
   function controller:open_objective_editor(_, _, opts)
     on_save = opts.on_save
     return true
   end
-  function controller:open_dashboard(root)
-    reopened_root = root
+  function controller:refresh_visible_dashboard(root)
+    refreshed_root = root
     return true
   end
 
   assert_true(controller:edit_selected_mission({ name = "Alpha", objective = "old" }))
   assert_true(on_save("Alpha", "new"))
+  assert_false(closed)
   assert_equal(saved_root, "/repo")
-  assert_equal(reopened_root, "/repo")
+  assert_equal(refreshed_root, "/repo")
   vim.schedule = old_schedule
 end
 
