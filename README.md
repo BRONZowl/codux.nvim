@@ -130,7 +130,7 @@
 
 <p>
   Use <code>:CoduxMissionCreate</code> to launch Mission Control.
-  Codux prompts for one mission objective, previews a default crew of architect, builder, and reviewer roles, then creates a clean Git worktree workspace for each role and starts each agent in plan mode with workspace-auto permissions.
+  Codux prompts for one mission objective, previews a default crew of builder and reviewer roles, then creates a clean Git worktree workspace for each role and starts each agent in plan mode with workspace-auto permissions.
   Mission role workspaces keep their mission metadata in Codux workspace state, and <code>:CoduxMissions</code> or <code>&lt;leader&gt;zM</code> opens a mission dashboard with full-word workspace detail columns for status, permission profile, last activity, needs review, worktree status, window status, branch, cleanup status, and target.
   Codux opens a <code>Codux mission:</code> search field above the mission dashboard; type a fuzzy mission, role, or workspace name to filter the dashboard while keeping each matching mission block visible.
   Press <code>&lt;Tab&gt;</code> to switch between mission search and the dashboard list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted mission or role, then use <code>j</code>/<code>k</code> to move through selectable mission and role rows.

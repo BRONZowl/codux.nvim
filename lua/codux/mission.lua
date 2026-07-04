@@ -84,11 +84,6 @@ end
 
 M.DEFAULT_ROLES = {
   {
-    name = "Architect",
-    safe_name = "architect",
-    focus = "Clarify the design, interfaces, risks, and implementation order.",
-  },
-  {
     name = "Builder",
     safe_name = "builder",
     focus = "Implement the primary code changes with focused validation.",
