@@ -1330,9 +1330,6 @@ mission_controller = mission_control_mod.new({
     return M.delete_mission(name, { project_root = root })
   end,
   workspace_entries_for_project = workspace_entries_for_project,
-  open_saved_workspace = function(name, project_root)
-    return M.open_saved_workspace(name, project_root)
-  end,
   edit_saved_workspace_instruction = edit_saved_workspace_instruction,
   delete_saved_workspace = delete_saved_workspace,
   close_saved_workspace_window = function(entry)

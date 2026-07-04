@@ -715,8 +715,6 @@ end
 do
   local bound = {}
   local closed = false
-  local opened_name
-  local opened_root
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_output_entry = {
@@ -741,11 +739,6 @@ do
   function controller:render_output_panel()
     return true
   end
-  controller.open_saved_workspace = function(name, root)
-    opened_name = name
-    opened_root = root
-    return true
-  end
 
   controller:bind_output_panel_commands(12)
   assert_equal(bound["<C-q>"].desc, "Close Codux Missions")
@@ -760,88 +753,6 @@ do
   assert_nil(bound.w)
   assert_true(bound["<C-q>"].rhs())
   assert_true(closed)
-  assert_nil(opened_name)
-  assert_nil(opened_root)
-end
-
-do
-  local closed = false
-  local opened_name
-  local controller = mission_control_mod.new({
-    state = {
-      mission_dashboard_items = {
-        [5] = {
-          kind = "role",
-          entry = {
-            name = "Builder",
-            safe_name = "alpha-builder",
-            project_root = "/repo",
-            mission_role = "Builder",
-            status = "idle",
-          },
-        },
-      },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 5,
-      mission_dashboard_output_entry = {
-        name = "Stale",
-        safe_name = "stale-builder",
-        project_root = "/repo",
-      },
-    },
-    open_saved_workspace = function(name)
-      opened_name = name
-      return true
-    end,
-  })
-  function controller:close_dashboard()
-    closed = true
-    return true
-  end
-
-  assert_true(controller:open_output_workspace())
-  assert_equal(opened_name, "alpha-builder")
-  assert_false(closed)
-end
-
-do
-  local closed = false
-  local opened_name
-  local controller = mission_control_mod.new({
-    state = {
-      mission_dashboard_output_entry = {
-        name = "Builder",
-        safe_name = "alpha-builder",
-        project_root = "/repo",
-      },
-    },
-    open_saved_workspace = function(name)
-      opened_name = name
-      return false
-    end,
-  })
-  function controller:close_dashboard()
-    closed = true
-    return true
-  end
-
-  assert_false(controller:open_output_workspace())
-  assert_equal(opened_name, "alpha-builder")
-  assert_false(closed)
-end
-
-do
-  local notifications = {}
-  local controller = mission_control_mod.new({
-    state = {},
-    notify = function(message, level)
-      table.insert(notifications, { message = message, level = level })
-    end,
-  })
-
-  assert_false(controller:open_output_workspace())
-  assert_equal(notifications[1].message, "No Codux workspace selected")
-  assert_equal(notifications[1].level, vim.log.levels.WARN)
 end
 
 do

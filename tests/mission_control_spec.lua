@@ -1381,7 +1381,6 @@ do
 end
 
 do
-  local ran_action
   local entry = { name = "alpha-builder", safe_name = "alpha-builder" }
   local controller = mission_control_mod.new({
     state = {
@@ -1398,15 +1397,10 @@ do
       close_window = function() end,
       delete_buffer = function() end,
     },
-    open_saved_workspace = function(name)
-      ran_action = "open:" .. tostring(name)
-      return true
-    end,
   })
   function controller:close_dashboard() end
 
   assert_false(controller:run_highlighted_action())
-  assert_equal(ran_action, nil)
 end
 
 do
@@ -1437,10 +1431,6 @@ do
     end,
     delete_saved_workspace = function(workspace)
       table.insert(calls, "delete:" .. tostring(workspace.name))
-      return true
-    end,
-    open_saved_workspace = function(name)
-      table.insert(calls, "open:" .. tostring(name))
       return true
     end,
   })

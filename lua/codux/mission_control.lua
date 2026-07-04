@@ -149,7 +149,6 @@ function M.new(opts)
       or function()
         return {}
       end,
-    open_saved_workspace = type(opts.open_saved_workspace) == "function" and opts.open_saved_workspace or noop,
     edit_saved_workspace_instruction = type(opts.edit_saved_workspace_instruction) == "function"
         and opts.edit_saved_workspace_instruction
       or noop,
@@ -2047,7 +2046,7 @@ function M:action_palette_target()
   return self.state.mission_dashboard_action_mission
 end
 
-function M:run_action(action, target)
+function M:run_workspace_action(action, target)
   local workspace = target or self.state.mission_dashboard_action_workspace
   if action == "open_workspace" then
     return false
@@ -2088,12 +2087,15 @@ function M:run_action(action, target)
     self:close_action_palette()
     return self:create_new_workspace(workspace)
   end
+  return nil
+end
 
+function M:run_mission_action(action, target)
   if action == "create_mission" then
     self:close_action_palette()
     return self:create_new_mission()
   end
-  local mission = target or self.state.mission_dashboard_action_mission or self:selected_mission_name_or_notify()
+  local mission = target or self.state.mission_dashboard_action_mission or self:selected_mission_or_notify()
   if not mission then
     return false
   end
@@ -2121,6 +2123,14 @@ function M:run_action(action, target)
   return false
 end
 
+function M:run_action(action, target)
+  local workspace_result = self:run_workspace_action(action, target)
+  if workspace_result ~= nil then
+    return workspace_result
+  end
+  return self:run_mission_action(action, target)
+end
+
 function M:run_highlighted_action()
   return self:action_palette_controller():run_highlighted()
 end
@@ -2136,15 +2146,6 @@ function M:open_action_palette_for(target, kind)
   end
 
   return self:action_palette_controller():open(target, kind)
-end
-
-function M:selected_mission_name_or_notify()
-  local item = self:selected_selectable_item()
-  if not item or item.kind ~= "mission" then
-    self.notify("No Codux mission selected", vim.log.levels.WARN)
-    return nil
-  end
-  return item.mission
 end
 
 function M:selected_role_workspace_or_notify()
@@ -2172,37 +2173,6 @@ function M:mission_context_for_workspace(entry)
     mission_name = entry.mission_name,
     mission_objective = entry.mission_objective,
   }
-end
-
-function M:open_role_workspace(entry)
-  if type(entry) ~= "table" then
-    return false
-  end
-  local name = entry.safe_name or entry.name
-  if type(name) ~= "string" or name == "" then
-    return false
-  end
-
-  return self.open_saved_workspace(name, entry.project_root)
-end
-
-function M:open_output_workspace()
-  local entry = self:selected_output_entry()
-  if type(entry) ~= "table" then
-    entry = self.state.mission_dashboard_output_entry
-  end
-  if type(entry) ~= "table" then
-    self.notify("No Codux workspace selected", vim.log.levels.WARN)
-    return false
-  end
-
-  local name = entry.safe_name or entry.name
-  if type(name) ~= "string" or name == "" then
-    self.notify("No Codux workspace selected", vim.log.levels.WARN)
-    return false
-  end
-
-  return self:open_role_workspace(entry)
 end
 
 function M:open_workspace_prompt(entry)
