@@ -959,10 +959,10 @@ function M:delete_selected_workspace(item)
   if not item then
     return false
   end
-  local choice = vim.fn.confirm("Delete Codux workspace " .. item.name .. "?", "&Yes\n&No", 2)
-  if choice == 1 then
-    self.delete_saved_workspace(item)
+  if self.workspace_ui.confirm_delete_workspace(item) then
+    return self.delete_saved_workspace(item)
   end
+  return false
 end
 
 function M:close_selected_workspace_window(item)

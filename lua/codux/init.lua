@@ -1051,8 +1051,18 @@ function M.rename_workspace(old_name, new_name)
   return workspace_runtime:rename_workspace(old_name, new_name)
 end
 
-function M.delete_workspace(name)
-  return workspace_runtime:delete_workspace(name)
+function M.delete_workspace(name, opts)
+  opts = type(opts) == "table" and opts or {}
+  local root = workspace_runtime:project_root()
+  local entry, error_message = workspace_runtime:entry_for_name(root, name)
+  if not entry then
+    notify(error_message or "workspace not found", vim.log.levels.ERROR)
+    return false
+  end
+  if opts.confirm ~= false and not workspace_ui.confirm_delete_workspace(entry) then
+    return false
+  end
+  return workspace_runtime:delete_saved_workspace(entry)
 end
 
 function M.close_all_workspace_windows(project_root)

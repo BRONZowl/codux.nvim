@@ -1184,6 +1184,8 @@ do
   local old_confirm = vim.fn.confirm
   vim.fn.confirm = function(message, choices, default)
     table.insert(calls, "confirm:" .. tostring(message) .. ":" .. tostring(choices) .. ":" .. tostring(default))
+    assert_equal(choices, "&Delete\n&Cancel")
+    assert_equal(default, 2)
     return 1
   end
   local controller = mission_control_mod.new({
@@ -1223,6 +1225,31 @@ do
   assert_contains(calls[4], "confirm:Delete Codux workspace alpha-builder?")
   assert_equal(calls[5], "delete:alpha-builder")
   vim.fn.confirm = old_confirm
+end
+
+do
+  local entry = {
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    workspace_kind = "worktree",
+    worktree_path = "/codux-worktrees/alpha-builder",
+    worktree_branch = "dev/alpha-builder",
+  }
+  local message = workspace_ui.delete_workspace_message(entry)
+  assert_contains(message, "Delete Codux workspace alpha-builder?")
+  assert_contains(message, "Force delete will remove the Git worktree and delete its branch.")
+  assert_contains(message, "Uncommitted and untracked work")
+  assert_contains(message, "Worktree: /codux-worktrees/alpha-builder")
+  assert_contains(message, "Branch: dev/alpha-builder")
+  assert_true(workspace_ui.confirm_delete_workspace(entry, function(confirm_message, choices, default)
+    assert_equal(confirm_message, message)
+    assert_equal(choices, "&Delete\n&Cancel")
+    assert_equal(default, 2)
+    return 1
+  end))
+  assert_false(workspace_ui.confirm_delete_workspace(entry, function()
+    return 2
+  end))
 end
 
 do
@@ -2947,6 +2974,36 @@ do
 end
 
 do
+  local confirmed_message
+  local delete_called = false
+  local controller = manager_mod.new({
+    workspace_ui = workspace_ui,
+    delete_saved_workspace = function()
+      delete_called = true
+      return true
+    end,
+  })
+  local old_confirm = vim.fn.confirm
+  vim.fn.confirm = function(message, choices, default)
+    confirmed_message = message
+    assert_equal(choices, "&Delete\n&Cancel")
+    assert_equal(default, 2)
+    return 2
+  end
+
+  assert_false(controller:delete_selected_workspace({
+    name = "review",
+    safe_name = "review",
+    workspace_kind = "worktree",
+    worktree_path = "/codux-worktrees/review",
+    worktree_branch = "dev/review",
+  }))
+  assert_contains(confirmed_message, "Force delete will remove the Git worktree and delete its branch.")
+  assert_false(delete_called)
+  vim.fn.confirm = old_confirm
+end
+
+do
   local old_api = vim.api
   local highlights = {}
   vim.api = {
@@ -3442,6 +3499,60 @@ if type(vim.api) == "table" then
   assert_contains(table.concat(rendered_lines, "\n"), "Output: Reviewer")
   assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-reviewer")
   assert_equal(controller.state.mission_dashboard_output_job, 77)
+  vim.api.nvim_buf_delete(bufnr, { force = true })
+end
+
+if type(vim.api) == "table" then
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  local preview_entry
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_buf = 10,
+      mission_dashboard_win = 11,
+      mission_dashboard_output_buf = bufnr,
+      mission_dashboard_output_win = 13,
+      mission_dashboard_items = {
+        [3] = {
+          kind = "mission",
+          mission = {
+            roles = {
+              { safe_name = "alpha-architect", mission_role = "Architect", status = "active" },
+              { safe_name = "alpha-reviewer", mission_role = "Reviewer", status = "question" },
+            },
+          },
+        },
+      },
+      mission_dashboard_selectable_rows = { 3 },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 3,
+    },
+    is_loaded_buf = function(target)
+      return target == 10 or (target == bufnr and vim.api.nvim_buf_is_loaded(target))
+    end,
+    is_valid_win = function(win)
+      return win == 11 or win == 13
+    end,
+    ui = {
+      set_lines = function()
+        return true
+      end,
+    },
+    workspace_interactive_preview = function(entry)
+      preview_entry = entry
+      return {
+        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
+        preview_session = "codux-preview-test",
+      }, nil
+    end,
+    termopen = function()
+      return 77
+    end,
+  })
+
+  assert_equal(controller:selected_output_entry().safe_name, "alpha-reviewer")
+  assert_true(controller:render_output_panel())
+  assert_equal(preview_entry.safe_name, "alpha-reviewer")
+  assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-reviewer")
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 

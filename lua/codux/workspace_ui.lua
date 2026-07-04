@@ -240,6 +240,35 @@ function M.manager_action_items()
   }
 end
 
+function M.delete_workspace_message(entry)
+  entry = type(entry) == "table" and entry or {}
+  local label = entry.name or entry.safe_name or "workspace"
+  local lines = {
+    "Delete Codux workspace " .. tostring(label) .. "?",
+    "",
+    "This removes the saved workspace metadata and instruction file.",
+  }
+
+  if entry.workspace_kind == "worktree" or entry.worktree_path or entry.worktree_branch then
+    table.insert(lines, "")
+    table.insert(lines, "Force delete will remove the Git worktree and delete its branch.")
+    table.insert(lines, "Uncommitted and untracked work in this workspace may be lost.")
+    if type(entry.worktree_path) == "string" and entry.worktree_path ~= "" then
+      table.insert(lines, "Worktree: " .. entry.worktree_path)
+    end
+    if type(entry.worktree_branch) == "string" and entry.worktree_branch ~= "" then
+      table.insert(lines, "Branch: " .. entry.worktree_branch)
+    end
+  end
+
+  return table.concat(lines, "\n")
+end
+
+function M.confirm_delete_workspace(entry, confirm_fn)
+  confirm_fn = type(confirm_fn) == "function" and confirm_fn or vim.fn.confirm
+  return confirm_fn(M.delete_workspace_message(entry), "&Delete\n&Cancel", 2) == 1
+end
+
 function M.manager_action_line(item, width)
   item = type(item) == "table" and item or {}
   width = tonumber(width) or 40
