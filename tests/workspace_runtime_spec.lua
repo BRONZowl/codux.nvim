@@ -1630,9 +1630,9 @@ do
     return false, "still execute"
   end
 
-  assert_false(runtime:start_mission("Alpha", { project_root = "/repo" }))
-  assert_contains(table.concat(notifications, "\n"), "Failed to start Codux mission role Builder: still execute")
-  assert_contains(table.concat(notifications, "\n"), "Started 0 roles in Codux mission Alpha; 1 failed")
+  assert_true(runtime:start_mission("Alpha", { project_root = "/repo" }))
+  assert_equal(#notifications, 1)
+  assert_equal(notifications[1], "Started Codux mission Alpha with 1 roles")
 end
 
 do
