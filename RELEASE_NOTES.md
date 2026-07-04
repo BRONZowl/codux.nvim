@@ -1,5 +1,20 @@
 # Release Notes
 
+## v0.8.0
+
+Mission Control release.
+
+codux.nvim v0.8.0 promotes Mission Control into the main Codux workflow and tightens the surrounding workspace, prompt, profile, and dashboard behavior.
+
+- Added Mission Control for creating objective-scoped Codux crews with Git worktree role workspaces, mission metadata, plan-mode startup, workspace-auto permissions, and rollback when role startup cannot be verified.
+- Refined the default mission crew to Builder and Reviewer roles, with role prompts that start in plan mode and ask for repo grounding, next steps, blockers, and handoff notes.
+- Added the mission dashboard with fuzzy mission/role search, search/list tab switching, selectable mission and role rows, contextual mission/workspace menus, live role output preview, token usage, prompt sending, question answering, role interrupt, mission close, and destructive mission delete.
+- Added a keyed Codex open profile picker for default, auto, and full-access starts, and routed prompt actions through the picker when Codex is not already running.
+- Extracted shared dashboard search, action palette, mission output panel, and test helpers to support the expanded UI surface.
+- Hardened workspace lifecycle behavior around plan-mode gating, created-workspace mission attachment, workspace delete confirmations, inactive workspace state, hidden focus sinks, prompt focus restoration, and Mission Control dashboard refresh paths.
+- Refreshed `README.md` to document the current plugin-first command surface, workspaces, Mission Control, token/status monitoring, Doctor, and test workflow while removing GIF embeds.
+- Expanded automated coverage for Mission Control, mission output preview, action palettes, profile opening, prompt actions, terminal mode handling, workspace runtime, workspace store, workspace UI, dashboard search, and headless Neovim validation.
+
 ## v0.7.1
 
 Workspace worktrees and cleanup.

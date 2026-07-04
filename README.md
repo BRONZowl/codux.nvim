@@ -1,240 +1,16 @@
 <p align="center">
-  ⭐ If codux.nvim helps your workflow, consider starring the repo — it helps other Neovim users discover it.
-</p>
-
-<br>
-
-<p align="center">
   <img src="assets/codux-title.svg" alt="codux.nvim" width="900">
 </p>
 
-<h2 align="center">What is Codux?</h2>
+# codux.nvim
 
-<p align="center">
-  Codux is a Neovim plugin that runs OpenAI Codex inside a persistent floating terminal.
-</p>
+codux.nvim runs the OpenAI Codex CLI from Neovim and keeps the session close to
+the code you are already editing. It provides a persistent floating terminal,
+editor-native prompt helpers, token/status visibility, tmux-backed Codux
+workspaces, and Mission Control for coordinated multi-role Codex sessions.
 
-<p align="center">
-  Unlike chat-style AI plugins, Codux keeps you connected to a real Codex CLI session.<br>
-  Send files, visual selections, diagnostics, Git diffs, and file explorer targets directly from Neovim without leaving your editor.
-</p>
-
-<p align="center">
-  Close the window at any time; the Codex session keeps running in the background.
-  Codux helps preserve and organize Codex context so you waste fewer tokens rebuilding prompts.
-</p>
-
-<h2 align="center">Why Codux?</h2>
-
-<p align="center">
-  Persistent Codex sessions<br>
-  Floating terminal workflow<br>
-  Built-in token monitoring<br>
-  Native Neovim experience<br>
-  No context loss between prompts
-</p>
-
-<p align="center">
-  <img src="assets/codux-demo.gif?v=20260619-token-usage-2" alt="codux.nvim showing the Codex menu, persistent terminal, and visual selection workflow" width="900">
-</p>
-
-<h2 align="center">Why not just use Codex in a terminal?</h2>
-
-<p align="center">
-  Using Codex in a separate terminal works, but it means:
-</p>
-
-<p align="center">
-  Switching between editor and terminal<br>
-  Losing focus while reviewing changes<br>
-  Managing window layouts manually<br>
-  No editor-native visibility into token usage
-</p>
-
-<p align="center">
-  codux.nvim keeps your Codex workflow inside Neovim with:
-</p>
-
-<p align="center">
-  Persistent sessions<br>
-  Floating terminal integration<br>
-  Built-in token monitoring<br>
-  Fast toggling between code and AI
-</p>
-
-<div align="center">
-
-<h2>Codux Workspaces with tmux</h2>
-
-<p>
-  Large development tasks rarely involve a single conversation.
-</p>
-
-<p>
-  With tmux, you can dedicate a Codux session to a specific objective and keep that context alive while you work.
-</p>
-
-<p>
-  <strong>Window 1 - Feature Development</strong><br>
-  Implementing a new gameplay system<br>
-  Codux focused on design decisions, code generation, and implementation details
-</p>
-
-<p>
-  <strong>Window 2 - Code Review</strong><br>
-  Reviewing your current branch<br>
-  Codux focused on bugs, edge cases, performance issues, and refactoring opportunities
-</p>
-
-<p>
-  <strong>Window 3 - Debugging</strong><br>
-  Investigating a failing test or runtime issue<br>
-  Codux focused on logs, diagnostics, stack traces, and root-cause analysis
-</p>
-
-<p>
-  <strong>Window 4 - Architecture</strong><br>
-  Planning larger changes<br>
-  Codux focused on project structure, APIs, and long-term design decisions
-</p>
-
-<p>
-  Each Codux session maintains its own conversation and context.
-</p>
-
-<p>
-  Instead of constantly changing topics within a single AI conversation, you can keep dedicated Codux sessions attached to specific workflows and switch between them instantly from the workspace dashboard.
-</p>
-
-<p align="center">
-  <img src="assets/codux-workspaces.gif?v=20260621-workspaces" alt="codux.nvim creating and managing named Codex workspaces in tmux" width="900">
-</p>
-
-<p>
-  Use <code>:CoduxWorkspaceCreate</code> inside tmux to create a guided Codex workspace.
-  The create flow prompts for a name, opens the Vim-like instruction editor, then previews the instruction before launch.
-  Workspace instructions are mirrored to <code>.agents/codux/&lt;workspace&gt;.md</code>, stored in Codux workspace state, and passed to Codex as session guidance; Codux does not create or edit <code>AGENTS.md</code>.
-  New Codux workspaces are Git worktrees: Codux requires the current checkout to be clean, creates <code>../codux-worktrees/&lt;workspace&gt;</code> on branch <code>dev/&lt;workspace&gt;</code> from the current ref, and launches the workspace there.
-  If a branch named <code>dev</code> already exists, Codux uses the next available namespace such as <code>dev1/&lt;workspace&gt;</code>.
-</p>
-
-<p>
-  Inside tmux, Codux creates or reuses a window named after the workspace in the current tmux session, restores Neo-tree to the same target when available, and starts new workspaces with your current Codex permission profile.
-  New Codux-managed Codex sessions start in plan mode by default; set <code>default_initial_mode = "execute"</code> in <code>require("codux").setup()</code> to keep the previous execute-mode startup behavior.
-  Reopened saved workspaces keep their stored profile.
-  Reopened saved workspaces resume the stored Codex session id when available, so the workspace returns to the same Codex conversation instead of starting a new one.
-  Workspace windows use the requested workspace name for the tmux window.
-  The workspace name is the worktree name.
-  New guided workspaces open the Codux popup with the workspace guidance loaded and wait for your first task.
-</p>
-
-<p>
-  Use <code>:CoduxMissionCreate</code> to launch Mission Control.
-  Codux prompts for one mission objective, previews a default crew of builder and reviewer roles, then creates a clean Git worktree workspace for each role and starts each agent in plan mode with workspace-auto permissions.
-  Mission role workspaces keep their mission metadata in Codux workspace state, and <code>:CoduxMissions</code> or <code>&lt;leader&gt;zM</code> opens a mission dashboard with full-word workspace detail columns for status, permission profile, last activity, needs review, worktree status, window status, branch, cleanup status, and target.
-  Codux opens a <code>Codux mission:</code> search field above the mission dashboard; type a fuzzy mission, role, or workspace name to filter the dashboard while keeping each matching mission block visible.
-  Press <code>&lt;Tab&gt;</code> to switch between mission search and the dashboard list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted mission or role, then use <code>j</code>/<code>k</code> to move through selectable mission and role rows.
-  The dashboard shows a live output panel near the top; it follows the highlighted role, or the first role in the highlighted mission.
-  From the mission dashboard, press <code>p</code> to send a prompt or command to the highlighted role workspace when it is open, <code>m</code> to open a mission menu when a mission row is highlighted or a workspace menu when a role row is highlighted, <code>s</code> from a mission menu to start or reopen all role workspaces, <code>v</code> from a mission menu to view the objective, <code>o</code> from a role workspace menu to open that workspace, <code>e</code> to edit the mission objective across all role instructions, <code>x</code> to close all role windows, <code>d</code> to delete the whole mission after a destructive confirmation, <code>n</code> to create another mission, or <code>w</code> to create a Codux workspace.
-  Command equivalents are <code>:CoduxMissionEdit &lt;mission&gt;</code>, <code>:CoduxMissionClose &lt;mission&gt;</code>, and <code>:CoduxMissionDelete &lt;mission&gt;</code>.
-</p>
-
-<p>
-  Workspace names are persisted per project in <code>stdpath("data")/codux/workspaces.json</code>.
-  Instruction files in <code>.agents/codux/</code> are project-local and editable; when a non-empty instruction file exists, Codux uses it over the saved JSON copy.
-  Codux warns when <code>.agents/codux/</code> is not ignored by Git in the current project; run <code>:CoduxWorkspaceIgnore</code> once to add the ignore rule to that project's <code>.gitignore</code>.
-  If workspace state is missing but an instruction file remains, the workspace dashboard can recover that workspace entry from the file.
-  Creating a workspace with an existing name shows <code>workspace already exists</code>.
-  When a workspace branch has been merged into its recorded base ref, the dashboard prompts to delete the workspace, worktree, instruction file, saved state, and branch.
-</p>
-
-<p>
-  Use <code>:CoduxWorkspaces</code> to open <code>current codux workspaces</code>.
-  Codux opens a <code>Codux workspace:</code> search field above the dashboard; type a fuzzy workspace name to filter the dashboard and preview the closest match.
-  Press <code>&lt;Tab&gt;</code> to switch between the search field and workspace list. Press <code>&lt;CR&gt;</code> in search to focus the highlighted dashboard result, then use dashboard shortcuts: <code>j</code>/<code>k</code> to move, <code>&lt;CR&gt;</code> to open, <code>h</code> to run Doctor, and <code>m</code> to open the selected-workspace menu.
-  The workspace menu exposes rename workspace, edit instructions, close workspace, close all workspaces, and delete workspace.
-  Deleting a workspace closes its tmux window, removes saved state and matching <code>.agents/codux/&lt;workspace&gt;.md</code> instruction file, removes the worktree, and deletes the workspace branch.
-  Press <code>&lt;Tab&gt;</code> from the dashboard to search again, or <code>&lt;C-q&gt;</code> to close the dashboard and search field.
-  Statuses show <code>active</code> when Codex is working, <code>question</code> when plan mode is waiting on your answer, <code>idle</code> when the workspace is open, or <code>inactive</code> when it is not open.
-  The mode column shows <code>execute</code>, <code>plan</code>, or <code>not set</code> when the workspace mode is unknown or inactive.
-  The dashboard uses question/active/idle/inactive status order, then recent activity, and shows each workspace permission profile, last activity, needs review, worktree status, window status, branch, cleanup status, and target.
-  The target column updates as each workspace moves between files or supported file explorer targets.
-</p>
-
-<p>
-  Outside tmux, Codux shows <code>no tmux session running</code> and does not create a workspace.
-</p>
-
-<p>
-  Workspace names are user-defined and sanitized for tmux window safety.
-  Empty names and sanitized-name collisions are rejected with a clear error.
-</p>
-
-<h3>Workspace Restore and Doctor</h3>
-
-<p>
-  Use <code>:CoduxWorkspaceRestore</code> to reconcile saved workspace state with tmux after restarts.
-  Saved workspace state also records the Codex session id after launch; older workspace records are seeded from the most recent local Codex session for the same project root the next time they are opened.
-  Use <code>:CoduxDoctor</code>, or press <code>h</code> in the workspace dashboard, when troubleshooting external dependencies and saved workspace targets.
-</p>
-
-<p align="center">
-  <img src="assets/codux-doctor-full.png" alt="codux.nvim doctor output showing tmux, codex, workspace state, project root, loaded workspaces, and missing workspace target checks" width="700">
-</p>
-
-</div>
-
-## Manual Install
-
-1. Add codux.nvim with lazy.nvim or LazyVim:
-
-```lua
-{
-  "BRONZowl/codux.nvim",
-  opts = {},
-}
-```
-
-2. Run `:Lazy sync`, restart Neovim, then open Codux:
-
-```vim
-:Codux
-```
-
-In LazyVim, `<leader>` is usually Space. Codux also maps open to `<leader>zc`; that key opens a fixed picker where `d` is default, `a` is auto, and `f` is full access.
-
-3. Install the Codex CLI and sign in if `codex` is not already available:
-
-```bash
-curl -fsSL https://chatgpt.com/codex/install.sh | sh
-codex login
-```
-
-Confirm the CLI is available:
-
-```bash
-codex --version
-```
-
-4. Open a project and verify the setup:
-
-```bash
-cd ~/Projects/your-project
-nvim
-```
-
-```vim
-:checkhealth codux
-:Codux
-```
-
-<h3 align="center">
-  <strong>Or just have Codex do it.</strong>
-</h3>
-
-<p align="center">
-  Ask Codex: <code>Install BRONZowl/codux.nvim in my LazyVim config.</code>
-</p>
+Codux is plugin-first. Install it as a Neovim plugin, then use Neovim commands
+and mappings to open Codex, send context, manage workspaces, and launch missions.
 
 ## Requirements
 
@@ -244,171 +20,255 @@ nvim
 
 Optional:
 
-- which-key.nvim for the `<leader>z` group label
-- tmux for `:CoduxWorkspaceCreate <name>`
+- which-key.nvim for the `<leader>z` group label and live Codux status header
+- tmux for Codux workspaces and Mission Control
 - Neo-tree, Oil.nvim, nvim-tree, or mini.files for file explorer targets
 
-This plugin was developed using Neo-tree in LazyVim.
-
-Windows users can use WSL2 with the Linux install command above, or follow the official Codex Windows setup guide.
-
-For remote or headless login:
+Windows users can use WSL2 with the Linux Codex CLI install flow. For remote or
+headless login, run:
 
 ```bash
 codex login --device-auth
 ```
 
-Codux sends requested files, selections, diagnostics, and health output through your configured Codex CLI session.
+## Install
 
-<h2 align="center">Usage</h2>
+Add codux.nvim with lazy.nvim or LazyVim:
 
-<table align="center">
-<tr>
-<th>Action</th>
-<th>Key</th>
-<th>Command</th>
-</tr>
-<tr>
-<td>Open or focus Codex; <code>&lt;leader&gt;zc</code> uses <code>d</code> default, <code>a</code> auto, or <code>f</code> full when Codex is not running</td>
-<td><code>&lt;leader&gt;zc</code></td>
-<td><code>:Codux</code></td>
-</tr>
-<tr>
-<td>Open Codex autopilot with approve-for-me permissions</td>
-<td>-</td>
-<td><code>:CoduxOpenAuto</code></td>
-</tr>
-<tr>
-<td>Open Codex danger zone with no sandbox</td>
-<td>-</td>
-<td><code>:CoduxOpenDanger</code></td>
-</tr>
-<tr>
-<td>Create a guided tmux workspace</td>
-<td>-</td>
-<td><code>:CoduxWorkspaceCreate</code></td>
-</tr>
-<tr>
-<td>Manage current Codux workspaces</td>
-<td>-</td>
-<td><code>:CoduxWorkspaces</code></td>
-</tr>
-<tr>
-<td>Create a Codux mission crew</td>
-<td>-</td>
-<td><code>:CoduxMissionCreate</code></td>
-</tr>
-<tr>
-<td>Mission Control</td>
-<td><code>&lt;leader&gt;zM</code></td>
-<td><code>:CoduxMissions</code></td>
-</tr>
-<tr>
-<td>Open the mission dashboard</td>
-<td><code>&lt;leader&gt;zM</code></td>
-<td><code>:CoduxMissionDashboard</code></td>
-</tr>
-<tr>
-<td>Edit a Codux mission objective</td>
-<td></td>
-<td><code>:CoduxMissionEdit &lt;mission&gt;</code></td>
-</tr>
-<tr>
-<td>Close a Codux mission</td>
-<td></td>
-<td><code>:CoduxMissionClose &lt;mission&gt;</code></td>
-</tr>
-<tr>
-<td>Delete a Codux mission</td>
-<td></td>
-<td><code>:CoduxMissionDelete &lt;mission&gt;</code></td>
-</tr>
-<tr>
-<td>Ignore local workspace files</td>
-<td></td>
-<td><code>:CoduxWorkspaceIgnore</code></td>
-</tr>
-<tr>
-<td>Send current file or explorer node</td>
-<td><code>&lt;leader&gt;zf</code></td>
-<td><code>:CoduxReview</code></td>
-</tr>
-<tr>
-<td>Send selected code</td>
-<td><code>&lt;leader&gt;zs</code></td>
-<td><code>:&#39;&lt;,&#39;&gt;CoduxReviewSelection</code></td>
-</tr>
-<tr>
-<td>Send diagnostics and health output</td>
-<td><code>&lt;leader&gt;zd</code></td>
-<td><code>:CoduxDiagnostics</code></td>
-</tr>
-<tr>
-<td>Send Git changes</td>
-<td><code>&lt;leader&gt;zg</code></td>
-<td><code>:CoduxDiff</code></td>
-</tr>
-<tr>
-<td>Toggle Codex plan mode</td>
-<td><code>&lt;leader&gt;zp</code></td>
-<td><code>:CoduxTogglePlan</code></td>
-</tr>
-<tr>
-<td>Hide the popup</td>
-<td><code>&lt;C-q&gt;</code></td>
-<td><code>:CoduxClose</code></td>
-</tr>
-<tr>
-<td>Close Codux dashboards and prompts</td>
-<td><code>&lt;C-q&gt;</code></td>
-<td></td>
-</tr>
-<tr>
-<td>Start typing after scrolling</td>
-<td>Type normally</td>
-<td></td>
-</tr>
-<tr>
-<td>Stop Codex</td>
-<td></td>
-<td><code>:CoduxExit</code></td>
-</tr>
-<tr>
-<td>Move workspace dashboard selection</td>
-<td><code>j</code> / <code>k</code></td>
-<td></td>
-</tr>
-<tr>
-<td>Troubleshoot Codux setup</td>
-<td><code>h</code> in workspace dashboard</td>
-<td><code>:CoduxDoctor</code></td>
-</tr>
-</table>
+```lua
+{
+  "BRONZowl/codux.nvim",
+  opts = {},
+}
+```
 
-<p align="center">
-  <code>:CoduxOpenDanger</code> starts Codex with no approval prompts and no sandbox. Use it only in repositories you trust.
-</p>
+Install and authenticate the Codex CLI if `codex` is not already available:
 
-<h2 align="center">Token Monitoring</h2>
+```bash
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+codex login
+codex --version
+```
 
-<p align="center">
-  The <code>&lt;leader&gt;z</code> menu header shows the current Codux-tracked status and token usage while Codux is running:<br>
-  <code>codux exec | 5hr 3% | wk 5%</code><br>
-  <code>codux plan | 5hr 3% | wk 5%</code>
-</p>
+Restart Neovim, open a project, then verify Codux:
 
-<p align="center">
-  Token monitoring refreshes in the background only while Codux is running. The popup can be hidden, but the Codex session must still be active. If usage is unavailable while Codux is running, Codux shows <code>--%</code> placeholders. Status text is green for execute, purple for plan, and red when Codex is not running.
-</p>
+```vim
+:checkhealth codux
+:Codux
+```
 
-<p align="center">
-  When Codex is actively working and the popup is hidden, Codux shows a small <code>codex is working...</code> indicator near the bottom-right of the editor. The indicator clears when Codex goes idle, is interrupted, or exits.
-</p>
+## Quick Start
 
-<h2 align="center">Roadmap</h2>
+`:Codux` opens or focuses the persistent Codex popup. Closing the popup with
+`:CoduxClose` or `<C-q>` hides the window without stopping Codex; `:CoduxExit`
+stops the Codex process.
 
-<p align="center">
-  codux.nvim is focused on persistent, organized Codex context rather than autonomous background loops.
-  Upcoming work will focus on improving saved workspace management and dashboard ergonomics.
-  Future task-run features should stay bounded and human-approved, with explicit step limits, visible token awareness, and pauses before continuing.
-</p>
+The default open mapping is `<leader>zc`. When Codex is not running, it opens a
+small profile picker:
+
+- `d` starts the default Codex command.
+- `a` starts the workspace-auto command.
+- `f` starts the danger/full-access command.
+
+Use full access only in repositories you trust. `:CoduxOpenDanger` starts Codex
+with no approval prompts and no sandbox.
+
+Codux can send editor context to the active Codex session:
+
+- `:CoduxReview` sends the current file, directory, or supported file explorer
+  target.
+- `:'<,'>CoduxReviewSelection` sends the visual selection.
+- `:CoduxDiagnostics` sends diagnostics, quickfix/location list context, and
+  Codux health output.
+- `:CoduxDiff` sends the current Git diff.
+
+## Commands
+
+| Action | Default key | Command |
+| --- | --- | --- |
+| Open or focus Codex | `<leader>zc` | `:Codux` or `:CoduxOpen` |
+| Toggle Codex popup | none | `:CoduxToggle` |
+| Hide the popup | `<C-q>` in popup | `:CoduxClose` |
+| Stop Codex | none | `:CoduxExit` |
+| Open Codex with auto profile | picker key `a` | `:CoduxOpenAuto` |
+| Open Codex with full access | picker key `f` | `:CoduxOpenDanger` |
+| Send file, folder, or explorer node | `<leader>zf` | `:CoduxReview` |
+| Send visual selection | `<leader>zs` | `:CoduxReviewSelection` |
+| Send diagnostics and health output | `<leader>zd` | `:CoduxDiagnostics` |
+| Send Git diff | `<leader>zg` | `:CoduxDiff` |
+| Toggle Codex plan mode | `<leader>zp` | `:CoduxTogglePlan` |
+| Create a tmux workspace | none | `:CoduxWorkspace` or `:CoduxWorkspaceCreate` |
+| Show current workspaces | none | `:CoduxWorkspaces` |
+| Open a saved workspace | none | `:CoduxWorkspaceOpen <name>` |
+| Select a saved workspace | none | `:CoduxWorkspaceSelect <name>` |
+| Rename a workspace | none | `:CoduxWorkspaceRename <old> <new>` |
+| Delete a workspace | none | `:CoduxWorkspaceDelete <name>` |
+| Restore workspace state from tmux | none | `:CoduxWorkspaceRestore` |
+| Close all workspace windows | none | `:CoduxWorkspaceCloseAll` |
+| Ignore local workspace files | none | `:CoduxWorkspaceIgnore` |
+| Create a Mission Control crew | none | `:CoduxMissionCreate` |
+| Show Mission Control | `<leader>zM` | `:CoduxMissions` or `:CoduxMissionDashboard` |
+| Edit a mission objective | none | `:CoduxMissionEdit <mission>` |
+| Close a mission | none | `:CoduxMissionClose <mission>` |
+| Delete a mission | none | `:CoduxMissionDelete <mission>` |
+| Run Neovim health checks | none | `:CoduxHealth` |
+| Run Codux Doctor | `h` in workspace dashboard | `:CoduxDoctor` |
+
+By default, Codux maps only the core single-session actions and Mission Control:
+open, review file, review selection, diagnostics, diff, plan-mode toggle, and
+missions. Workspace create/list mappings are disabled by default, but every
+workspace command is available directly.
+
+## Configuration
+
+The default setup is:
+
+```lua
+require("codux").setup({
+  default_initial_mode = "plan",
+  token_monitor = {
+    enabled = true,
+  },
+  workspaces = {
+    enabled = true,
+    tmux_cmd = "tmux",
+    worktree = {
+      directory = "../codux-worktrees",
+      branch_prefix = "dev/",
+    },
+    instruction_files = {
+      enabled = true,
+      directory = ".agents/codux",
+    },
+  },
+})
+```
+
+The Codex commands can be overridden through setup options or environment
+variables:
+
+- `CODEX_CMD` for the default profile
+- `CODEX_WORKSPACE_AUTO_CMD` for the auto profile
+- `CODEX_DANGER_FULL_ACCESS_CMD` for the full-access profile
+
+New Codux-managed Codex sessions start in plan mode. Set
+`default_initial_mode = "execute"` to keep older execute-mode startup behavior.
+
+## Workspaces
+
+Codux workspaces are tmux-backed Neovim windows with their own Codex session,
+instruction file, Git worktree, target path, permission profile, and saved state.
+They are intended for dedicated streams of work such as implementation, review,
+debugging, or architecture.
+
+Run `:CoduxWorkspaceCreate` inside tmux to create a guided workspace. Codux:
+
+- prompts for a workspace name
+- opens a Vim-like instruction editor
+- previews the instruction before launch
+- requires the current checkout to be clean
+- creates `../codux-worktrees/<workspace>` from the current ref
+- creates a `dev/<workspace>` branch, or the next available namespace such as
+  `dev1/<workspace>` when needed
+- writes `.agents/codux/<workspace>.md` in the workspace
+- opens a tmux window named for the workspace
+- starts the workspace Codex session in plan mode
+
+Workspace state is stored per project in
+`stdpath("data")/codux/workspaces.json`. Instruction files are project-local; if
+a non-empty `.agents/codux/<workspace>.md` exists, Codux uses it over the saved
+JSON copy.
+
+Use `:CoduxWorkspaces` to open the workspace dashboard. It includes fuzzy search,
+`<Tab>` search/list switching, `j`/`k` movement, `<CR>` open, `h` Doctor, and
+`m` for the selected-workspace menu. The menu supports rename, edit
+instructions, close workspace, close all workspaces, and delete workspace.
+
+Deleting a workspace removes saved state and the matching instruction file,
+closes the tmux window, removes the worktree, and deletes the workspace branch.
+When `.agents/codux/` is not ignored by Git, Codux warns; run
+`:CoduxWorkspaceIgnore` once per project to add the ignore rule.
+
+Outside tmux, workspace creation stops with `no tmux session running`.
+
+## Mission Control
+
+Mission Control launches a small crew of Codux workspaces for one objective. Run
+`:CoduxMissionCreate`, enter the objective, review the preview, and launch.
+
+The default crew is:
+
+- Builder: implements the primary code changes with focused validation.
+- Reviewer: reviews the branch for bugs, regressions, edge cases, and test gaps.
+
+Each role gets a clean Git worktree workspace, mission metadata in Codux
+workspace state, workspace-auto permissions, and an initial plan-mode prompt. If
+Codux cannot confirm plan mode for a newly created mission role, it rolls back
+the new role workspaces.
+
+`:CoduxMissions`, `:CoduxMissionDashboard`, and `<leader>zM` open the mission
+dashboard. It shows mission and role rows with status, mode, profile, age, and
+target, plus a live `Output:` panel near the top for the highlighted role.
+
+Dashboard controls:
+
+- Type in `Codux mission:` to fuzzy-filter mission, role, or workspace names.
+- `<Tab>` switches between search and the dashboard list.
+- `<CR>` focuses the highlighted mission or role from search.
+- `j`/`k` moves through selectable mission and role rows.
+- `p` sends a prompt to an open highlighted role workspace.
+- `m` opens the mission menu for mission rows or the workspace menu for role
+  rows.
+
+Mission menu actions include start/reopen mission, view objective, edit
+objective, close mission, delete mission, and create a mission. Role workspace
+menus include answer question when active, edit instructions, close workspace,
+delete workspace, and create workspace.
+
+Close and delete are separate operations. Closing a mission only closes role
+windows and preserves worktrees, branches, instructions, saved state, and mission
+metadata. Deleting a mission is destructive cleanup and asks for confirmation.
+
+## Token and Status Monitoring
+
+When Codux is running, the `<leader>z` which-key header shows the current Codux
+mode and token usage, for example:
+
+```text
+codux exec | 5hr 3% | wk 5%
+codux plan | 5hr 3% | wk 5%
+```
+
+Token monitoring refreshes in the background only while Codux is running. If
+usage is unavailable, Codux shows `--%` placeholders. When Codex is actively
+working and the popup is hidden, Codux shows a small `codex is working...`
+indicator near the bottom-right of the editor.
+
+## Troubleshooting
+
+Use `:checkhealth codux` or `:CoduxHealth` for Neovim health checks.
+
+Use `:CoduxDoctor` for Codux-specific runtime checks. Doctor reports tmux
+availability, Codex availability, workspace state readability/writability,
+project-root detection, `.agents/codux/` ignore status, loaded workspaces, and
+workspace window state.
+
+Common checks:
+
+- `codex --version` confirms the Codex CLI is available.
+- `:checkhealth codux` confirms Neovim can load the plugin.
+- `:CoduxDoctor` confirms tmux/workspace state for Codux workspaces.
+- `:CoduxWorkspaceRestore` reconciles saved workspace state with tmux after
+  restarts.
+
+## Development
+
+Run the test suite with:
+
+```bash
+make test
+```
+
+The suite runs plain Lua specs, headless Neovim specs with
+`--headless -u NONE -i NONE --cmd 'set shadafile=NONE'`, LuaJIT syntax loading,
+plugin setup, and `checkhealth codux`.
