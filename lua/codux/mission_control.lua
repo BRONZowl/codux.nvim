@@ -2490,7 +2490,7 @@ function M:open_workspace_prompt_input(entry, label, submit_fn, success_prefix)
   })
 end
 
-function M:interrupt_workspace_prompt(entry)
+function M:interrupt_workspace_action(entry)
   entry = type(entry) == "table" and entry or self:selected_role_workspace_or_notify()
   if not entry then
     return false
@@ -2506,7 +2506,9 @@ function M:interrupt_workspace_prompt(entry)
   end
 
   local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
-  return self:open_workspace_prompt_input(entry, label, self.send_prompt_to_workspace, "Sent prompt to ")
+  self.notify("Interrupted " .. tostring(label))
+  self:render_dashboard()
+  return true
 end
 
 function M:interrupt_selected_workspace(entry)
@@ -2514,7 +2516,7 @@ function M:interrupt_selected_workspace(entry)
   if not entry then
     return false
   end
-  return self:interrupt_workspace_prompt(entry)
+  return self:interrupt_workspace_action(entry)
 end
 
 function M:switch_selected_workspace_mode(entry)

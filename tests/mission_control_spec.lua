@@ -2151,6 +2151,7 @@ end
 do
   local calls = {}
   local notifications = {}
+  local rendered = false
   local entry = {
     name = "alpha-builder",
     safe_name = "alpha-builder",
@@ -2180,12 +2181,16 @@ do
       return true, nil
     end,
   })
+  function controller:render_dashboard()
+    rendered = true
+    return true
+  end
 
   assert_true(controller:interrupt_selected_workspace(entry))
   assert_equal(calls[1], "interrupt:alpha-builder")
-  assert_contains(calls[2], "prompt:Prompt Builder")
-  assert_equal(calls[3], "send:alpha-builder:next task")
-  assert_contains(notifications[#notifications], "Sent prompt to Builder")
+  assert_equal(calls[2], nil)
+  assert_true(rendered)
+  assert_contains(notifications[#notifications], "Interrupted Builder")
 end
 
 do

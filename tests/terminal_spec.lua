@@ -538,13 +538,17 @@ do
   local controller = terminal_mod.new({})
   controller.state.job_id = 42
   controller.state.codex_working = true
+  controller.state.terminal_prompt_input = "unfinished"
+  controller.state.terminal_prompt_tracking_valid = false
   function controller:terminal_running()
     return true
   end
 
   assert_true(controller:interrupt_codex_session())
-  assert_equal(sent, "\27")
+  assert_equal(sent, "\3")
   assert_false(controller.state.codex_working)
+  assert_equal(controller.state.terminal_prompt_input, "")
+  assert_true(controller.state.terminal_prompt_tracking_valid)
 
   vim.fn.chansend = old_chansend
 end

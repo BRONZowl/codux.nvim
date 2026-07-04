@@ -1076,7 +1076,7 @@ function M:interrupt_codex_session()
 
   self:set_codex_working(false, { force_idle = true })
   self:reset_terminal_prompt_input()
-  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, "\27")
+  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, "\3")
   return send_ok and sent ~= 0
 end
 
