@@ -501,8 +501,24 @@ local function token_usage_label()
   })
 end
 
+local function mission_token_usage_label()
+  return token_monitor:label({
+    show_when_not_running = true,
+  })
+end
+
 refresh_token_usage = function(force)
   return token_monitor:refresh(force)
+end
+
+local function refresh_mission_token_usage(force)
+  return token_monitor:refresh(force, {
+    require_running = false,
+  })
+end
+
+local function token_usage_refresh_ms()
+  return token_monitor:refresh_ms()
 end
 
 start_token_monitor_timer = function()
@@ -1182,7 +1198,9 @@ mission_controller = mission_control_mod.new({
   window_buffer = window_buffer,
   buffer_filetype = buffer_filetype,
   notify = notify,
-  token_usage_label = token_usage_label,
+  token_usage_label = mission_token_usage_label,
+  refresh_token_usage = refresh_mission_token_usage,
+  token_usage_refresh_ms = token_usage_refresh_ms,
   create_mission = function(mission)
     return M.create_mission(mission)
   end,

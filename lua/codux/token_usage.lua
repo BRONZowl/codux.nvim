@@ -62,7 +62,10 @@ function M.label(usage, opts)
   opts = type(opts) == "table" and opts or {}
   usage = type(usage) == "table" and usage or {}
 
-  if opts.enabled == false or opts.running == false or opts.mode == "not running" then
+  if opts.enabled == false then
+    return ""
+  end
+  if opts.show_when_not_running ~= true and (opts.running == false or opts.mode == "not running") then
     return ""
   end
 

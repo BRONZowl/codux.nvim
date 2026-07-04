@@ -171,6 +171,32 @@ end
 do
   local controller = mission_control_mod.new({
     token_usage_label = function()
+      return "usage | 5hr --% | wk --%"
+    end,
+    workspace_entries_for_project = function()
+      return {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          mission_id = "mission:alpha",
+          mission_name = "Alpha",
+          mission_role = "Builder",
+          status = "idle",
+        },
+      }, nil
+    end,
+  })
+
+  local lines, items, rows = controller:dashboard_lines("/repo", { dashboard_width = 80 })
+  assert_contains(lines[2], "usage | 5hr --% | wk --%")
+  assert_equal(items[4].kind, "mission")
+  assert_equal(items[6].kind, "role")
+  assert_equal(table.concat(rows, ","), "4,6")
+end
+
+do
+  local controller = mission_control_mod.new({
+    token_usage_label = function()
       return ""
     end,
     workspace_entries_for_project = function()
@@ -747,6 +773,7 @@ if type(vim.api) == "table" then
   local old_create_autocmd = vim.api.nvim_create_autocmd
   local old_schedule = vim.schedule
   local output_entry = "unset"
+  local token_refreshes = {}
   local search_opened = false
   vim.o.mouse = "a"
   vim.api.nvim_open_win = function()
@@ -789,6 +816,10 @@ if type(vim.api) == "table" then
     },
     set_buffer_keymap = function() end,
     set_window_cursor = function()
+      return true
+    end,
+    refresh_token_usage = function(force)
+      table.insert(token_refreshes, force)
       return true
     end,
   })
@@ -838,6 +869,8 @@ if type(vim.api) == "table" then
   assert_true(controller:open_dashboard("/repo"))
   assert_equal(controller.state.mission_dashboard_selected_row, 3)
   assert_nil(output_entry)
+  assert_equal(#token_refreshes, 1)
+  assert_true(token_refreshes[1])
   assert_true(search_opened)
   controller:close_dashboard()
   assert_equal(vim.o.mouse, "a")
@@ -1751,6 +1784,23 @@ if type(vim.api) == "table" then
   assert_equal(reserved_output_config.row, reserved_command_config.row + reserved_command_config.height + 2)
   assert_true(reserved_output_config.row + reserved_output_config.height + 2 <= vim.o.lines - vim.o.cmdheight)
 
+  reserved_dashboard_config = controller:dashboard_config(18, {
+    reserve_command_bar = true,
+    reserve_output_panel = true,
+    selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
+    dashboard_min_height = 2,
+  })
+  reserved_command_config = controller:dashboard_command_config(#controller:dashboard_command_lines(reserved_dashboard_config.width))
+  reserved_output_config = controller:dashboard_output_config(2, {
+    selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
+    dashboard_min_height = 2,
+  })
+  assert_equal(reserved_dashboard_config.height, 2)
+  assert_equal(reserved_output_config.height, 14)
+  assert_equal(reserved_command_config.row, reserved_dashboard_config.row + reserved_dashboard_config.height + 2)
+  assert_equal(reserved_output_config.row, reserved_command_config.row + reserved_command_config.height + 2)
+  assert_true(reserved_output_config.row + reserved_output_config.height + 2 <= vim.o.lines - vim.o.cmdheight)
+
   for _, status in ipairs({ "idle", "question" }) do
     reserved_dashboard_config = controller:dashboard_config(18, {
       reserve_command_bar = true,
@@ -1860,6 +1910,21 @@ if type(vim.api) == "table" then
     assert_equal(configs[91].height, 1)
     assert_equal(configs[92].height, 1)
     assert_equal(configs[93].height, 15)
+    assert_equal(configs[92].row, configs[91].row + configs[91].height + 2)
+    assert_equal(configs[93].row, configs[92].row + configs[92].height + 2)
+    assert_true(configs[93].row + configs[93].height + 2 <= vim.o.lines - vim.o.cmdheight)
+    assert_equal(configs[92].width, configs[91].width)
+    assert_equal(configs[93].width, configs[91].width)
+
+    calls = {}
+    assert_true(resize_controller:resize_dashboard_stack(18, {
+      selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
+      dashboard_min_height = 2,
+    }))
+    assert_equal(table.concat(calls, ","), "91,92,93")
+    assert_equal(configs[91].height, 2)
+    assert_equal(configs[92].height, 1)
+    assert_equal(configs[93].height, 14)
     assert_equal(configs[92].row, configs[91].row + configs[91].height + 2)
     assert_equal(configs[93].row, configs[92].row + configs[92].height + 2)
     assert_true(configs[93].row + configs[93].height + 2 <= vim.o.lines - vim.o.cmdheight)
@@ -2000,6 +2065,152 @@ if type(vim.api) == "table" then
     assert_equal(controller.state.mission_dashboard_selected_row, 7)
     assert_true(configs[91].height < compact_dashboard_height)
     assert_true(configs[93].height > 1)
+  end
+
+  do
+    local configs = {
+      [91] = { relative = "editor", row = 0, col = 0, width = 80, height = 8 },
+      [92] = { relative = "editor", row = 0, col = 0, width = 80, height = 4 },
+      [93] = { relative = "editor", row = 0, col = 0, width = 80, height = 6 },
+    }
+    local items = {
+      [4] = { kind = "mission", mission = { name = "Alpha" } },
+      [6] = { kind = "role", mission = { name = "Alpha" }, entry = { safe_name = "alpha-builder", status = "active" } },
+    }
+    local controller = mission_control_mod.new({
+      state = {
+        mission_dashboard_buf = 90,
+        mission_dashboard_win = 91,
+        mission_dashboard_command_bar_win = 92,
+        mission_dashboard_output_win = 93,
+        mission_dashboard_items = items,
+        mission_dashboard_selectable_rows = { 4, 6 },
+        mission_dashboard_search_confirmed = true,
+        mission_dashboard_selected_row = 6,
+      },
+      is_loaded_buf = function(bufnr)
+        return bufnr == 90
+      end,
+      is_valid_win = function(win)
+        return win == 91 or win == 92 or win == 93
+      end,
+      get_window_config = function(win)
+        return configs[win] or {}
+      end,
+      get_window_height = function(win)
+        return configs[win] and configs[win].height or nil
+      end,
+      get_window_width = function(win)
+        return configs[win] and configs[win].width or nil
+      end,
+      set_window_config = function(win, config)
+        configs[win] = config
+        return true
+      end,
+      ui = {
+        set_lines = function()
+          return true
+        end,
+      },
+    })
+    function controller:dashboard_lines()
+      return { "Mission", "usage | 5hr 12% | wk 34%", "", "Alpha", "role", "Builder" }, items, { 4, 6 }, nil
+    end
+    function controller:highlight_dashboard()
+      return true
+    end
+    function controller:render_command_bar()
+      return true
+    end
+    function controller:render_output_panel()
+      return true
+    end
+
+    vim.o.columns = 120
+    vim.o.lines = 24
+    assert_true(controller:render_dashboard())
+    assert_equal(configs[91].height, 2)
+    assert_equal(configs[93].height, 14)
+  end
+
+  do
+    local now_ms = 1000
+    local refresh_calls = 0
+    local configs = {
+      [91] = { relative = "editor", row = 0, col = 0, width = 80, height = 8 },
+      [92] = { relative = "editor", row = 0, col = 0, width = 80, height = 1 },
+      [93] = { relative = "editor", row = 0, col = 0, width = 80, height = 6 },
+    }
+    local items = {
+      [3] = { kind = "mission", mission = { name = "Alpha" } },
+    }
+    local controller = mission_control_mod.new({
+      state = {
+        mission_dashboard_buf = 90,
+        mission_dashboard_win = 91,
+        mission_dashboard_command_bar_win = 92,
+        mission_dashboard_output_win = 93,
+        mission_dashboard_items = items,
+        mission_dashboard_selectable_rows = { 3 },
+        mission_dashboard_search_confirmed = true,
+        mission_dashboard_selected_row = 3,
+      },
+      is_loaded_buf = function(bufnr)
+        return bufnr == 90
+      end,
+      is_valid_win = function(win)
+        return win == 91 or win == 92 or win == 93
+      end,
+      get_window_config = function(win)
+        return configs[win] or {}
+      end,
+      get_window_height = function(win)
+        return configs[win] and configs[win].height or nil
+      end,
+      get_window_width = function(win)
+        return configs[win] and configs[win].width or nil
+      end,
+      set_window_config = function(win, config)
+        configs[win] = config
+        return true
+      end,
+      refresh_token_usage = function(force)
+        assert_false(force)
+        refresh_calls = refresh_calls + 1
+        return true
+      end,
+      token_usage_refresh_ms = function()
+        return 60000
+      end,
+      token_usage_now_ms = function()
+        return now_ms
+      end,
+      ui = {
+        set_lines = function()
+          return true
+        end,
+      },
+    })
+    function controller:dashboard_lines()
+      return { "Mission", "usage | 5hr --% | wk --%" }, items, { 3 }, nil
+    end
+    function controller:highlight_dashboard()
+      return true
+    end
+    function controller:render_command_bar()
+      return true
+    end
+    function controller:render_output_panel()
+      return true
+    end
+
+    assert_true(controller:render_dashboard())
+    assert_equal(refresh_calls, 1)
+    assert_true(controller:render_dashboard())
+    assert_equal(refresh_calls, 1)
+    now_ms = 62000
+    assert_true(controller:render_dashboard())
+    assert_equal(refresh_calls, 2)
   end
 
   local codux = require("codux")

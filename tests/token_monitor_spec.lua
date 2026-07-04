@@ -1,5 +1,6 @@
 local h = require("tests.helpers")
 local assert_equal = h.assert_equal
+local assert_nil = h.assert_nil
 local assert_table_equal = h.assert_table_equal
 
 local token_monitor_mod = require("codux.token_monitor")
@@ -79,6 +80,73 @@ do
     { "codex-token", "--profile", "usage", "app-server", "--stdio" },
     "explicit list monitor command should keep configured args"
   )
+end
+
+do
+  local monitor = monitor_with_config({
+    codex_cmd = "codex",
+  }, {
+    state = {
+      five_hour_percent = 12,
+      weekly_percent = 34,
+    },
+    is_running = function()
+      return false
+    end,
+  })
+
+  assert_equal(monitor:label({ running = false, mode = "not running" }), "")
+  assert_equal(
+    monitor:label({ running = false, mode = "not running", show_when_not_running = true }),
+    "usage | 5hr 12% | wk 34%"
+  )
+end
+
+do
+  local monitor = monitor_with_config({
+    token_monitor = false,
+  }, {
+    state = {
+      five_hour_percent = 12,
+      weekly_percent = 34,
+    },
+    is_running = function()
+      return false
+    end,
+  })
+
+  assert_equal(monitor:label({ show_when_not_running = true }), "")
+end
+
+do
+  local state = {}
+  local updates = 0
+  local monitor = monitor_with_config({
+    codex_cmd = "codex",
+    token_monitor = {
+      codex_cmd = {},
+    },
+  }, {
+    state = state,
+    is_running = function()
+      return false
+    end,
+    on_update = function()
+      updates = updates + 1
+    end,
+  })
+
+  assert_equal(monitor:refresh(false), false, "default refresh should require a running terminal")
+  assert_nil(state.last_error, "default refresh should stop before command validation")
+  assert_equal(updates, 0, "default refresh should not publish an update")
+
+  assert_equal(
+    monitor:refresh(false, { require_running = false }),
+    false,
+    "dashboard refresh should validate even without a running terminal"
+  )
+  assert_equal(state.last_error, "Codex token monitor command list must start with an executable")
+  assert_equal(updates, 1, "dashboard refresh should publish command validation errors")
 end
 
 do

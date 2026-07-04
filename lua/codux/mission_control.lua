@@ -125,6 +125,17 @@ function M.new(opts)
     token_usage_label = type(opts.token_usage_label) == "function" and opts.token_usage_label or function()
       return ""
     end,
+    refresh_token_usage = type(opts.refresh_token_usage) == "function" and opts.refresh_token_usage or noop,
+    token_usage_refresh_ms = type(opts.token_usage_refresh_ms) == "function" and opts.token_usage_refresh_ms or function()
+      return 60000
+    end,
+    token_usage_now_ms = type(opts.token_usage_now_ms) == "function" and opts.token_usage_now_ms or function()
+      local loop = vim.uv or vim.loop
+      if loop and type(loop.now) == "function" then
+        return loop.now()
+      end
+      return os.time() * 1000
+    end,
     create_mission = type(opts.create_mission) == "function" and opts.create_mission or noop,
     create_workspace_prompt = type(opts.create_workspace_prompt) == "function" and opts.create_workspace_prompt or noop,
     workspace_entries_for_project = type(opts.workspace_entries_for_project) == "function"
@@ -351,10 +362,11 @@ function M:dashboard_preview_mode(item)
   return "compact"
 end
 
-function M:dashboard_preview_height(total_height, command_height, mode)
+function M:dashboard_preview_height(total_height, command_height, mode, dashboard_min_height)
   total_height = math.max(1, tonumber(total_height) or (vim.o.lines - vim.o.cmdheight))
   command_height = math.max(0, tonumber(command_height) or 0)
   mode = mode == "workspace" and "workspace" or "compact"
+  dashboard_min_height = math.max(1, tonumber(dashboard_min_height) or 1)
 
   if mode == "compact" then
     return 1
@@ -363,13 +375,12 @@ function M:dashboard_preview_height(total_height, command_height, mode)
   local target = math.min(40, math.max(14, math.floor(total_height * 0.80)))
   local reserved_gaps = (command_height > 0 and 1 or 0) + 1
   local content_capacity = available_dimension(total_height, 4)
-  local preferred_dashboard_height = 1
-  local preferred_available = content_capacity - command_height - reserved_gaps - preferred_dashboard_height
+  local preferred_available = content_capacity - command_height - reserved_gaps - dashboard_min_height
   if preferred_available >= 1 then
     return math.min(target, preferred_available)
   end
 
-  local compact_available = content_capacity - command_height - reserved_gaps - 1
+  local compact_available = content_capacity - command_height - reserved_gaps - dashboard_min_height
   return math.min(target, math.max(1, compact_available))
 end
 
@@ -382,14 +393,16 @@ function M:dashboard_config(line_count, opts)
   local search_reserve = opts.reserve_search_input and bordered_float_outer_height(1) or 0
   local command_height = opts.reserve_command_bar and #self:dashboard_command_lines(width) or 0
   local preview_mode = opts.preview_mode or self:dashboard_preview_mode(opts.selected_item)
-  local preview_height = opts.reserve_output_panel and self:dashboard_preview_height(total_height, command_height, preview_mode)
+  local dashboard_min_height = math.max(1, tonumber(opts.dashboard_min_height) or 1)
+  local preview_height = opts.reserve_output_panel
+      and self:dashboard_preview_height(total_height, command_height, preview_mode, dashboard_min_height)
     or 0
   local command_reserve = command_height > 0 and bordered_float_outer_height(command_height) or 0
   local preview_reserve = preview_height > 0 and bordered_float_outer_height(preview_height) or 0
   local output_reserve = search_reserve + command_reserve + preview_reserve
-  local max_height = output_reserve > 0 and math.max(1, total_height - output_reserve - 2)
+  local max_height = output_reserve > 0 and math.max(dashboard_min_height, total_height - output_reserve - 2)
     or available_dimension(total_height, 4)
-  local height = math.min(max_height, math.max(8, line_count or 1))
+  local height = math.min(max_height, math.max(8, dashboard_min_height, line_count or 1))
   local stack_height = bordered_float_outer_height(height) + output_reserve
   local stack_top = math.max(0, math.floor((total_height - stack_height) / 2))
 
@@ -487,7 +500,12 @@ function M:dashboard_output_config(line_count, opts)
     or next_bordered_float_row(dashboard_row, dashboard_height)
   local available_below = total_height - row - 2
   local preview_mode = opts.preview_mode or self:dashboard_preview_mode(opts.selected_item)
-  local desired_height = self:dashboard_preview_height(total_height, command_height, preview_mode)
+  local desired_height = self:dashboard_preview_height(
+    total_height,
+    command_height,
+    preview_mode,
+    opts.dashboard_min_height
+  )
   local height = math.min(desired_height, math.max(1, available_below))
 
   return {
@@ -517,6 +535,7 @@ function M:resize_dashboard_stack(line_count, opts)
     reserve_search_input = self.is_valid_win(self.state.mission_dashboard_search_win),
     selected_item = opts.selected_item,
     preview_mode = opts.preview_mode,
+    dashboard_min_height = opts.dashboard_min_height,
   })
   local ok = self.set_window_config(self.state.mission_dashboard_win, dashboard_config)
   if not ok then
@@ -537,6 +556,7 @@ function M:resize_dashboard_stack(line_count, opts)
       self:dashboard_output_config(line_count, {
         selected_item = opts.selected_item,
         preview_mode = opts.preview_mode,
+        dashboard_min_height = opts.dashboard_min_height,
       })
     ) and ok
   end
@@ -959,6 +979,28 @@ function M:dashboard_token_usage_line(dashboard_width)
   return center_display_line(self.workspace_ui, usage, dashboard_width)
 end
 
+function M:dashboard_min_height_for_lines(lines)
+  for _, line in ipairs(lines or {}) do
+    if tostring(line):find("usage | ", 1, true) then
+      return 2
+    end
+  end
+  return 1
+end
+
+function M:refresh_dashboard_token_usage(force)
+  local now = tonumber(self.token_usage_now_ms()) or (os.time() * 1000)
+  local refresh_ms = tonumber(self.token_usage_refresh_ms()) or 60000
+  refresh_ms = math.max(10000, refresh_ms)
+  local last = tonumber(self.state.mission_dashboard_token_usage_refreshed_at)
+  if not force and last and now - last < refresh_ms then
+    return false
+  end
+
+  self.state.mission_dashboard_token_usage_refreshed_at = now
+  return self.refresh_token_usage(force == true)
+end
+
 function M:dashboard_lines(root, opts)
   opts = type(opts) == "table" and opts or {}
   local entries, error_message = self.workspace_entries_for_project(root)
@@ -1362,6 +1404,7 @@ function M:render_dashboard()
     return false
   end
 
+  self:refresh_dashboard_token_usage(false)
   local root = self.state.mission_dashboard_project_root or self.project_root()
   local query = tostring(self.state.mission_dashboard_query or "")
   local selected = self:selected_item()
@@ -1374,7 +1417,8 @@ function M:render_dashboard()
   self.state.mission_dashboard_best_match_row = best_match_row
 
   local selected_item = self:selected_item()
-  self:resize_dashboard_stack(#lines, { selected_item = selected_item })
+  local dashboard_min_height = self:dashboard_min_height_for_lines(lines)
+  self:resize_dashboard_stack(#lines, { selected_item = selected_item, dashboard_min_height = dashboard_min_height })
   self.ui.set_lines(self.state.mission_dashboard_buf, lines, { modifiable = true })
   self:highlight_dashboard(self.state.mission_dashboard_buf, lines, items)
   self:render_command_bar()
@@ -1743,6 +1787,7 @@ function M:close_dashboard()
   self.state.mission_dashboard_search_confirmed = false
   self.state.mission_dashboard_project_root = nil
   self.state.mission_dashboard_resize_augroup = nil
+  self.state.mission_dashboard_token_usage_refreshed_at = nil
   self:restore_dashboard_mouse()
   return true
 end
@@ -2461,6 +2506,7 @@ function M:open_dashboard(root)
     reserve_output_panel = true,
     reserve_search_input = true,
     selected_item = initial_selected_item,
+    dashboard_min_height = self:dashboard_min_height_for_lines(lines),
   }))
   if not win_ok then
     self:restore_dashboard_mouse()
@@ -2487,6 +2533,7 @@ function M:open_dashboard(root)
   self.state.mission_dashboard_query = ""
   self.state.mission_dashboard_focus_match = false
   self.state.mission_dashboard_search_confirmed = false
+  self:refresh_dashboard_token_usage(true)
   self.state.mission_dashboard_resize_augroup = vim.api.nvim_create_augroup(
     "codux-mission-dashboard-" .. tostring(bufnr),
     { clear = true }

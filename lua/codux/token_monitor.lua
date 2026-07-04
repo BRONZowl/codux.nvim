@@ -103,6 +103,7 @@ function M:label(opts)
     enabled = self:enabled(),
     running = running,
     mode = mode,
+    show_when_not_running = opts.show_when_not_running,
   })
 end
 
@@ -252,8 +253,10 @@ function M:app_server_command()
   return { executable, "app-server", "--stdio" }, executable, nil
 end
 
-function M:refresh(force)
-  if not self:enabled() or not self.is_running() then
+function M:refresh(force, opts)
+  opts = type(opts) == "table" and opts or {}
+  local require_running = opts.require_running ~= false
+  if not self:enabled() or (require_running and not self.is_running()) then
     return false
   end
 
