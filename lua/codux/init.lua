@@ -966,6 +966,14 @@ function M._v5.remote_send_to_codex(message)
   return terminal:send_to_codex(tostring(message or "")) and "ok" or "failed"
 end
 
+function M._v5.remote_interrupt_codex_session()
+  return terminal:interrupt_codex_session() and "ok" or "failed"
+end
+
+function M._v5.remote_switch_codex_mode()
+  return terminal:toggle_plan_mode() and "ok" or "failed"
+end
+
 function M._v5.remote_show_existing_codex_terminal()
   if not terminal:terminal_running() then
     return "not_running"
@@ -1216,6 +1224,20 @@ mission_controller = mission_control_mod.new({
   end,
   send_prompt_to_workspace = function(entry, prompt)
     local ok, error_message = workspace_runtime:send_prompt_to_workspace(entry, prompt)
+    if not ok and error_message then
+      return false, error_message
+    end
+    return ok
+  end,
+  interrupt_workspace = function(entry)
+    local ok, error_message = workspace_runtime:interrupt_workspace(entry)
+    if not ok and error_message then
+      return false, error_message
+    end
+    return ok
+  end,
+  switch_workspace_mode = function(entry)
+    local ok, error_message = workspace_runtime:switch_workspace_mode(entry)
     if not ok and error_message then
       return false, error_message
     end

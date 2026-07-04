@@ -283,6 +283,7 @@ function M.mission_action_items()
     { key = "e", action = "edit_objective", label = "Edit Objective" },
     { key = "x", action = "close_mission", label = "Close Mission" },
     { key = "d", action = "delete_mission", label = "Delete Mission" },
+    { key = "n", action = "create_mission", label = "Create Mission" },
   }
 end
 
@@ -293,10 +294,10 @@ end
 function M.role_workspace_action_items()
   return {
     { key = "o", action = "open_workspace", label = "Open Workspace" },
-    { key = "p", action = "prompt_workspace", label = "Prompt Workspace" },
     { key = "e", action = "edit_instructions", label = "Edit Instructions" },
     { key = "x", action = "close_workspace", label = "Close Workspace" },
     { key = "d", action = "delete_workspace", label = "Delete Workspace" },
+    { key = "w", action = "create_workspace", label = "Create Workspace" },
   }
 end
 

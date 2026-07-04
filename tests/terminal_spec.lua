@@ -478,4 +478,27 @@ do
   vim.schedule = old_schedule
 end
 
+do
+  local sent
+  local old_chansend = vim.fn.chansend
+  vim.fn.chansend = function(job_id, value)
+    assert_equal(job_id, 42)
+    sent = value
+    return 1
+  end
+
+  local controller = terminal_mod.new({})
+  controller.state.job_id = 42
+  controller.state.codex_working = true
+  function controller:terminal_running()
+    return true
+  end
+
+  assert_true(controller:interrupt_codex_session())
+  assert_equal(sent, "\27")
+  assert_false(controller.state.codex_working)
+
+  vim.fn.chansend = old_chansend
+end
+
 print("terminal_spec.lua: ok")

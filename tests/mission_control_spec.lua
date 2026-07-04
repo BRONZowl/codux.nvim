@@ -146,18 +146,20 @@ do
   local command_lines = controller:dashboard_command_lines(120)
   local command_text = table.concat(command_lines, "\n")
   assert_equal(#command_lines, 1)
-  assert_equal(command_lines[1]:find("Tab search", 1, true), 11)
+  assert_true(command_lines[1]:find("Tab search", 1, true) ~= nil)
   assert_contains(command_text, "Tab search")
-  assert_contains(command_text, "j/k move")
   assert_contains(command_text, "m menu")
   assert_contains(command_text, "p prompt")
-  assert_contains(command_text, "O preview")
-  assert_contains(command_text, "e edit")
-  assert_contains(command_text, "x close")
-  assert_contains(command_text, "d delete")
-  assert_contains(command_text, "n mission")
-  assert_contains(command_text, "w workspace")
-  assert_contains(command_text, "q close")
+  assert_contains(command_text, "i interrupt")
+  assert_contains(command_text, "s mode")
+  assert_equal(command_text:find("O preview", 1, true), nil)
+  assert_equal(command_text:find("e edit", 1, true), nil)
+  assert_equal(command_text:find("x close", 1, true), nil)
+  assert_equal(command_text:find("d delete", 1, true), nil)
+  assert_equal(command_text:find("j/k move", 1, true), nil)
+  assert_equal(command_text:find("n mission", 1, true), nil)
+  assert_equal(command_text:find("w workspace", 1, true), nil)
+  assert_equal(command_text:find("q close", 1, true), nil)
 end
 
 do
@@ -193,16 +195,10 @@ do
   local line = command_lines[1]
   local commands = {
     { key = "Tab", label = "search" },
-    { key = "j/k", label = "move" },
     { key = "m", label = "menu" },
     { key = "p", label = "prompt" },
-    { key = "O", label = "preview" },
-    { key = "e", label = "edit" },
-    { key = "x", label = "close" },
-    { key = "d", label = "delete" },
-    { key = "n", label = "mission" },
-    { key = "w", label = "workspace" },
-    { key = "q", label = "close" },
+    { key = "i", label = "interrupt" },
+    { key = "s", label = "mode" },
   }
   local search_start = 1
   for _, command in ipairs(commands) do
@@ -623,7 +619,7 @@ if type(vim.api) == "table" then
       return 8
     end,
     get_window_width = function()
-      return 100
+      return 140
     end,
     ui = {
       create_scratch_buffer = function()
@@ -645,8 +641,11 @@ if type(vim.api) == "table" then
   assert_equal(controller.state.mission_dashboard_command_bar_win, 42)
   local command_text = table.concat(rendered_lines, "\n")
   assert_contains(command_text, "Tab search")
-  assert_contains(command_text, "O preview")
-  assert_contains(command_text, "q close")
+  assert_equal(command_text:find("O preview", 1, true), nil)
+  assert_equal(command_text:find("e edit", 1, true), nil)
+  assert_equal(command_text:find("x close", 1, true), nil)
+  assert_equal(command_text:find("d delete", 1, true), nil)
+  assert_equal(command_text:find("q close", 1, true), nil)
 
   vim.api.nvim_open_win = old_open_win
   vim.api.nvim_create_augroup = old_create_augroup
@@ -707,9 +706,12 @@ end
 
 do
   local bound = {}
+  local close_opts
   local controller = mission_control_mod.new({
     state = {},
-    bind_close_keys = function() end,
+    bind_close_keys = function(_, _, _, _, opts)
+      close_opts = opts
+    end,
     set_buffer_keymap = function(_, mode, lhs, _rhs, desc)
       if mode == "n" then
         bound[lhs] = desc
@@ -725,13 +727,18 @@ do
   assert_nil(bound["<CR>"])
   assert_equal(bound["<Tab>"], "Search/List Codux Missions")
   assert_equal(bound.p, "Prompt Codux Mission Role")
-  assert_equal(bound.O, "Focus Codux Mission Output")
-  assert_equal(bound.n, "Create Codux Mission")
-  assert_equal(bound.w, "Create Codux Workspace")
-  assert_equal(bound.e, "Edit Codux Mission Objective")
-  assert_equal(bound.x, "Close Codux Mission")
-  assert_equal(bound.d, "Delete Codux Mission")
+  assert_equal(bound.i, "Interrupt Codux Mission Role")
+  assert_equal(bound.s, "Switch Codux Mission Role Mode")
+  assert_nil(bound.n)
+  assert_nil(bound.w)
+  assert_nil(bound.O)
+  assert_nil(bound.e)
+  assert_nil(bound.x)
+  assert_nil(bound.d)
+  assert_nil(bound.q)
   assert_nil(bound.r)
+  assert_true(close_opts.escape)
+  assert_nil(close_opts.q)
 end
 
 do
@@ -889,6 +896,30 @@ do
 end
 
 do
+  local calls = {}
+  local controller = mission_control_mod.new({})
+  function controller:close_action_palette()
+    table.insert(calls, "close_palette")
+    return true
+  end
+  function controller:create_new_mission()
+    table.insert(calls, "create_mission")
+    return true
+  end
+  function controller:create_new_workspace()
+    table.insert(calls, "create_workspace")
+    return true
+  end
+
+  assert_true(controller:run_action("create_mission"))
+  assert_true(controller:run_action("create_workspace"))
+  assert_equal(calls[1], "close_palette")
+  assert_equal(calls[2], "create_mission")
+  assert_equal(calls[3], "close_palette")
+  assert_equal(calls[4], "create_workspace")
+end
+
+do
   local entry = {
     name = "alpha-builder",
     safe_name = "alpha-builder",
@@ -1035,6 +1066,175 @@ do
   assert_true(controller:open_workspace_prompt(entry))
   assert_equal(sent_prompt, "  /plan  ")
   assert_contains(notifications[#notifications], "Sent prompt to Builder")
+end
+
+do
+  local calls = {}
+  local notifications = {}
+  local entry = {
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "active",
+    codex_status = "working",
+  }
+  local controller = mission_control_mod.new({
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    ui = {
+      close_window = function() end,
+      delete_buffer = function() end,
+      single_line_prompt = function(opts, callback)
+        table.insert(calls, "prompt:" .. tostring(opts.prompt))
+        callback("next task")
+        return true
+      end,
+    },
+    interrupt_workspace = function(workspace)
+      table.insert(calls, "interrupt:" .. tostring(workspace.safe_name))
+      return true, nil
+    end,
+    send_prompt_to_workspace = function(workspace, prompt)
+      table.insert(calls, "send:" .. tostring(workspace.safe_name) .. ":" .. prompt)
+      return true, nil
+    end,
+  })
+
+  assert_true(controller:interrupt_selected_workspace(entry))
+  assert_equal(calls[1], "interrupt:alpha-builder")
+  assert_contains(calls[2], "prompt:Prompt Builder")
+  assert_equal(calls[3], "send:alpha-builder:next task")
+  assert_contains(notifications[#notifications], "Sent prompt to Builder")
+end
+
+do
+  local calls = {}
+  local entry = {
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+    codex_status = "idle",
+  }
+  local controller = mission_control_mod.new({
+    ui = {
+      close_window = function() end,
+      delete_buffer = function() end,
+      single_line_prompt = function()
+        table.insert(calls, "prompt")
+        return true
+      end,
+    },
+    interrupt_workspace = function()
+      table.insert(calls, "interrupt")
+      return true, nil
+    end,
+    send_prompt_to_workspace = function()
+      table.insert(calls, "send")
+      return true, nil
+    end,
+  })
+
+  assert_false(controller:interrupt_selected_workspace(entry))
+  assert_equal(#calls, 0)
+end
+
+do
+  local prompted = false
+  local notifications = {}
+  local entry = {
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "active",
+    codex_status = "working",
+  }
+  local controller = mission_control_mod.new({
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    ui = {
+      close_window = function() end,
+      delete_buffer = function() end,
+      single_line_prompt = function()
+        prompted = true
+        return true
+      end,
+    },
+    interrupt_workspace = function()
+      return false, "interrupt failed"
+    end,
+  })
+
+  assert_false(controller:interrupt_selected_workspace(entry))
+  assert_false(prompted)
+  assert_equal(notifications[#notifications], "interrupt failed")
+end
+
+do
+  local calls = {}
+  local notifications = {}
+  local rendered = false
+  local entry = {
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+    codex_mode = "plan",
+  }
+  local controller = mission_control_mod.new({
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    ui = {
+      close_window = function() end,
+      delete_buffer = function() end,
+    },
+    switch_workspace_mode = function(workspace)
+      table.insert(calls, "switch:" .. tostring(workspace.safe_name))
+      return true, nil
+    end,
+  })
+  function controller:render_dashboard()
+    rendered = true
+  end
+
+  assert_true(controller:switch_selected_workspace_mode(entry))
+  assert_equal(calls[1], "switch:alpha-builder")
+  assert_true(rendered)
+  assert_equal(notifications[#notifications], "Switched Codux mode for Builder")
+end
+
+do
+  local notifications = {}
+  local rendered = false
+  local entry = {
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+    codex_mode = "plan",
+  }
+  local controller = mission_control_mod.new({
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    ui = {
+      close_window = function() end,
+      delete_buffer = function() end,
+    },
+    switch_workspace_mode = function()
+      return false, "workspace is inactive"
+    end,
+  })
+  function controller:render_dashboard()
+    rendered = true
+  end
+
+  assert_false(controller:switch_selected_workspace_mode(entry))
+  assert_false(rendered)
+  assert_equal(notifications[#notifications], "workspace is inactive")
 end
 
 do
@@ -1505,6 +1705,8 @@ if type(vim.api) == "table" then
   assert_true(codux._v5.should_select_permission_profile(nil))
   assert_false(codux._v5.should_select_permission_profile(12))
   assert_equal(codux._v5.remote_show_existing_codex_terminal(), "not_running")
+  assert_equal(codux._v5.remote_interrupt_codex_session(), "failed")
+  assert_equal(codux._v5.remote_switch_codex_mode(), "failed")
 
   local profile_choices = codux._v5.permission_profile_choices()
   assert_equal(profile_choices[1].profile, "default")

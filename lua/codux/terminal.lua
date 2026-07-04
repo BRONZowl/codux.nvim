@@ -1069,6 +1069,17 @@ function M:interrupt_terminal_prompt()
   return send_ok and sent ~= 0
 end
 
+function M:interrupt_codex_session()
+  if not self:terminal_running() then
+    return false
+  end
+
+  self:set_codex_working(false, { force_idle = true })
+  self:reset_terminal_prompt_input()
+  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, "\27")
+  return send_ok and sent ~= 0
+end
+
 function M:ensure_buffer()
   if self:valid_buf() then
     return true

@@ -25,16 +25,10 @@ end
 
 local dashboard_command_items = {
   { key = "Tab", label = "search" },
-  { key = "j/k", label = "move" },
   { key = "m", label = "menu" },
   { key = "p", label = "prompt" },
-  { key = "O", label = "preview" },
-  { key = "e", label = "edit" },
-  { key = "x", label = "close" },
-  { key = "d", label = "delete" },
-  { key = "n", label = "mission" },
-  { key = "w", label = "workspace" },
-  { key = "q", label = "close" },
+  { key = "i", label = "interrupt" },
+  { key = "s", label = "mode" },
 }
 
 local function entry_key(entry)
@@ -154,6 +148,12 @@ function M.new(opts)
       or function()
         return false, "workspace prompt unavailable"
       end,
+    interrupt_workspace = type(opts.interrupt_workspace) == "function" and opts.interrupt_workspace or function()
+      return false, "workspace interrupt unavailable"
+    end,
+    switch_workspace_mode = type(opts.switch_workspace_mode) == "function" and opts.switch_workspace_mode or function()
+      return false, "workspace mode switch unavailable"
+    end,
     update_mission_objective = type(opts.update_mission_objective) == "function"
         and opts.update_mission_objective
       or noop,
@@ -1989,7 +1989,15 @@ function M:run_action(action, target)
     self:close_action_palette()
     return self:delete_role_workspace(workspace)
   end
+  if action == "create_workspace" then
+    self:close_action_palette()
+    return self:create_new_workspace()
+  end
 
+  if action == "create_mission" then
+    self:close_action_palette()
+    return self:create_new_mission()
+  end
   local mission = target or self.state.mission_dashboard_action_mission or self:selected_mission_name_or_notify()
   if not mission then
     return false
@@ -2205,6 +2213,20 @@ function M:open_workspace_prompt(entry)
     return false
   end
 
+  return self:open_workspace_prompt_input(entry, label, self.send_prompt_to_workspace, "Sent prompt to ")
+end
+
+function M:open_workspace_prompt_input(entry, label, submit_fn, success_prefix)
+  entry = type(entry) == "table" and entry or nil
+  label = label or (entry and (entry.mission_role or entry.name or entry.safe_name)) or "workspace"
+  submit_fn = type(submit_fn) == "function" and submit_fn or self.send_prompt_to_workspace
+  success_prefix = type(success_prefix) == "string" and success_prefix or "Sent prompt to "
+  local prompt_fn = self.ui.single_line_prompt
+  if type(prompt_fn) ~= "function" then
+    self.notify("Codux prompt input is unavailable", vim.log.levels.ERROR)
+    return false
+  end
+
   return prompt_fn({
     prompt = "Prompt " .. tostring(label) .. ": ",
     filetype = "codux-mission-workspace-prompt",
@@ -2221,9 +2243,9 @@ function M:open_workspace_prompt(entry)
       return
     end
 
-    local ok, error_message = self.send_prompt_to_workspace(entry, input)
+    local ok, error_message = submit_fn(entry, input)
     if ok then
-      self.notify("Sent prompt to " .. tostring(label))
+      self.notify(success_prefix .. tostring(label))
       self:render_dashboard()
     else
       self.notify(error_message or "Failed to send prompt", vim.log.levels.ERROR)
@@ -2233,6 +2255,50 @@ function M:open_workspace_prompt(entry)
     set_buffer_keymap = self.set_buffer_keymap,
     bind_close_keys = self.bind_close_keys,
   })
+end
+
+function M:interrupt_workspace_prompt(entry)
+  entry = type(entry) == "table" and entry or self:selected_role_workspace_or_notify()
+  if not entry then
+    return false
+  end
+  if entry.status ~= "active" and entry.codex_status ~= "working" then
+    return false
+  end
+
+  local ok, error_message = self.interrupt_workspace(entry)
+  if not ok then
+    self.notify(error_message or "Failed to interrupt workspace", vim.log.levels.ERROR)
+    return false
+  end
+
+  local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
+  return self:open_workspace_prompt_input(entry, label, self.send_prompt_to_workspace, "Sent prompt to ")
+end
+
+function M:interrupt_selected_workspace(entry)
+  entry = type(entry) == "table" and entry or self:selected_role_workspace_or_notify()
+  if not entry then
+    return false
+  end
+  return self:interrupt_workspace_prompt(entry)
+end
+
+function M:switch_selected_workspace_mode(entry)
+  entry = type(entry) == "table" and entry or self:selected_role_workspace_or_notify()
+  if not entry then
+    return false
+  end
+
+  local ok, error_message = self.switch_workspace_mode(entry)
+  if ok then
+    self.notify("Switched Codux mode for " .. tostring(entry.mission_role or entry.name or entry.safe_name))
+    self:render_dashboard()
+    return true
+  end
+
+  self.notify(error_message or "Failed to switch workspace mode", vim.log.levels.ERROR)
+  return false
 end
 
 function M:delete_role_workspace(entry)
@@ -2279,7 +2345,7 @@ end
 function M:bind_dashboard_commands(bufnr)
   self.bind_close_keys(bufnr, function()
     return self:close_dashboard()
-  end, "Close Codux Missions", "n", { escape = true, q = true })
+  end, "Close Codux Missions", "n", { escape = true })
   self.set_buffer_keymap(bufnr, "n", "<Tab>", function()
     return self:toggle_search_list_focus()
   end, "Search/List Codux Missions", {
@@ -2301,24 +2367,12 @@ function M:bind_dashboard_commands(bufnr)
   self.set_buffer_keymap(bufnr, "n", "p", function()
     return self:open_workspace_prompt()
   end, "Prompt Codux Mission Role")
-  self.set_buffer_keymap(bufnr, "n", "O", function()
-    return self:focus_output_panel()
-  end, "Focus Codux Mission Output")
-  self.set_buffer_keymap(bufnr, "n", "e", function()
-    return self:edit_selected_mission()
-  end, "Edit Codux Mission Objective")
-  self.set_buffer_keymap(bufnr, "n", "x", function()
-    return self:close_selected_mission()
-  end, "Close Codux Mission")
-  self.set_buffer_keymap(bufnr, "n", "d", function()
-    return self:delete_selected_mission()
-  end, "Delete Codux Mission")
-  self.set_buffer_keymap(bufnr, "n", "n", function()
-    return self:create_new_mission()
-  end, "Create Codux Mission")
-  self.set_buffer_keymap(bufnr, "n", "w", function()
-    return self:create_new_workspace()
-  end, "Create Codux Workspace")
+  self.set_buffer_keymap(bufnr, "n", "i", function()
+    return self:interrupt_selected_workspace()
+  end, "Interrupt Codux Mission Role")
+  self.set_buffer_keymap(bufnr, "n", "s", function()
+    return self:switch_selected_workspace_mode()
+  end, "Switch Codux Mission Role Mode")
 end
 
 function M:open_dashboard(root)

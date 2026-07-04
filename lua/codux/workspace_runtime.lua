@@ -1251,6 +1251,46 @@ function M:send_prompt_to_workspace(entry, prompt, opts)
   return false, remote_error or output or "Failed to send prompt"
 end
 
+function M:interrupt_workspace(entry, opts)
+  opts = type(opts) == "table" and opts or {}
+  local workspace, ensure_error = self:ensure_workspace_remote(entry)
+  if not workspace then
+    return false, ensure_error or "workspace not found"
+  end
+
+  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
+  local output, remote_error = self:remote_luaeval(
+    server,
+    "require('codux')._v5.remote_interrupt_codex_session()",
+    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
+  )
+  if output == "ok" then
+    return true, nil
+  end
+
+  return false, remote_error or output or "Failed to interrupt workspace"
+end
+
+function M:switch_workspace_mode(entry, opts)
+  opts = type(opts) == "table" and opts or {}
+  local workspace, ensure_error = self:ensure_workspace_remote(entry)
+  if not workspace then
+    return false, ensure_error or "workspace not found"
+  end
+
+  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
+  local output, remote_error = self:remote_luaeval(
+    server,
+    "require('codux')._v5.remote_switch_codex_mode()",
+    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
+  )
+  if output == "ok" then
+    return true, nil
+  end
+
+  return false, remote_error or output or "Failed to switch workspace mode"
+end
+
 function M:ensure_workspace_plan_mode(entry, opts)
   opts = type(opts) == "table" and opts or {}
   local workspace, ensure_error =
