@@ -94,6 +94,21 @@ local function role_cache_key(entry)
   }, "\0")
 end
 
+local function mission_default_output_entry(mission)
+  mission = type(mission) == "table" and mission or {}
+  local fallback = nil
+  for _, entry in ipairs(mission.roles or {}) do
+    if type(entry) == "table" then
+      fallback = fallback or entry
+      local status = tostring(entry.status or "")
+      if status == "question" or status == "active" or status == "idle" then
+        return entry
+      end
+    end
+  end
+  return fallback
+end
+
 local function disable_completion(is_loaded_buf, bufnr)
   if type(is_loaded_buf) == "function" and not is_loaded_buf(bufnr) then
     return false
@@ -198,10 +213,6 @@ function M.new(opts)
     close_saved_workspace_window = type(opts.close_saved_workspace_window) == "function"
         and opts.close_saved_workspace_window
       or noop,
-    workspace_terminal_snapshot = type(opts.workspace_terminal_snapshot) == "function" and opts.workspace_terminal_snapshot
-      or function()
-        return nil, "workspace monitor unavailable"
-      end,
     workspace_interactive_preview = type(opts.workspace_interactive_preview) == "function" and opts.workspace_interactive_preview
       or function()
         return nil, "workspace preview unavailable"
@@ -550,7 +561,7 @@ function M:dashboard_output_config(line_count, opts)
     relative = "editor",
     style = "minimal",
     border = "rounded",
-    title = " Mission Preview ",
+    title = " Output ",
     title_pos = "center",
     footer = " Ctrl-o workspace ",
     footer_pos = "center",
@@ -1099,48 +1110,11 @@ function M:dashboard_output_entry(item)
     if item.kind == "role" and type(item.entry) == "table" then
       return item.entry
     end
+    if item.kind == "mission" then
+      return mission_default_output_entry(item.mission)
+    end
   end
   return nil
-end
-
-function M:output_lines(entry, opts)
-  opts = type(opts) == "table" and opts or {}
-  local lines = {}
-  if opts.leading_blank ~= false then
-    table.insert(lines, "")
-  end
-  if type(entry) ~= "table" then
-    table.insert(lines, "Output  select a workspace row to view workspace output")
-    return lines
-  end
-
-  local role = entry.mission_role or entry.name or entry.safe_name or "workspace"
-  table.insert(lines, "Output  " .. tostring(role))
-  if entry.status == "inactive" then
-    table.insert(lines, "  workspace is not active")
-    return lines
-  end
-
-  local max_lines = tonumber(opts.max_lines) or 8
-  local output, error_message = self.workspace_terminal_snapshot(entry, { max_lines = max_lines })
-  output = trim(output)
-  if output == "" then
-    table.insert(lines, "  " .. tostring(error_message or "no terminal output available"))
-    return lines
-  end
-
-  local width = math.max(20, tonumber(opts.width) or ((self:window_width() or 80) - 4))
-  local output_lines = vim.split(output, "\n", { plain = true })
-  local start = math.max(1, #output_lines - max_lines + 1)
-  for index = start, #output_lines do
-    local line = self.workspace_ui.truncate_display_tail(output_lines[index], width)
-    table.insert(lines, "  " .. line)
-  end
-  return lines
-end
-
-function M:monitor_lines(entry)
-  return self:output_lines(entry)
 end
 
 function M:mission_for_name(root, name)
@@ -1351,9 +1325,10 @@ end
 function M:highlight_output_panel(bufnr, lines)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, self.namespace, 0, -1)
   for index, line in ipairs(lines or {}) do
-    if line:find("^Codex%s%s", 1, false) or line:find("^Output%s%s", 1, false) then
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKeyDesc", index - 1, 0, 6)
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 6, -1)
+    local prefix_end = line:find("^Output:%s", 1, false)
+    if prefix_end then
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKeyDesc", index - 1, 0, prefix_end)
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, prefix_end, -1)
     elseif line:find("^%s+", 1, false) then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
     end
@@ -1461,17 +1436,17 @@ end
 function M:output_panel_lines(entry, message)
   local lines = {}
   if type(entry) ~= "table" then
-    table.insert(lines, "Codex  select a workspace row to preview its Codex session")
+    table.insert(lines, "Output: select a workspace row to preview its Codux session")
     return lines
   end
 
   if entry.status == "inactive" then
-    table.insert(lines, "workspace inactive...")
+    table.insert(lines, "Output: workspace inactive")
     return lines
   end
 
   local role = entry.mission_role or entry.name or entry.safe_name or "workspace"
-  table.insert(lines, "Codex  " .. tostring(role))
+  table.insert(lines, "Output: " .. tostring(role))
   table.insert(lines, "  " .. tostring(message or "opening workspace session preview..."))
   table.insert(lines, "  Ctrl-o workspace")
   return lines

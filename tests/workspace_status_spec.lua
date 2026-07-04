@@ -302,16 +302,6 @@ do
         merged = entry.safe_name == "alpha-reviewer",
       }
     end,
-    workspace_terminal_snapshot = function(entry, opts)
-      assert_equal(opts.max_lines, 8)
-      if entry.safe_name == "alpha-builder" then
-        return "builder output", nil
-      end
-      if entry.safe_name == "alpha-reviewer" then
-        return "reviewer output", nil
-      end
-      return "", "missing output"
-    end,
   })
   local now = workspace_ui.parse_timestamp("2026-07-03T12:30:00Z")
   local lines, items = controller:dashboard_lines("/repo", { now = now, dashboard_width = 180 })
@@ -494,9 +484,6 @@ do
     workspace_branch_state = function()
       branch_calls = branch_calls + 1
       return { worktree = true, merged = false, ahead_count = 0 }
-    end,
-    workspace_terminal_snapshot = function()
-      return "", "missing output"
     end,
   })
 
@@ -1391,7 +1378,7 @@ if type(vim.api) == "table" then
   assert_true(dashboard_config.height <= 7)
   assert_equal(command_config.title, " Commands ")
   assert_equal(command_config.focusable, false)
-  assert_equal(output_config.title, " Mission Preview ")
+  assert_equal(output_config.title, " Output ")
   assert_contains(output_config.footer, "Ctrl-o workspace")
   assert_equal(output_config.footer:find("Ctrl-q", 1, true), nil)
   assert_equal(output_config.footer:find("Tab list", 1, true), nil)
@@ -3146,37 +3133,12 @@ do
   assert_equal(labels_by_key.d, "Delete Workspace")
 end
 
-do
-  local controller = mission_control_mod.new({
-    workspace_terminal_snapshot = function(entry, opts)
-      assert_equal(entry.safe_name, "alpha-builder")
-      assert_equal(opts.max_lines, 8)
-      return "first line\nlatest line", nil
-    end,
-  })
-  local lines = controller:output_lines({
-    safe_name = "alpha-builder",
-    mission_role = "Builder",
-    status = "idle",
-  })
-  assert_contains(table.concat(lines, "\n"), "Output  Builder")
-  assert_contains(table.concat(lines, "\n"), "latest line")
-
-  local inactive = controller:output_lines({
-    safe_name = "alpha-reviewer",
-    mission_role = "Reviewer",
-    status = "inactive",
-  })
-  assert_contains(table.concat(inactive, "\n"), "workspace is not active")
-end
-
 if type(vim.api) == "table" then
   local bufnr = vim.api.nvim_create_buf(false, true)
   local rendered_lines
   local preview_entry
   local term_command
   local modified_at_termopen
-  local snapshot_called = false
   local controller = mission_control_mod.new({
     namespace = vim.api.nvim_create_namespace("codux.mission_output.test"),
     state = {
@@ -3209,10 +3171,6 @@ if type(vim.api) == "table" then
         rendered_lines = lines
       end,
     },
-    workspace_terminal_snapshot = function()
-      snapshot_called = true
-      return "", "snapshot should not be used"
-    end,
     workspace_interactive_preview = function(entry)
       preview_entry = entry
       return {
@@ -3233,8 +3191,7 @@ if type(vim.api) == "table" then
   assert_equal(table.concat(term_command, " "), "env -u TMUX tmux attach-session -t codux-preview-test")
   assert_false(modified_at_termopen)
   assert_equal(controller.state.mission_dashboard_output_job, 77)
-  assert_false(snapshot_called)
-  assert_contains(table.concat(rendered_lines, "\n"), "Codex  Reviewer")
+  assert_contains(table.concat(rendered_lines, "\n"), "Output: Reviewer")
   assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-o workspace")
   assert_equal(table.concat(rendered_lines, "\n"):find("Ctrl-q", 1, true), nil)
   vim.api.nvim_buf_delete(bufnr, { force = true })
@@ -3404,7 +3361,73 @@ if type(vim.api) == "table" then
       mission_dashboard_output_buf = bufnr,
       mission_dashboard_output_win = 13,
       mission_dashboard_items = {
-        [3] = { kind = "mission", mission = { roles = { { safe_name = "alpha-builder", mission_role = "Builder" } } } },
+        [3] = {
+          kind = "mission",
+          mission = {
+            roles = {
+              { safe_name = "alpha-builder", mission_role = "Builder", status = "inactive" },
+              { safe_name = "alpha-reviewer", mission_role = "Reviewer", status = "idle" },
+            },
+          },
+        },
+      },
+      mission_dashboard_selectable_rows = { 3 },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 3,
+    },
+    is_loaded_buf = function(target)
+      return target == 10 or (target == bufnr and vim.api.nvim_buf_is_loaded(target))
+    end,
+    is_valid_win = function(win)
+      return win == 11 or win == 13
+    end,
+    ui = {
+      set_lines = function(_, lines)
+        rendered_lines = lines
+      end,
+    },
+    workspace_interactive_preview = function(entry)
+      preview_called = true
+      assert_equal(entry.safe_name, "alpha-reviewer")
+      return {
+        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
+        preview_session = "codux-preview-test",
+      }, nil
+    end,
+    termopen = function()
+      return 77
+    end,
+  })
+
+  assert_equal(controller:selected_output_entry().safe_name, "alpha-reviewer")
+  assert_true(controller:render_output_panel())
+  assert_true(preview_called)
+  assert_contains(table.concat(rendered_lines, "\n"), "Output: Reviewer")
+  assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-reviewer")
+  assert_equal(controller.state.mission_dashboard_output_job, 77)
+  vim.api.nvim_buf_delete(bufnr, { force = true })
+end
+
+if type(vim.api) == "table" then
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  local rendered_lines
+  local preview_called = false
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_buf = 10,
+      mission_dashboard_win = 11,
+      mission_dashboard_output_buf = bufnr,
+      mission_dashboard_output_win = 13,
+      mission_dashboard_items = {
+        [3] = {
+          kind = "mission",
+          mission = {
+            roles = {
+              { safe_name = "alpha-builder", mission_role = "Builder", status = "inactive" },
+              { safe_name = "alpha-reviewer", mission_role = "Reviewer", status = "inactive" },
+            },
+          },
+        },
       },
       mission_dashboard_selectable_rows = { 3 },
       mission_dashboard_search_confirmed = true,
@@ -3427,11 +3450,11 @@ if type(vim.api) == "table" then
     end,
   })
 
-  assert_nil(controller:selected_output_entry())
+  assert_equal(controller:selected_output_entry().safe_name, "alpha-builder")
   assert_true(controller:render_output_panel())
   assert_false(preview_called)
-  assert_contains(table.concat(rendered_lines, "\n"), "select a workspace row to preview its Codex session")
-  assert_nil(controller.state.mission_dashboard_output_entry)
+  assert_equal(table.concat(rendered_lines, "\n"), "Output: workspace inactive")
+  assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-builder")
   assert_nil(controller.state.mission_dashboard_output_job)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
@@ -3535,7 +3558,7 @@ if type(vim.api) == "table" then
     status = "inactive",
   }))
   on_exit(77, 2)
-  assert_equal(table.concat(rendered_lines, "\n"), "workspace inactive...")
+  assert_equal(table.concat(rendered_lines, "\n"), "Output: workspace inactive")
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 
@@ -3681,8 +3704,8 @@ if type(vim.api) == "table" then
   }))
   assert_false(preview_called)
   local rendered_text = table.concat(rendered_lines, "\n")
-  assert_contains(rendered_text, "workspace inactive...")
-  assert_equal(rendered_text:find("Codex  Reviewer", 1, true), nil)
+  assert_contains(rendered_text, "Output: workspace inactive")
+  assert_equal(rendered_text:find("Output: Reviewer", 1, true), nil)
   assert_equal(rendered_text:find("alpha-reviewer", 1, true), nil)
   assert_equal(rendered_text:find("Ctrl-o workspace", 1, true), nil)
   assert_equal(rendered_text:find("Ctrl-q", 1, true), nil)
@@ -3716,7 +3739,7 @@ if type(vim.api) == "table" then
   assert_true(controller.state.mission_dashboard_output_buf ~= terminal_buf)
   assert_equal(vim.api.nvim_get_option_value("buftype", { buf = controller.state.mission_dashboard_output_buf }), "nofile")
   local lines = vim.api.nvim_buf_get_lines(controller.state.mission_dashboard_output_buf, 0, -1, false)
-  assert_equal(table.concat(lines, "\n"), "workspace inactive...")
+  assert_equal(table.concat(lines, "\n"), "Output: workspace inactive")
   assert_false(vim.api.nvim_buf_is_valid(terminal_buf))
   vim.api.nvim_buf_delete(controller.state.mission_dashboard_output_buf, { force = true })
 end

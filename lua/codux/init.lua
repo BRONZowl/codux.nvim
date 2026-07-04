@@ -1198,9 +1198,6 @@ mission_controller = mission_control_mod.new({
   close_saved_workspace_window = function(entry)
     return M._v5.close_saved_workspace_window(entry)
   end,
-  workspace_terminal_snapshot = function(entry, opts)
-    return workspace_runtime:workspace_terminal_snapshot(entry, opts)
-  end,
   workspace_interactive_preview = function(entry, opts)
     return workspace_runtime:workspace_interactive_preview(entry, opts)
   end,
