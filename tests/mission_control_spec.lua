@@ -1391,6 +1391,7 @@ if type(vim.api) == "table" then
   assert_equal(command_config.title, " Commands ")
   assert_equal(command_config.focusable, false)
   assert_equal(output_config.title, " Output ")
+  assert_equal(output_config.focusable, false)
   assert_nil(output_config.footer)
 
   local old_is_valid_win = controller.is_valid_win

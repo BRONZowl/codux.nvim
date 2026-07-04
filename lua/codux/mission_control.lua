@@ -498,6 +498,7 @@ function M:dashboard_output_config(line_count, opts)
     col = math.max(0, dashboard_col),
     row = math.max(0, row),
     zindex = 55,
+    focusable = false,
   }
 end
 
