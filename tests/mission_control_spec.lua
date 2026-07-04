@@ -2395,6 +2395,15 @@ if type(vim.api) == "table" then
   assert_equal(profile_choices[2].profile, "auto")
   assert_equal(profile_choices[3].profile, "danger")
   assert_equal(profile_choices[3].label, "Full Access")
+  local keyed_profile_choices = codux._v5.keyed_permission_profile_choices()
+  assert_equal(keyed_profile_choices[1].key, "d")
+  assert_equal(keyed_profile_choices[1].label, "default")
+  assert_equal(keyed_profile_choices[1].profile, "default")
+  assert_equal(keyed_profile_choices[2].key, "a")
+  assert_equal(keyed_profile_choices[2].profile, "auto")
+  assert_equal(keyed_profile_choices[3].key, "f")
+  assert_equal(keyed_profile_choices[3].label, "full")
+  assert_equal(keyed_profile_choices[3].profile, "danger")
   assert_true(codux._v5.suppress_startup_plan_warning_for_workspace({
     mission_id = "mission:alpha",
   }))
@@ -2463,6 +2472,54 @@ if type(vim.api) == "table" then
     open_danger = open_danger,
   }), false)
   assert_equal(#profile_calls, 3)
+
+  assert_equal(codux._v5.select_keyed_permission_profile_open({
+    initial_prompt = "hello",
+    menu = function(opts, callback)
+      assert_equal(opts.title, " Codex permission profile ")
+      assert_equal(opts.filetype, "codux-open-profile")
+      assert_equal(opts.choices[1].key, "d")
+      assert_equal(opts.choices[2].key, "a")
+      assert_equal(opts.choices[3].key, "f")
+      return callback(opts.choices[1])
+    end,
+    open_default = open_default,
+    open_auto = open_auto,
+    open_danger = open_danger,
+  }), "default")
+  assert_equal(profile_calls[#profile_calls], "default:hello")
+
+  assert_equal(codux._v5.select_keyed_permission_profile_open({
+    initial_prompt = "hello",
+    menu = function(opts, callback)
+      return callback(opts.choices[2])
+    end,
+    open_default = open_default,
+    open_auto = open_auto,
+    open_danger = open_danger,
+  }), "auto")
+  assert_equal(profile_calls[#profile_calls], "auto:hello")
+
+  assert_equal(codux._v5.select_keyed_permission_profile_open({
+    initial_prompt = "hello",
+    menu = function(opts, callback)
+      return callback(opts.choices[3])
+    end,
+    open_default = open_default,
+    open_auto = open_auto,
+    open_danger = open_danger,
+  }), "danger")
+  assert_equal(profile_calls[#profile_calls], "danger:hello")
+
+  assert_equal(codux._v5.select_keyed_permission_profile_open({
+    menu = function(_, callback)
+      return callback(nil)
+    end,
+    open_default = open_default,
+    open_auto = open_auto,
+    open_danger = open_danger,
+  }), false)
+  assert_equal(#profile_calls, 6)
 
   local mission_map = vim.fn.maparg("<leader>zm", "n", false, true)
   assert_equal(mission_map.desc, "create codux mission")

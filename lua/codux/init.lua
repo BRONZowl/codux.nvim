@@ -213,8 +213,33 @@ function M._v5.permission_profile_choices()
   }
 end
 
+function M._v5.keyed_permission_profile_choices()
+  return {
+    { key = "d", label = "default", profile = "default", desc = "Open Codex Default" },
+    { key = "a", label = "auto", profile = "auto", desc = "Open Codex Auto" },
+    { key = "f", label = "full", profile = "danger", desc = "Open Codex Full Access" },
+  }
+end
+
 function M._v5.should_select_permission_profile(job_id)
   return job_id == nil
+end
+
+function M._v5.open_permission_profile_choice(choice, opts)
+  opts = type(opts) == "table" and opts or {}
+  if type(choice) ~= "table" then
+    return false
+  end
+  if choice.profile == "auto" and type(opts.open_auto) == "function" then
+    return opts.open_auto(opts.initial_prompt)
+  end
+  if choice.profile == "danger" and type(opts.open_danger) == "function" then
+    return opts.open_danger(opts.initial_prompt)
+  end
+  if type(opts.open_default) == "function" then
+    return opts.open_default(opts.initial_prompt)
+  end
+  return false
 end
 
 function M._v5.select_permission_profile_open(opts)
@@ -233,19 +258,29 @@ function M._v5.select_permission_profile_open(opts)
       return item.label
     end,
   }, function(choice)
-    if type(choice) ~= "table" then
-      return false
-    end
-    if choice.profile == "auto" and type(opts.open_auto) == "function" then
-      return opts.open_auto(opts.initial_prompt)
-    end
-    if choice.profile == "danger" and type(opts.open_danger) == "function" then
-      return opts.open_danger(opts.initial_prompt)
-    end
+    return M._v5.open_permission_profile_choice(choice, opts)
+  end)
+end
+
+function M._v5.select_keyed_permission_profile_open(opts)
+  opts = type(opts) == "table" and opts or {}
+  local menu = opts.menu or ui.key_choice_menu
+  if type(menu) ~= "function" then
     if type(opts.open_default) == "function" then
       return opts.open_default(opts.initial_prompt)
     end
     return false
+  end
+
+  return menu({
+    title = " Codex permission profile ",
+    choices = M._v5.keyed_permission_profile_choices(),
+    filetype = "codux-open-profile",
+    cancel_desc = "Cancel Codux Open",
+    create_error = "Failed to create Codux open menu",
+    open_error = "Failed to open Codux open menu",
+  }, function(choice)
+    return M._v5.open_permission_profile_choice(choice, opts)
   end)
 end
 
@@ -937,6 +972,20 @@ function M.open(opts)
   end
 
   return M._v5.select_permission_profile_open({
+    initial_prompt = opts.initial_prompt,
+    open_default = M.open_default,
+    open_auto = M.open_workspace_auto,
+    open_danger = M.open_danger_full_access,
+  })
+end
+
+function M.open_with_profile_menu(opts)
+  opts = type(opts) == "table" and opts or {}
+  if not M._v5.should_select_permission_profile(state.job_id) then
+    return terminal:open(opts)
+  end
+
+  return M._v5.select_keyed_permission_profile_open({
     initial_prompt = opts.initial_prompt,
     open_default = M.open_default,
     open_auto = M.open_workspace_auto,
@@ -1691,7 +1740,7 @@ function M.setup(opts)
 
   local mappings = type(config.mappings) == "table" and config.mappings or {}
   refresh_which_key()
-  set_mapping("n", mappings.open, M.open, "open codex")
+  set_mapping("n", mappings.open, M.open_with_profile_menu, "open codex")
   set_mapping("n", mappings.review_file, M.send_file_review, "send file/folder to codex")
   set_mapping("n", mappings.review_selection, M.send_selection, "send selection to codex")
   set_mapping("v", mappings.review_selection, M.send_selection, "send selection to codex")

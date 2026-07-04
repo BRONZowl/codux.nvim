@@ -223,6 +223,126 @@ function M.bind_close_keys(bufnr, close_fn, desc, modes, opts)
   end
 end
 
+local function display_width(value)
+  value = tostring(value or "")
+  if vim.fn and type(vim.fn.strdisplaywidth) == "function" then
+    local ok, width = pcall(vim.fn.strdisplaywidth, value)
+    if ok and type(width) == "number" then
+      return width
+    end
+  end
+
+  return #value
+end
+
+function M.key_choice_lines(choices)
+  local lines = {}
+  for _, choice in ipairs(type(choices) == "table" and choices or {}) do
+    local key = tostring(choice.key or "")
+    local label = tostring(choice.label or "")
+    if key ~= "" and label ~= "" then
+      table.insert(lines, key .. " - " .. label)
+    end
+  end
+  return lines
+end
+
+function M.key_choice_menu(opts, callback, deps)
+  opts = type(opts) == "table" and opts or {}
+  deps = type(deps) == "table" and deps or {}
+  callback = type(callback) == "function" and callback or function() end
+  local notify = type(deps.notify) == "function" and deps.notify or function(message, level)
+    vim.notify(message, level or vim.log.levels.INFO, { title = "codux.nvim" })
+  end
+  local create_scratch_buffer = type(deps.create_scratch_buffer) == "function" and deps.create_scratch_buffer
+    or M.create_scratch_buffer
+  local set_lines = type(deps.set_lines) == "function" and deps.set_lines or M.set_lines
+  local set_window_options = type(deps.set_window_options) == "function" and deps.set_window_options or M.set_window_options
+  local delete_buffer = type(deps.delete_buffer) == "function" and deps.delete_buffer or M.delete_buffer
+  local close_window = type(deps.close_window) == "function" and deps.close_window or M.close_window
+  local set_keymap = type(deps.set_buffer_keymap) == "function" and deps.set_buffer_keymap or M.set_keymap
+  local bind_close_keys = type(deps.bind_close_keys) == "function" and deps.bind_close_keys or M.bind_close_keys
+  local open_win = type(deps.open_win) == "function" and deps.open_win or vim.api.nvim_open_win
+  local choices = type(opts.choices) == "table" and opts.choices or {}
+  local lines = M.key_choice_lines(choices)
+  local width = display_width(tostring(opts.title or ""))
+
+  for _, line in ipairs(lines) do
+    width = math.max(width, display_width(line))
+  end
+  width = math.min(math.max(width + 4, 20), math.max(20, vim.o.columns - 4))
+
+  local closed = false
+  local win
+  local bufnr = create_scratch_buffer({
+    bufhidden = "wipe",
+    buftype = "nofile",
+    filetype = opts.filetype or "codux-key-choice",
+    swapfile = false,
+    modifiable = false,
+  })
+  if not bufnr then
+    notify(opts.create_error or "Failed to create Codux menu", vim.log.levels.ERROR)
+    return false
+  end
+
+  local function close_menu(choice)
+    if closed then
+      return false
+    end
+    closed = true
+    close_window(win)
+    delete_buffer(bufnr)
+    callback(choice)
+    return true
+  end
+
+  set_lines(bufnr, lines, { modifiable = true })
+  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local height = math.max(1, #lines)
+  local win_ok, winid = pcall(open_win, bufnr, true, {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = opts.title or " Codux ",
+    title_pos = "center",
+    width = width,
+    height = height,
+    col = math.max(0, math.floor((vim.o.columns - width) / 2)),
+    row = math.max(0, math.floor((total_height - height) / 2) - 2),
+    zindex = opts.zindex or 60,
+  })
+  if not win_ok then
+    delete_buffer(bufnr)
+    notify(opts.open_error or "Failed to open Codux menu", vim.log.levels.ERROR)
+    return false
+  end
+  win = winid
+
+  set_window_options(win, {
+    number = false,
+    relativenumber = false,
+    signcolumn = "no",
+    winfixbuf = true,
+    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
+  })
+
+  bind_close_keys(bufnr, function()
+    return close_menu(nil)
+  end, opts.cancel_desc or "Cancel Codux Menu", "n", { escape = true, q = true })
+  for _, choice in ipairs(choices) do
+    local key = choice.key
+    if type(key) == "string" and key ~= "" then
+      local bound_choice = choice
+      set_keymap(bufnr, "n", key, function()
+        return close_menu(bound_choice)
+      end, tostring(choice.desc or choice.label or "Select Codux Menu Item"), { nowait = true })
+    end
+  end
+
+  return true
+end
+
 function M.printable_prompt_keys()
   local keys = { { "<Space>", " " } }
 
