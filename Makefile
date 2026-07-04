@@ -7,6 +7,7 @@ NVIM_HEADLESS ?= $(NVIM_BIN) --headless -u NONE -i NONE --cmd 'set shadafile=NON
 TEST_SPECS := \
 	tests/mission_spec.lua \
 	tests/mission_control_spec.lua \
+	tests/mission_output_panel_spec.lua \
 	tests/prompt_actions_spec.lua \
 	tests/workspace_runtime_spec.lua \
 	tests/workspace_store_spec.lua \
