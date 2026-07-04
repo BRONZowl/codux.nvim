@@ -2016,7 +2016,7 @@ end
 
 do
   local old_key_choice_menu = ui_mod.key_choice_menu
-  local prompts = {}
+  local prompt_opts = {}
   local calls = {}
   local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", codex_status = "question" }
   ui_mod.key_choice_menu = function(_, callback)
@@ -2029,8 +2029,8 @@ do
     end,
     ui = {
       single_line_prompt = function(opts, callback)
-        table.insert(prompts, opts.prompt)
-        if #prompts == 1 then
+        table.insert(prompt_opts, opts)
+        if #prompt_opts == 1 then
           callback("3")
         else
           callback("ship this plan")
@@ -2053,8 +2053,10 @@ do
   end
 
   assert_true(controller:open_workspace_question_answer(entry))
-  assert_contains(prompts[1], "Plan option Builder")
-  assert_contains(prompts[2], "Note Builder")
+  assert_contains(prompt_opts[1].prompt, "Plan option Builder")
+  assert_nil(prompt_opts[1].insert_input)
+  assert_contains(prompt_opts[2].prompt, "Note Builder")
+  assert_true(prompt_opts[2].insert_input)
   assert_equal(calls[1], "select:alpha-builder:3:true")
   assert_equal(calls[2], "note:alpha-builder:ship this plan")
   assert_equal(calls[3], "notify:Sent note to Builder")

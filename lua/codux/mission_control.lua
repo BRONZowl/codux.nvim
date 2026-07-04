@@ -2424,6 +2424,7 @@ function M:open_question_note_input(entry, label)
     prompt = "Note " .. tostring(label) .. ": ",
     filetype = "codux-mission-question-note",
     zindex = 86,
+    insert_input = true,
     on_create_buffer = function(bufnr)
       ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
     end,

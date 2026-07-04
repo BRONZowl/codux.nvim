@@ -442,6 +442,7 @@ function M.single_line_prompt(opts, callback, deps)
   local bind_close_keys = type(deps.bind_close_keys) == "function" and deps.bind_close_keys or M.bind_close_keys
   local prompt = tostring(opts.prompt or "")
   local value = tostring(opts.default or "")
+  local insert_input = opts.insert_input == true
   local allowed_chars
   if type(opts.allowed_chars) == "string" then
     allowed_chars = {}
@@ -468,9 +469,11 @@ function M.single_line_prompt(opts, callback, deps)
       return false
     end
 
-    M.set_lines(bufnr, { value .. " " })
+    local display_value = insert_input and value or value .. " "
+    M.set_lines(bufnr, { display_value })
     if M.is_valid_win(win) then
-      pcall(vim.api.nvim_win_set_cursor, win, { 1, math.min(#value, math.max(0, width - 1)) })
+      local cursor_col = insert_input and #display_value or #value
+      pcall(vim.api.nvim_win_set_cursor, win, { 1, math.min(cursor_col, math.max(0, width - 1)) })
     end
     return true
   end
@@ -551,51 +554,56 @@ function M.single_line_prompt(opts, callback, deps)
 
   bind_close_keys(bufnr, function()
     return close_prompt(nil)
-  end, "Cancel Codux Prompt", "n", { escape = true })
-  set_keymap(bufnr, "n", "<CR>", function()
+  end, "Cancel Codux Prompt", insert_input and { "n", "i" } or "n", { escape = true })
+  set_keymap(bufnr, insert_input and { "n", "i" } or "n", "<CR>", function()
     return close_prompt(submitted_value())
   end, "Submit Codux Prompt")
-  set_keymap(bufnr, "n", "<BS>", function()
-    local length = vim.fn.strchars(value)
-    if length > 0 then
-      value = vim.fn.strcharpart(value, 0, length - 1)
-      return render()
-    end
-    return true
-  end, "Delete Codux Prompt Character", { nowait = true })
-  set_keymap(bufnr, "n", "<C-h>", function()
-    local length = vim.fn.strchars(value)
-    if length > 0 then
-      value = vim.fn.strcharpart(value, 0, length - 1)
-      return render()
-    end
-    return true
-  end, "Delete Codux Prompt Character", { nowait = true })
-  set_keymap(bufnr, "n", "<C-u>", function()
-    value = ""
-    return render()
-  end, "Clear Codux Prompt", { nowait = true })
-  local function append_prompt_input(input)
-    if not can_append_input(input) then
+  if not insert_input then
+    set_keymap(bufnr, "n", "<BS>", function()
+      local length = vim.fn.strchars(value)
+      if length > 0 then
+        value = vim.fn.strcharpart(value, 0, length - 1)
+        return render()
+      end
       return true
+    end, "Delete Codux Prompt Character", { nowait = true })
+    set_keymap(bufnr, "n", "<C-h>", function()
+      local length = vim.fn.strchars(value)
+      if length > 0 then
+        value = vim.fn.strcharpart(value, 0, length - 1)
+        return render()
+      end
+      return true
+    end, "Delete Codux Prompt Character", { nowait = true })
+    set_keymap(bufnr, "n", "<C-u>", function()
+      value = ""
+      return render()
+    end, "Clear Codux Prompt", { nowait = true })
+    local function append_prompt_input(input)
+      if not can_append_input(input) then
+        return true
+      end
+      value = value .. input
+      return render()
     end
-    value = value .. input
-    return render()
-  end
-  for _, key in ipairs(M.printable_prompt_keys()) do
-    local lhs = key[1]
-    local input = key[2]
-    set_keymap(bufnr, "n", lhs, function()
-      return append_prompt_input(input)
-    end, "Type in Codux Prompt", { nowait = true })
-  end
-  if type(vim.g) == "table" and vim.g.mapleader == " " then
-    set_keymap(bufnr, "n", "<Leader>", function()
-      return append_prompt_input(" ")
-    end, "Type in Codux Prompt", { nowait = true })
+    for _, key in ipairs(M.printable_prompt_keys()) do
+      local lhs = key[1]
+      local input = key[2]
+      set_keymap(bufnr, "n", lhs, function()
+        return append_prompt_input(input)
+      end, "Type in Codux Prompt", { nowait = true })
+    end
+    if type(vim.g) == "table" and vim.g.mapleader == " " then
+      set_keymap(bufnr, "n", "<Leader>", function()
+        return append_prompt_input(" ")
+      end, "Type in Codux Prompt", { nowait = true })
+    end
   end
 
   render()
+  if insert_input then
+    pcall(vim.cmd, "startinsert")
+  end
   return true
 end
 

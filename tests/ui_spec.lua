@@ -295,6 +295,7 @@ do
   local rendered
   local direct_line
   local submitted
+  local started_command
 
   vim.g = vim.g or {}
   local old_mapleader = vim.g.mapleader
@@ -302,10 +303,14 @@ do
   vim.api = vim.api or {}
   local old_open_win = vim.api.nvim_open_win
   local old_win_set_cursor = vim.api.nvim_win_set_cursor
+  local old_cmd = vim.cmd
   vim.api.nvim_open_win = function()
     return 202
   end
   vim.api.nvim_win_set_cursor = function() end
+  vim.cmd = function(command)
+    started_command = command
+  end
 
   ui.create_scratch_buffer = function(options)
     created_options = options
@@ -406,9 +411,36 @@ do
   assert_true(keymaps["<CR>"].rhs())
   assert_equal(submitted, "raw pasted note")
 
+  keymaps = {}
+  direct_line = nil
+  submitted = nil
+  started_command = nil
+  assert_true(ui.single_line_prompt({
+    prompt = "Note Builder: ",
+    insert_input = true,
+  }, function(value)
+    submitted = value
+  end, {
+    bind_close_keys = function() end,
+    set_buffer_keymap = function(_, modes, lhs, rhs, _, opts)
+      keymaps[lhs] = { modes = modes, rhs = rhs, opts = opts }
+    end,
+  }))
+
+  assert_true(created_options.modifiable)
+  assert_nil(keymaps["<Space>"])
+  assert_nil(keymaps["<Leader>"])
+  assert_equal(keymaps["<CR>"].modes[1], "n")
+  assert_equal(keymaps["<CR>"].modes[2], "i")
+  assert_equal(started_command, "startinsert")
+  direct_line = "ship this plan with context "
+  assert_true(keymaps["<CR>"].rhs())
+  assert_equal(submitted, "ship this plan with context")
+
   vim.api.nvim_open_win = old_open_win
   vim.api.nvim_win_set_cursor = old_win_set_cursor
   vim.api = old_api
+  vim.cmd = old_cmd
   if old_g == nil then
     vim.g = nil
   else
