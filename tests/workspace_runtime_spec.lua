@@ -627,10 +627,58 @@ do
     assert_nil(error_message)
     assert_true(ok)
     local command_text = table.concat(commands, "\n")
+    local ensure_index = command_text:find("remote_ensure_plan_mode", 1, true)
+    local send_index = command_text:find("remote_send_to_codex", 1, true)
+    assert_true(type(ensure_index) == "number")
+    assert_true(type(send_index) == "number")
+    assert_true(ensure_index < send_index)
     assert_contains(command_text, "remote_send_to_codex")
     assert_contains(command_text, "  /plan  ")
     assert_contains(command_text, expected_server)
     assert_equal(command_text:find(runtime:workspace_server_path("/repo", "review"), 1, true), nil)
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local expected_server = "/tmp/stale-review.sock"
+    local runtime = workspace_prepare_runtime({
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        if command:find("remote_ensure_plan_mode", 1, true) then
+          return "failed\n", 0
+        end
+        if command:find("remote_send_to_codex", 1, true) then
+          error("prompt should not be sent before plan mode is confirmed")
+        end
+        if expected_server and command:find("nvim --server " .. expected_server .. " --remote-expr", 1, true) then
+          return "ok\n", 0
+        end
+        return "", 1
+      end,
+    })
+    local ok, error_message = runtime:send_prompt_to_workspace({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+      nvim_server = "/tmp/stale-review.sock",
+    }, "do work", { attempts = 1 })
+    assert_false(ok)
+    assert_equal(error_message, "failed")
+    local command_text = table.concat(commands, "\n")
+    assert_contains(command_text, "remote_ensure_plan_mode")
+    assert_equal(command_text:find("remote_send_to_codex", 1, true), nil)
   end)
 end
 
@@ -1629,10 +1677,14 @@ do
   function runtime:ensure_workspace_plan_mode()
     return false, "still execute"
   end
+  function runtime:switch_tmux_window()
+    error("failed plan-mode roles should not be focused")
+  end
 
-  assert_true(runtime:start_mission("Alpha", { project_root = "/repo" }))
-  assert_equal(#notifications, 1)
-  assert_equal(notifications[1], "Started Codux mission Alpha with 1 roles")
+  assert_false(runtime:start_mission("Alpha", { project_root = "/repo", focus_first = true }))
+  assert_equal(#notifications, 2)
+  assert_equal(notifications[1], "Failed to start Codux mission role Builder: still execute")
+  assert_equal(notifications[2], "Started 0 roles in Codux mission Alpha; 1 failed")
 end
 
 do
