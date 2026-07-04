@@ -1351,12 +1351,7 @@ if type(vim.api) == "table" then
   assert_equal(command_config.title, " Commands ")
   assert_equal(command_config.focusable, false)
   assert_equal(output_config.title, " Output ")
-  assert_contains(output_config.footer, "Ctrl-o workspace")
-  assert_equal(output_config.footer:find("Ctrl-q", 1, true), nil)
-  assert_equal(output_config.footer:find("Tab list", 1, true), nil)
-  assert_equal(output_config.footer:find("r refresh", 1, true), nil)
-  assert_equal(output_config.footer:find("p prompt", 1, true), nil)
-  assert_equal(output_config.footer:find("o open", 1, true), nil)
+  assert_nil(output_config.footer)
 
   local old_is_valid_win = controller.is_valid_win
   local old_get_window_config = controller.get_window_config

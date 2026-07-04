@@ -493,8 +493,6 @@ function M:dashboard_output_config(line_count, opts)
     border = "rounded",
     title = " Output ",
     title_pos = "center",
-    footer = " Ctrl-o workspace ",
-    footer_pos = "center",
     width = dashboard_width,
     height = height,
     col = math.max(0, dashboard_col),

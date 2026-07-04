@@ -100,7 +100,6 @@ function Output:output_panel_lines(entry, message)
   local role = entry.mission_role or entry.name or entry.safe_name or "workspace"
   table.insert(lines, "Output: " .. tostring(role))
   table.insert(lines, "  " .. tostring(message or "opening workspace session preview..."))
-  table.insert(lines, "  Ctrl-o workspace")
   return lines
 end
 
@@ -431,11 +430,6 @@ function Output:bind_output_panel_commands(bufnr)
   self.set_buffer_keymap(bufnr, { "n", "t" }, "<C-q>", function()
     return self:close_dashboard()
   end, "Close Codux Missions", {
-    nowait = true,
-  })
-  self.set_buffer_keymap(bufnr, { "n", "t" }, "<C-o>", function()
-    return self:open_output_workspace()
-  end, "Open Codux Mission Workspace", {
     nowait = true,
   })
 end

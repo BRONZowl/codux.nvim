@@ -66,7 +66,7 @@ if type(vim.api) == "table" then
   assert_false(modified_at_termopen)
   assert_equal(controller.state.mission_dashboard_output_job, 77)
   assert_contains(table.concat(rendered_lines, "\n"), "Output: Reviewer")
-  assert_contains(table.concat(rendered_lines, "\n"), "Ctrl-o workspace")
+  assert_equal(table.concat(rendered_lines, "\n"):find("Ctrl-o workspace", 1, true), nil)
   assert_equal(table.concat(rendered_lines, "\n"):find("Ctrl-q", 1, true), nil)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
@@ -746,7 +746,7 @@ do
 
   controller:bind_output_panel_commands(12)
   assert_equal(bound["<C-q>"].desc, "Close Codux Missions")
-  assert_equal(bound["<C-o>"].desc, "Open Codux Mission Workspace")
+  assert_nil(bound["<C-o>"])
   assert_nil(bound.r)
   assert_nil(bound.o)
   assert_nil(bound.p)
@@ -757,9 +757,8 @@ do
   assert_nil(bound.w)
   assert_true(bound["<C-q>"].rhs())
   assert_true(closed)
-  assert_true(bound["<C-o>"].rhs())
-  assert_equal(opened_name, "alpha-builder")
-  assert_equal(opened_root, "/repo")
+  assert_nil(opened_name)
+  assert_nil(opened_root)
 end
 
 do
