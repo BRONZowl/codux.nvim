@@ -1432,12 +1432,17 @@ function M:open(opts)
     self:focus_window()
   end
 
-  return self:start_terminal(focus, opts.initial_prompt, nil, nil, "default")
+  return self:start_terminal(focus, opts.initial_prompt, nil, nil, "default", {
+    initial_mode = opts.initial_mode,
+  })
 end
 
-function M:restart_with_command(command, focus, permission_profile, initial_prompt)
+function M:restart_with_command(command, focus, permission_profile, initial_prompt, opts)
+  opts = type(opts) == "table" and opts or {}
   self:exit()
-  return self:start_terminal(focus ~= false, initial_prompt, command, nil, permission_profile)
+  return self:start_terminal(focus ~= false, initial_prompt, command, nil, permission_profile, {
+    initial_mode = opts.initial_mode,
+  })
 end
 
 function M:restart_hidden_with_command(command, permission_profile, initial_prompt)

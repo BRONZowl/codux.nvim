@@ -267,7 +267,7 @@ function M._v5.open_permission_profile_choice(choice, opts)
   }
   local opener = openers[choice.profile]
   if type(opener) == "function" then
-    return opener(opts.initial_prompt)
+    return opener(opts.initial_prompt, opts.open_opts)
   end
   return false
 end
@@ -277,7 +277,7 @@ function M._v5.select_permission_profile_open(opts)
   local selector = opts.selector or (vim.ui and vim.ui.select)
   if type(selector) ~= "function" then
     if type(opts.open_default) == "function" then
-      return opts.open_default(opts.initial_prompt)
+      return opts.open_default(opts.initial_prompt, opts.open_opts)
     end
     return false
   end
@@ -297,7 +297,7 @@ function M._v5.select_keyed_permission_profile_open(opts)
   local menu = opts.menu or ui.key_choice_menu
   if type(menu) ~= "function" then
     if type(opts.open_default) == "function" then
-      return opts.open_default(opts.initial_prompt)
+      return opts.open_default(opts.initial_prompt, opts.open_opts)
     end
     return false
   end
@@ -969,8 +969,8 @@ function M._v5.parse_create_args(args)
   return workspace_runtime_mod.parse_create_args(args)
 end
 
-local function restart_with_command(command, focus, permission_profile, initial_prompt)
-  return terminal:restart_with_command(command, focus, permission_profile, initial_prompt)
+local function restart_with_command(command, focus, permission_profile, initial_prompt, opts)
+  return terminal:restart_with_command(command, focus, permission_profile, initial_prompt, opts)
 end
 
 local function start_hidden_with_command(command, permission_profile, initial_prompt)
@@ -981,18 +981,22 @@ local function restart_hidden_with_command(command, permission_profile, initial_
   return terminal:restart_hidden_with_command(command, permission_profile, initial_prompt)
 end
 
-function M.open_workspace_auto(initial_prompt)
+function M.open_workspace_auto(initial_prompt, opts)
   notify("Starting Codex autopilot with approve-for-me permissions")
-  return restart_with_command(config.workspace_auto_cmd, true, "auto", initial_prompt)
+  return restart_with_command(config.workspace_auto_cmd, true, "auto", initial_prompt, opts)
 end
 
-function M.open_danger_full_access(initial_prompt)
+function M.open_danger_full_access(initial_prompt, opts)
   notify("Starting Codex with no approvals and no sandbox", vim.log.levels.WARN)
-  return restart_with_command(config.danger_full_access_cmd, true, "danger", initial_prompt)
+  return restart_with_command(config.danger_full_access_cmd, true, "danger", initial_prompt, opts)
 end
 
-function M.open_default(initial_prompt)
-  return terminal:open({ initial_prompt = initial_prompt })
+function M.open_default(initial_prompt, opts)
+  opts = type(opts) == "table" and opts or {}
+  return terminal:open({
+    initial_prompt = initial_prompt,
+    initial_mode = opts.initial_mode,
+  })
 end
 
 function M.open(opts)
@@ -1003,6 +1007,7 @@ function M.open(opts)
 
   return M._v5.select_permission_profile_open({
     initial_prompt = opts.initial_prompt,
+    open_opts = opts.open_opts,
     open_default = M.open_default,
     open_auto = M.open_workspace_auto,
     open_danger = M.open_danger_full_access,
@@ -1017,6 +1022,7 @@ function M.open_with_keyed_profile_menu(opts)
 
   return M._v5.select_keyed_permission_profile_open({
     initial_prompt = opts.initial_prompt,
+    open_opts = opts.open_opts,
     open_default = M.open_default,
     open_auto = M.open_workspace_auto,
     open_danger = M.open_danger_full_access,
@@ -1025,6 +1031,19 @@ end
 
 function M.open_with_profile_menu(opts)
   return M.open_with_keyed_profile_menu(opts)
+end
+
+function M._v5.send_prompt_or_open_with_profile(message)
+  if not M._v5.should_select_permission_profile(state.job_id) then
+    return terminal:send_to_codex(message)
+  end
+
+  return M.open_with_keyed_profile_menu({
+    initial_prompt = message,
+    open_opts = {
+      initial_mode = "plan",
+    },
+  })
 end
 
 function M.open_workspace_session(workspace, initial_prompt, opts)
@@ -1393,7 +1412,7 @@ function M.toggle_plan_mode()
 end
 
 local function send_to_codex(message)
-  return terminal:send_to_codex(message)
+  return M._v5.send_prompt_or_open_with_profile(message)
 end
 
 prompt_actions = prompt_actions_mod.new({

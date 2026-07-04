@@ -53,6 +53,54 @@ do
 end
 
 do
+  local calls = {}
+  local controller = terminal_mod.new({})
+  function controller:exit()
+    table.insert(calls, { name = "exit" })
+  end
+  function controller:valid_win()
+    return true
+  end
+  function controller:focus_window()
+    table.insert(calls, { name = "focus_window" })
+  end
+  function controller:start_terminal(focus, initial_prompt, command, workspace, permission_profile, opts)
+    table.insert(calls, {
+      name = "start_terminal",
+      focus = focus,
+      initial_prompt = initial_prompt,
+      command = command,
+      workspace = workspace,
+      permission_profile = permission_profile,
+      initial_mode = type(opts) == "table" and opts.initial_mode,
+    })
+    return "started"
+  end
+
+  assert_equal(controller:open({
+    initial_prompt = "hello",
+    initial_mode = "plan",
+    focus = false,
+  }), "started")
+  assert_equal(calls[1].name, "start_terminal")
+  assert_equal(calls[1].focus, false)
+  assert_equal(calls[1].initial_prompt, "hello")
+  assert_equal(calls[1].permission_profile, "default")
+  assert_equal(calls[1].initial_mode, "plan")
+
+  assert_equal(controller:restart_with_command("codex-auto", true, "auto", "fix it", {
+    initial_mode = "plan",
+  }), "started")
+  assert_equal(calls[2].name, "exit")
+  assert_equal(calls[3].name, "start_terminal")
+  assert_equal(calls[3].focus, true)
+  assert_equal(calls[3].initial_prompt, "fix it")
+  assert_equal(calls[3].command, "codex-auto")
+  assert_equal(calls[3].permission_profile, "auto")
+  assert_equal(calls[3].initial_mode, "plan")
+end
+
+do
   local function with_terminal_start_env(opts, callback)
     opts = opts or {}
     local old_api = vim.api

@@ -62,6 +62,22 @@ if type(vim.api) == "table" then
   }), false)
   assert_equal(#profile_calls, 1)
 
+  local forwarded_prompt
+  local forwarded_opts
+  assert_equal(codux._v5.open_permission_profile_choice({
+    profile = "default",
+  }, {
+    initial_prompt = "plan this",
+    open_opts = { initial_mode = "plan" },
+    open_default = function(prompt, open_opts)
+      forwarded_prompt = prompt
+      forwarded_opts = open_opts
+      return "forwarded"
+    end,
+  }), "forwarded")
+  assert_equal(forwarded_prompt, "plan this")
+  assert_equal(forwarded_opts.initial_mode, "plan")
+
   assert_equal(codux._v5.select_permission_profile_open({
     initial_prompt = "hello",
     selector = function(items, opts, callback)
@@ -154,6 +170,31 @@ if type(vim.api) == "table" then
     open_danger = open_danger,
   }), false)
   assert_equal(#profile_calls, 7)
+
+  local selected_open_opts
+  assert_equal(codux._v5.select_keyed_permission_profile_open({
+    initial_prompt = "cold prompt",
+    open_opts = { initial_mode = "plan" },
+    menu = function(opts, callback)
+      return callback(opts.choices[1])
+    end,
+    open_default = function(_, open_opts)
+      selected_open_opts = open_opts
+      return "selected"
+    end,
+  }), "selected")
+  assert_equal(selected_open_opts.initial_mode, "plan")
+
+  local opened_opts
+  local old_open_with_keyed_profile_menu = codux.open_with_keyed_profile_menu
+  codux.open_with_keyed_profile_menu = function(opts)
+    opened_opts = opts
+    return "opened"
+  end
+  assert_equal(codux._v5.send_prompt_or_open_with_profile("review me"), "opened")
+  assert_equal(opened_opts.initial_prompt, "review me")
+  assert_equal(opened_opts.open_opts.initial_mode, "plan")
+  codux.open_with_keyed_profile_menu = old_open_with_keyed_profile_menu
 
   local open_map = vim.fn.maparg("<leader>zc", "n", false, true)
   assert_equal(open_map.desc, "open codex")
