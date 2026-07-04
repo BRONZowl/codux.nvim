@@ -1675,16 +1675,19 @@ do
     }, nil
   end
   function runtime:ensure_workspace_plan_mode()
+    table.insert(notifications, "ensure_plan_attempted")
     return false, "still execute"
   end
-  function runtime:switch_tmux_window()
-    error("failed plan-mode roles should not be focused")
+  function runtime:switch_tmux_window(window_id)
+    table.insert(notifications, "focus:" .. tostring(window_id))
+    return true
   end
 
-  assert_false(runtime:start_mission("Alpha", { project_root = "/repo", focus_first = true }))
-  assert_equal(#notifications, 2)
-  assert_equal(notifications[1], "Failed to start Codux mission role Builder: still execute")
-  assert_equal(notifications[2], "Started 0 roles in Codux mission Alpha; 1 failed")
+  assert_true(runtime:start_mission("Alpha", { project_root = "/repo", focus_first = true }))
+  assert_equal(#notifications, 3)
+  assert_equal(notifications[1], "ensure_plan_attempted")
+  assert_equal(notifications[2], "Started Codux mission Alpha with 1 roles")
+  assert_equal(notifications[3], "focus:@1")
 end
 
 do

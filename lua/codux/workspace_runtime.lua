@@ -2685,19 +2685,10 @@ function M:start_mission(name, opts)
         restart_inactive = opts.restart_inactive == true,
       })
       if workspace then
+        started = started + 1
+        table.insert(started_workspaces, workspace)
         workspace.initial_mode = "plan"
-        local plan_ok, plan_error = self:ensure_workspace_plan_mode(workspace)
-        if plan_ok then
-          started = started + 1
-          table.insert(started_workspaces, workspace)
-        else
-          failed = failed + 1
-          local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
-          self.notify(
-            "Failed to start Codux mission role " .. tostring(label) .. ": " .. tostring(plan_error or "plan mode unavailable"),
-            vim.log.levels.WARN
-          )
-        end
+        self:ensure_workspace_plan_mode(workspace)
       else
         failed = failed + 1
         local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
