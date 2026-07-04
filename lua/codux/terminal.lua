@@ -1543,25 +1543,48 @@ end
 function M:select_codex_question_option(option, with_note)
   option = trim(option)
   local option_number = tonumber(option)
-  if option == "" or not option:match("^%d+$") or option_number == nil or option_number < 1 or not self:terminal_running() then
+  if
+    option == ""
+    or not option:match("^%d+$")
+    or option_number == nil
+    or option_number < 1
+    or option_number > 4
+    or not self:terminal_running()
+  then
     return false
   end
 
-  local reset_count = 20
-  local sequence = string.rep("\27[A", reset_count) .. string.rep("\27[B", option_number - 1)
+  local function send_key(key)
+    local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, key)
+    if send_ok and sent ~= 0 then
+      return true
+    end
+    self.notify("Failed to answer Codex question", vim.log.levels.ERROR)
+    return false
+  end
+
+  for _ = 1, 20 do
+    if not send_key("\27[A") then
+      return false
+    end
+    pcall(vim.fn.sleep, "15m")
+  end
+  for _ = 1, option_number - 1 do
+    if not send_key("\27[B") then
+      return false
+    end
+    pcall(vim.fn.sleep, "15m")
+  end
+
   local suffix = with_note == true and "\t" or "\r"
-  local move_ok, moved = pcall(vim.fn.chansend, self.state.job_id, sequence)
-  if not move_ok or moved == 0 then
-    self.notify("Failed to answer Codex question", vim.log.levels.ERROR)
+  pcall(vim.fn.sleep, "40m")
+  if not send_key(suffix) then
     return false
   end
 
-  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, suffix)
-  if not send_ok or sent == 0 then
-    self.notify("Failed to answer Codex question", vim.log.levels.ERROR)
-    return false
+  if with_note == true then
+    pcall(vim.fn.sleep, "40m")
   end
-
   self:invalidate_terminal_prompt_tracking()
   if with_note ~= true then
     self:mark_terminal_prompt_submission()

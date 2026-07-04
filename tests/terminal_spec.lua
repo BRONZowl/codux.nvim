@@ -551,10 +551,16 @@ end
 
 do
   local sent = {}
+  local sleeps = {}
   local old_chansend = vim.fn.chansend
+  local old_sleep = vim.fn.sleep
   vim.fn.chansend = function(job_id, value)
     assert_equal(job_id, 42)
     table.insert(sent, value)
+    return 1
+  end
+  vim.fn.sleep = function(value)
+    table.insert(sleeps, value)
     return 1
   end
 
@@ -573,31 +579,63 @@ do
     self.state.codex_working = working == true
   end
 
-  local reset = string.rep("\27[A", 20)
-  assert_true(controller:select_codex_question_option("1", false))
-  assert_equal(sent[1], reset)
-  assert_equal(sent[2], "\r")
-  assert_equal(sent[3], "mark")
+  local up = "\27[A"
+  local down = "\27[B"
+  local function reset_records()
+    sent = {}
+    sleeps = {}
+    controller.state.codex_working = false
+  end
+  local function assert_option_sequence(expected_down_count, submit_key, mark_expected)
+    local index = 1
+    for _ = 1, 20 do
+      assert_equal(sent[index], up)
+      assert_equal(sleeps[index], "15m")
+      index = index + 1
+    end
+    for _ = 1, expected_down_count do
+      assert_equal(sent[index], down)
+      assert_equal(sleeps[index], "15m")
+      index = index + 1
+    end
 
+    assert_equal(sent[index], submit_key)
+    assert_equal(sleeps[index], "40m")
+    index = index + 1
+    if mark_expected then
+      assert_equal(sent[index], "mark")
+      index = index + 1
+    end
+    assert_equal(sent[index], nil)
+  end
+
+  assert_true(controller:select_codex_question_option("1", false))
+  assert_option_sequence(0, "\r", true)
+
+  reset_records()
   assert_true(controller:select_codex_question_option("2", false))
-  assert_equal(sent[4], reset .. "\27[B")
-  assert_equal(sent[5], "\r")
-  assert_equal(sent[6], "mark")
+  assert_option_sequence(1, "\r", true)
   assert_true(controller.state.codex_working)
 
+  reset_records()
   assert_true(controller:select_codex_question_option("3", true))
-  assert_equal(sent[7], reset .. "\27[B\27[B")
-  assert_equal(sent[8], "\t")
+  assert_option_sequence(2, "\t", false)
+  assert_equal(sleeps[23], "40m")
+  assert_equal(sleeps[24], "40m")
+  assert_equal(sleeps[25], nil)
 
+  reset_records()
   assert_true(controller:submit_codex_question_note("ship it"))
-  assert_equal(sent[9], "\27[200~ship it\27[201~\r")
-  assert_equal(sent[10], "mark")
+  assert_equal(sent[1], "\27[200~ship it\27[201~\r")
+  assert_equal(sent[2], "mark")
 
   assert_false(controller:select_codex_question_option("two", false))
   assert_false(controller:select_codex_question_option("0", false))
-  assert_equal(sent[11], nil)
+  assert_false(controller:select_codex_question_option("5", false))
+  assert_equal(sent[3], nil)
 
   vim.fn.chansend = old_chansend
+  vim.fn.sleep = old_sleep
 end
 
 print("terminal_spec.lua: ok")
