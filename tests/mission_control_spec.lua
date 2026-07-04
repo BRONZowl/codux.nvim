@@ -2064,9 +2064,25 @@ end
 
 do
   local old_key_choice_menu = ui_mod.key_choice_menu
-  local notifications = {}
   local opened_picker = false
   local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "idle" }
+  ui_mod.key_choice_menu = function(_, callback)
+    opened_picker = true
+    callback(nil)
+    return true
+  end
+  local controller = mission_control_mod.new({})
+
+  assert_true(controller:open_workspace_question_answer(entry))
+  assert_true(opened_picker)
+  ui_mod.key_choice_menu = old_key_choice_menu
+end
+
+do
+  local old_key_choice_menu = ui_mod.key_choice_menu
+  local notifications = {}
+  local opened_picker = false
+  local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "inactive" }
   ui_mod.key_choice_menu = function()
     opened_picker = true
     return true
@@ -2079,7 +2095,7 @@ do
 
   assert_false(controller:open_workspace_question_answer(entry))
   assert_false(opened_picker)
-  assert_contains(notifications[#notifications], "not waiting for an answer")
+  assert_contains(notifications[#notifications], "workspace is inactive")
   ui_mod.key_choice_menu = old_key_choice_menu
 end
 
@@ -2092,7 +2108,9 @@ do
       table.insert(notifications, message)
     end,
     ui = {
-      single_line_prompt = function(_, callback)
+      single_line_prompt = function(opts, callback)
+        assert_equal(opts.allowed_chars, "1234")
+        assert_equal(opts.max_length, 1)
         callback("   ")
         return true
       end,
@@ -2111,6 +2129,18 @@ do
   assert_contains(notifications[#notifications], "Option number is required")
   assert_equal(#calls, 0)
 
+  controller.ui.single_line_prompt = function(_, callback)
+    callback("ship this plan")
+    return true
+  end
+  assert_true(controller:open_question_option_input(entry, "Builder", true))
+  assert_contains(notifications[#notifications], "Option number must be 1, 2, 3, or 4")
+  assert_equal(#calls, 0)
+
+  controller.ui.single_line_prompt = function(_, callback)
+    callback("   ")
+    return true
+  end
   assert_true(controller:open_question_note_input(entry, "Builder"))
   assert_contains(notifications[#notifications], "Note is required")
   assert_equal(#calls, 0)

@@ -1271,20 +1271,13 @@ function M:select_workspace_question_option(entry, option, opts)
   if option == "" then
     return false, "Option number is required"
   end
+  if not option:match("^[1-4]$") then
+    return false, "Option number must be 1, 2, 3, or 4"
+  end
 
   local workspace, ensure_error = self:ensure_workspace_remote(entry)
   if not workspace then
     return false, ensure_error or "workspace not found"
-  end
-
-  local plan_ok, plan_error = self:ensure_workspace_plan_mode(workspace, {
-    attempts = opts.plan_attempts or opts.attempts,
-    sleep_ms = opts.plan_sleep_ms or opts.sleep_ms,
-    remote_attempts = opts.remote_attempts,
-    remote_sleep_ms = opts.remote_sleep_ms,
-  })
-  if not plan_ok then
-    return false, plan_error or "Failed to switch workspace to plan mode"
   end
 
   local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)

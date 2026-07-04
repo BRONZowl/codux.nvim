@@ -118,7 +118,7 @@ do
 end
 
 do
-  local actions = workspace_ui.role_workspace_action_items()
+  local actions = workspace_ui.role_workspace_action_items({ status = "inactive" })
   local by_key = {}
   local labels_by_key = {}
   for _, action in ipairs(actions) do
@@ -148,17 +148,19 @@ do
 end
 
 do
-  local actions = workspace_ui.role_workspace_action_items({ status = "question", codex_status = "question" })
-  local by_key = {}
-  local labels_by_key = {}
-  for _, action in ipairs(actions) do
-    by_key[action.key] = action.action
-    labels_by_key[action.key] = action.label
-  end
+  for _, status in ipairs({ "active", "idle", "question" }) do
+    local actions = workspace_ui.role_workspace_action_items({ status = status })
+    local by_key = {}
+    local labels_by_key = {}
+    for _, action in ipairs(actions) do
+      by_key[action.key] = action.action
+      labels_by_key[action.key] = action.label
+    end
 
-  assert_equal(by_key.a, "answer_question")
-  assert_equal(labels_by_key.a, "Answer Question")
-  assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Answer Question")
+    assert_equal(by_key.a, "answer_question")
+    assert_equal(labels_by_key.a, "Answer Question")
+    assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Answer Question")
+  end
 end
 
 do

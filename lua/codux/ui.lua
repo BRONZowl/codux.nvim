@@ -442,6 +442,17 @@ function M.single_line_prompt(opts, callback, deps)
   local bind_close_keys = type(deps.bind_close_keys) == "function" and deps.bind_close_keys or M.bind_close_keys
   local prompt = tostring(opts.prompt or "")
   local value = tostring(opts.default or "")
+  local allowed_chars
+  if type(opts.allowed_chars) == "string" then
+    allowed_chars = {}
+    for index = 1, #opts.allowed_chars do
+      allowed_chars[opts.allowed_chars:sub(index, index)] = true
+    end
+  end
+  local max_length = tonumber(opts.max_length)
+  if max_length ~= nil then
+    max_length = math.max(0, math.floor(max_length))
+  end
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local prompt_width_ok, prompt_width = pcall(vim.fn.strdisplaywidth, prompt)
@@ -457,11 +468,20 @@ function M.single_line_prompt(opts, callback, deps)
       return false
     end
 
-    M.set_lines(bufnr, { value .. " " }, { modifiable = true })
+    M.set_lines(bufnr, { value .. " " })
     if M.is_valid_win(win) then
       pcall(vim.api.nvim_win_set_cursor, win, { 1, math.min(#value, math.max(0, width - 1)) })
     end
     return true
+  end
+
+  local function submitted_value()
+    local lines = M.buffer_lines(bufnr, 0, 1)
+    local line = type(lines) == "table" and tostring(lines[1] or "") or value
+    if line:sub(-1) == " " then
+      line = line:sub(1, -2)
+    end
+    return line
   end
 
   local function close_prompt(result)
@@ -477,12 +497,22 @@ function M.single_line_prompt(opts, callback, deps)
     return true
   end
 
+  local function can_append_input(input)
+    if allowed_chars and allowed_chars[input] ~= true then
+      return false
+    end
+    if max_length ~= nil and vim.fn.strchars(value) >= max_length then
+      return false
+    end
+    return true
+  end
+
   bufnr = M.create_scratch_buffer({
     bufhidden = "wipe",
     buftype = "nofile",
     filetype = opts.filetype or "codux-prompt",
     swapfile = false,
-    modifiable = false,
+    modifiable = true,
   })
   if not bufnr then
     notify("Failed to create Codux prompt", vim.log.levels.ERROR)
@@ -523,7 +553,7 @@ function M.single_line_prompt(opts, callback, deps)
     return close_prompt(nil)
   end, "Cancel Codux Prompt", "n", { escape = true })
   set_keymap(bufnr, "n", "<CR>", function()
-    return close_prompt(value)
+    return close_prompt(submitted_value())
   end, "Submit Codux Prompt")
   set_keymap(bufnr, "n", "<BS>", function()
     local length = vim.fn.strchars(value)
@@ -545,12 +575,23 @@ function M.single_line_prompt(opts, callback, deps)
     value = ""
     return render()
   end, "Clear Codux Prompt", { nowait = true })
+  local function append_prompt_input(input)
+    if not can_append_input(input) then
+      return true
+    end
+    value = value .. input
+    return render()
+  end
   for _, key in ipairs(M.printable_prompt_keys()) do
     local lhs = key[1]
     local input = key[2]
     set_keymap(bufnr, "n", lhs, function()
-      value = value .. input
-      return render()
+      return append_prompt_input(input)
+    end, "Type in Codux Prompt", { nowait = true })
+  end
+  if type(vim.g) == "table" and vim.g.mapleader == " " then
+    set_keymap(bufnr, "n", "<Leader>", function()
+      return append_prompt_input(" ")
     end, "Type in Codux Prompt", { nowait = true })
   end
 

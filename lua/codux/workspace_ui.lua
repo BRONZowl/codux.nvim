@@ -294,7 +294,7 @@ end
 function M.role_workspace_action_items(entry)
   entry = type(entry) == "table" and entry or {}
   local items = {}
-  if entry.status == "question" or entry.codex_status == "question" then
+  if entry.status ~= "inactive" then
     table.insert(items, { key = "a", action = "answer_question", label = "Answer Question" })
   end
   table.insert(items, { key = "e", action = "edit_instructions", label = "Edit Instructions" })

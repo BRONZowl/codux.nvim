@@ -279,4 +279,150 @@ do
   assert_nil(selected_choice)
 end
 
+do
+  local old_api = vim.api
+  local old_create_scratch_buffer = ui.create_scratch_buffer
+  local old_set_lines = ui.set_lines
+  local old_buffer_lines = ui.buffer_lines
+  local old_is_loaded_buf = ui.is_loaded_buf
+  local old_is_valid_win = ui.is_valid_win
+  local old_set_window_options = ui.set_window_options
+  local old_close_window = ui.close_window
+  local old_delete_buffer = ui.delete_buffer
+  local old_g = vim.g
+  local keymaps = {}
+  local created_options
+  local rendered
+  local direct_line
+  local submitted
+
+  vim.g = vim.g or {}
+  local old_mapleader = vim.g.mapleader
+  vim.g.mapleader = " "
+  vim.api = vim.api or {}
+  local old_open_win = vim.api.nvim_open_win
+  local old_win_set_cursor = vim.api.nvim_win_set_cursor
+  vim.api.nvim_open_win = function()
+    return 202
+  end
+  vim.api.nvim_win_set_cursor = function() end
+
+  ui.create_scratch_buffer = function(options)
+    created_options = options
+    return 101
+  end
+  ui.set_lines = function(_, lines)
+    rendered = lines[1]
+    return true
+  end
+  ui.buffer_lines = function()
+    if direct_line ~= nil then
+      return { direct_line }
+    end
+    return nil
+  end
+  ui.is_loaded_buf = function(bufnr)
+    return bufnr == 101
+  end
+  ui.is_valid_win = function(win)
+    return win == 202
+  end
+  ui.set_window_options = function() end
+  ui.close_window = function() end
+  ui.delete_buffer = function() end
+
+  assert_true(ui.single_line_prompt({
+    prompt = "Plan option Builder: ",
+    allowed_chars = "1234",
+    max_length = 1,
+  }, function(value)
+    submitted = value
+  end, {
+    bind_close_keys = function() end,
+    set_buffer_keymap = function(_, _, lhs, rhs, _, opts)
+      keymaps[lhs] = { rhs = rhs, opts = opts }
+    end,
+  }))
+
+  assert_true(created_options.modifiable)
+  assert_equal(rendered, " ")
+  assert_true(keymaps["<Leader>"].opts.nowait)
+  assert_true(keymaps.a.rhs())
+  assert_equal(rendered, " ")
+  assert_true(keymaps["<Leader>"].rhs())
+  assert_equal(rendered, " ")
+  assert_true(keymaps["2"].rhs())
+  assert_equal(rendered, "2 ")
+  assert_true(keymaps["3"].rhs())
+  assert_equal(rendered, "2 ")
+  assert_true(keymaps["<CR>"].rhs())
+  assert_equal(submitted, "2")
+
+  keymaps = {}
+  created_options = nil
+  rendered = nil
+  direct_line = nil
+  submitted = nil
+  assert_true(ui.single_line_prompt({
+    prompt = "Note Builder: ",
+  }, function(value)
+    submitted = value
+  end, {
+    bind_close_keys = function() end,
+    set_buffer_keymap = function(_, _, lhs, rhs, _, opts)
+      keymaps[lhs] = { rhs = rhs, opts = opts }
+    end,
+  }))
+
+  assert_true(created_options.modifiable)
+  assert_true(keymaps["<Space>"].opts.nowait)
+  assert_true(keymaps["<Leader>"].opts.nowait)
+  assert_true(keymaps.s.rhs())
+  assert_equal(rendered, "s ")
+  assert_true(keymaps["<Leader>"].rhs())
+  assert_equal(rendered, "s  ")
+  assert_true(keymaps["<Space>"].rhs())
+  assert_equal(rendered, "s   ")
+  assert_true(keymaps.h.rhs())
+  assert_equal(rendered, "s  h ")
+  assert_true(keymaps["<CR>"].rhs())
+  assert_equal(submitted, "s  h")
+
+  keymaps = {}
+  direct_line = nil
+  submitted = nil
+  assert_true(ui.single_line_prompt({
+    prompt = "Note Builder: ",
+  }, function(value)
+    submitted = value
+  end, {
+    bind_close_keys = function() end,
+    set_buffer_keymap = function(_, _, lhs, rhs, _, opts)
+      keymaps[lhs] = { rhs = rhs, opts = opts }
+    end,
+  }))
+
+  direct_line = "raw pasted note "
+  assert_true(keymaps["<CR>"].rhs())
+  assert_equal(submitted, "raw pasted note")
+
+  vim.api.nvim_open_win = old_open_win
+  vim.api.nvim_win_set_cursor = old_win_set_cursor
+  vim.api = old_api
+  if old_g == nil then
+    vim.g = nil
+  else
+    vim.g = old_g
+    vim.g.mapleader = old_mapleader
+  end
+  ui.create_scratch_buffer = old_create_scratch_buffer
+  ui.set_lines = old_set_lines
+  ui.buffer_lines = old_buffer_lines
+  ui.is_loaded_buf = old_is_loaded_buf
+  ui.is_valid_win = old_is_valid_win
+  ui.set_window_options = old_set_window_options
+  ui.close_window = old_close_window
+  ui.delete_buffer = old_delete_buffer
+end
+
 print("ui_spec.lua: ok")

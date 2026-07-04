@@ -1542,12 +1542,21 @@ end
 
 function M:select_codex_question_option(option, with_note)
   option = trim(option)
-  if option == "" or not self:terminal_running() then
+  local option_number = tonumber(option)
+  if option == "" or not option:match("^%d+$") or option_number == nil or option_number < 1 or not self:terminal_running() then
     return false
   end
 
+  local reset_count = 20
+  local sequence = string.rep("\27[A", reset_count) .. string.rep("\27[B", option_number - 1)
   local suffix = with_note == true and "\t" or "\r"
-  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, option .. suffix)
+  local move_ok, moved = pcall(vim.fn.chansend, self.state.job_id, sequence)
+  if not move_ok or moved == 0 then
+    self.notify("Failed to answer Codex question", vim.log.levels.ERROR)
+    return false
+  end
+
+  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, suffix)
   if not send_ok or sent == 0 then
     self.notify("Failed to answer Codex question", vim.log.levels.ERROR)
     return false

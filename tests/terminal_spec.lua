@@ -573,17 +573,29 @@ do
     self.state.codex_working = working == true
   end
 
+  local reset = string.rep("\27[A", 20)
+  assert_true(controller:select_codex_question_option("1", false))
+  assert_equal(sent[1], reset)
+  assert_equal(sent[2], "\r")
+  assert_equal(sent[3], "mark")
+
   assert_true(controller:select_codex_question_option("2", false))
-  assert_equal(sent[1], "2\r")
-  assert_equal(sent[2], "mark")
+  assert_equal(sent[4], reset .. "\27[B")
+  assert_equal(sent[5], "\r")
+  assert_equal(sent[6], "mark")
   assert_true(controller.state.codex_working)
 
   assert_true(controller:select_codex_question_option("3", true))
-  assert_equal(sent[3], "3\t")
+  assert_equal(sent[7], reset .. "\27[B\27[B")
+  assert_equal(sent[8], "\t")
 
   assert_true(controller:submit_codex_question_note("ship it"))
-  assert_equal(sent[4], "\27[200~ship it\27[201~\r")
-  assert_equal(sent[5], "mark")
+  assert_equal(sent[9], "\27[200~ship it\27[201~\r")
+  assert_equal(sent[10], "mark")
+
+  assert_false(controller:select_codex_question_option("two", false))
+  assert_false(controller:select_codex_question_option("0", false))
+  assert_equal(sent[11], nil)
 
   vim.fn.chansend = old_chansend
 end

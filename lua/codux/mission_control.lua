@@ -2320,7 +2320,7 @@ end
 
 function M:workspace_question_pending(entry)
   entry = type(entry) == "table" and entry or {}
-  return entry.status == "question" or entry.codex_status == "question"
+  return entry.status ~= "inactive"
 end
 
 function M:open_workspace_question_answer(entry)
@@ -2328,8 +2328,8 @@ function M:open_workspace_question_answer(entry)
   if not entry then
     return false
   end
-  if not self:workspace_question_pending(entry) then
-    self.notify("workspace is not waiting for an answer", vim.log.levels.WARN)
+  if entry.status == "inactive" then
+    self.notify("workspace is inactive", vim.log.levels.WARN)
     return false
   end
 
@@ -2378,6 +2378,8 @@ function M:open_question_option_input(entry, label, with_note)
     prompt = "Plan option " .. tostring(label) .. ": ",
     filetype = "codux-mission-question-option",
     zindex = 86,
+    allowed_chars = "1234",
+    max_length = 1,
     on_create_buffer = function(bufnr)
       ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
     end,
@@ -2385,6 +2387,10 @@ function M:open_question_option_input(entry, label, with_note)
     local option = trim(input)
     if option == "" then
       self.notify("Option number is required", vim.log.levels.WARN)
+      return
+    end
+    if not option:match("^[1-4]$") then
+      self.notify("Option number must be 1, 2, 3, or 4", vim.log.levels.WARN)
       return
     end
 

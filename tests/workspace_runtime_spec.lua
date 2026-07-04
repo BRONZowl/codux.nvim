@@ -679,9 +679,8 @@ do
     local command_text = table.concat(commands, "\n")
     local ensure_index = command_text:find("remote_ensure_plan_mode", 1, true)
     local answer_index = command_text:find("remote_select_codex_question_option", 1, true)
-    assert_true(type(ensure_index) == "number")
     assert_true(type(answer_index) == "number")
-    assert_true(ensure_index < answer_index)
+    assert_nil(ensure_index)
     assert_contains(command_text, '\\"2\\"')
     assert_contains(command_text, "false")
     assert_contains(command_text, expected_server)
@@ -721,8 +720,29 @@ do
     assert_true(ok)
     local command_text = table.concat(commands, "\n")
     assert_contains(command_text, "remote_select_codex_question_option")
+    assert_equal(command_text:find("remote_ensure_plan_mode", 1, true), nil)
     assert_contains(command_text, '\\"3\\"')
     assert_contains(command_text, "true")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local commands = {}
+    local runtime = workspace_prepare_runtime({
+      system = function(args)
+        table.insert(commands, table.concat(args, " "))
+        return "", 1
+      end,
+    })
+    local ok, error_message = runtime:select_workspace_question_option({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+    }, "5", { attempts = 1 })
+    assert_false(ok)
+    assert_equal(error_message, "Option number must be 1, 2, 3, or 4")
+    assert_equal(#commands, 0)
   end)
 end
 
