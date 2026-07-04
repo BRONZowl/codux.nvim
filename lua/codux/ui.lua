@@ -492,6 +492,9 @@ function M.single_line_prompt(opts, callback, deps)
       return false
     end
     closed = true
+    if insert_input then
+      pcall(vim.cmd, "stopinsert")
+    end
     if M.is_valid_win(win) then
       M.close_window(win)
     end

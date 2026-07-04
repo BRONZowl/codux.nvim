@@ -295,7 +295,8 @@ do
   local rendered
   local direct_line
   local submitted
-  local started_command
+  local commands = {}
+  local commands_at_submit = {}
 
   vim.g = vim.g or {}
   local old_mapleader = vim.g.mapleader
@@ -309,7 +310,7 @@ do
   end
   vim.api.nvim_win_set_cursor = function() end
   vim.cmd = function(command)
-    started_command = command
+    table.insert(commands, command)
   end
 
   ui.create_scratch_buffer = function(options)
@@ -414,12 +415,16 @@ do
   keymaps = {}
   direct_line = nil
   submitted = nil
-  started_command = nil
+  commands = {}
+  commands_at_submit = {}
   assert_true(ui.single_line_prompt({
     prompt = "Note Builder: ",
     insert_input = true,
   }, function(value)
     submitted = value
+    for index, command in ipairs(commands) do
+      commands_at_submit[index] = command
+    end
   end, {
     bind_close_keys = function() end,
     set_buffer_keymap = function(_, modes, lhs, rhs, _, opts)
@@ -432,10 +437,13 @@ do
   assert_nil(keymaps["<Leader>"])
   assert_equal(keymaps["<CR>"].modes[1], "n")
   assert_equal(keymaps["<CR>"].modes[2], "i")
-  assert_equal(started_command, "startinsert")
+  assert_equal(commands[1], "startinsert")
   direct_line = "ship this plan with context "
   assert_true(keymaps["<CR>"].rhs())
   assert_equal(submitted, "ship this plan with context")
+  assert_equal(commands_at_submit[1], "startinsert")
+  assert_equal(commands_at_submit[2], "stopinsert")
+  assert_equal(commands_at_submit[3], nil)
 
   vim.api.nvim_open_win = old_open_win
   vim.api.nvim_win_set_cursor = old_win_set_cursor
