@@ -340,6 +340,137 @@ do
 end
 
 do
+  local old_api = vim.api
+  local extmarks = {}
+  vim.api = {
+    nvim_buf_clear_namespace = function() end,
+    nvim_buf_add_highlight = function() end,
+    nvim_buf_set_extmark = function(bufnr, namespace, row, col, opts)
+      table.insert(extmarks, {
+        bufnr = bufnr,
+        namespace = namespace,
+        row = row,
+        col = col,
+        opts = opts,
+      })
+      return 1
+    end,
+  }
+
+  local controller = mission_control_mod.new({
+    namespace = 99,
+    state = {
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 2,
+    },
+  })
+  controller:highlight_dashboard(12, {
+    "summary",
+    "    Builder    active",
+  }, {
+    [2] = { kind = "role", entry = { status = "active" } },
+  })
+
+  assert_equal(#extmarks, 1)
+  assert_equal(extmarks[1].row, 1)
+  assert_equal(extmarks[1].col, 4)
+  assert_equal(extmarks[1].opts.end_col, #"    Builder    active")
+  assert_equal(extmarks[1].opts.hl_group, "IncSearch")
+  assert_false(extmarks[1].opts.hl_eol)
+
+  vim.api = old_api
+end
+
+do
+  local old_api = vim.api
+  local extmarks = {}
+  vim.api = {
+    nvim_buf_clear_namespace = function() end,
+    nvim_buf_add_highlight = function() end,
+    nvim_buf_set_extmark = function(bufnr, namespace, row, col, opts)
+      table.insert(extmarks, {
+        bufnr = bufnr,
+        namespace = namespace,
+        row = row,
+        col = col,
+        opts = opts,
+      })
+      return 1
+    end,
+  }
+
+  local controller = mission_control_mod.new({
+    namespace = 99,
+    state = {
+      mission_dashboard_search_confirmed = false,
+      mission_dashboard_selected_row = 2,
+    },
+  })
+  controller:highlight_dashboard(12, {
+    "summary",
+    "  Alpha    question  2 roles",
+  }, {
+    [2] = { kind = "mission", mission = { name = "Alpha" } },
+  })
+
+  assert_equal(#extmarks, 1)
+  assert_equal(extmarks[1].row, 1)
+  assert_equal(extmarks[1].col, 2)
+  assert_equal(extmarks[1].opts.end_col, #"  Alpha    question  2 roles")
+  assert_equal(extmarks[1].opts.hl_group, "IncSearch")
+  assert_false(extmarks[1].opts.hl_eol)
+
+  vim.api = old_api
+end
+
+do
+  local old_api = vim.api
+  local highlights = {}
+  vim.api = {
+    nvim_buf_clear_namespace = function() end,
+    nvim_buf_add_highlight = function(bufnr, namespace, group, row, start_col, end_col)
+      table.insert(highlights, {
+        bufnr = bufnr,
+        namespace = namespace,
+        group = group,
+        row = row,
+        start_col = start_col,
+        end_col = end_col,
+      })
+    end,
+    nvim_buf_set_extmark = function()
+      error("extmark unavailable")
+    end,
+  }
+
+  local controller = mission_control_mod.new({
+    namespace = 99,
+    state = {
+      mission_dashboard_best_match_row = 2,
+    },
+  })
+  controller:highlight_dashboard(12, {
+    "summary",
+    "  Alpha    question  2 roles",
+  }, {
+    [2] = { kind = "mission", mission = { name = "Alpha" } },
+  })
+
+  local selected_highlight
+  for _, highlight in ipairs(highlights) do
+    if highlight.group == "Visual" and highlight.row == 1 then
+      selected_highlight = highlight
+      break
+    end
+  end
+  assert_true(type(selected_highlight) == "table")
+  assert_equal(selected_highlight.start_col, 2)
+  assert_equal(selected_highlight.end_col, #"  Alpha    question  2 roles")
+
+  vim.api = old_api
+end
+
+do
   local dirty_calls = 0
   local branch_calls = 0
   local controller = mission_control_mod.new({
@@ -386,6 +517,7 @@ do
     state = {
       mission_dashboard_win = 10,
       mission_dashboard_search_win = 20,
+      mission_dashboard_command_win = 30,
       mission_dashboard_items = {
         [4] = { kind = "mission", mission = { name = "Alpha" } },
         [7] = { kind = "role", mission = { name = "Alpha" }, entry = { name = "alpha-builder" } },
@@ -397,7 +529,7 @@ do
       mission_dashboard_selected_row = 7,
     },
     is_valid_win = function(win)
-      return win == 10 or win == 20
+      return win == 10 or win == 20 or win == 30
     end,
     get_current_win = function()
       return current_win
@@ -417,15 +549,15 @@ do
   end
 
   assert_true(controller:toggle_search_list_focus())
-  assert_equal(current_win, 10)
-  assert_equal(cursors[10][1], 7)
+  assert_equal(current_win, 30)
+  assert_nil(cursors[10])
 
   assert_true(controller:toggle_search_list_focus())
   assert_equal(current_win, 20)
 
   assert_true(controller:move_mission_selection(1))
   assert_equal(controller.state.mission_dashboard_selected_row, 8)
-  assert_equal(cursors[10][1], 8)
+  assert_nil(cursors[10])
   assert_equal(controller:selected_item().entry.name, "alpha-reviewer")
 
   assert_true(controller:move_mission_selection(1))
@@ -684,7 +816,9 @@ end
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
   local window_config
-  vim.api.nvim_open_win = function(_, _, config)
+  local window_enter
+  vim.api.nvim_open_win = function(_, enter, config)
+    window_enter = enter
     window_config = config
     return 40
   end
@@ -707,7 +841,8 @@ if type(vim.api) == "table" then
   })
 
   assert_true(controller:open_command_sink())
-  assert_equal(window_config.focusable, false)
+  assert_true(window_enter)
+  assert_equal(window_config.focusable, true)
   vim.api.nvim_open_win = old_open_win
 end
 
@@ -781,13 +916,24 @@ if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
   local old_create_augroup = vim.api.nvim_create_augroup
   local old_create_autocmd = vim.api.nvim_create_autocmd
+  local old_set_hl = vim.api.nvim_set_hl
   local old_schedule = vim.schedule
   local output_entry = "unset"
   local token_refreshes = {}
   local search_opened = false
+  local dashboard_enter
+  local dashboard_options
+  local dashboard_cursor_highlight
+  local highlighted_selected_row
   vim.o.mouse = "a"
-  vim.api.nvim_open_win = function()
+  vim.api.nvim_open_win = function(_, enter)
+    dashboard_enter = enter
     return 20
+  end
+  vim.api.nvim_set_hl = function(_, name, opts)
+    if name == "CoduxDashboardCursor" then
+      dashboard_cursor_highlight = opts
+    end
   end
   vim.api.nvim_create_augroup = function()
     return 91
@@ -822,11 +968,13 @@ if type(vim.api) == "table" then
       set_lines = function() end,
       close_window = function() end,
       delete_buffer = function() end,
-      set_window_options = function() end,
+      set_window_options = function(_, opts)
+        dashboard_options = opts
+      end,
     },
     set_buffer_keymap = function() end,
     set_window_cursor = function()
-      return true
+      error("dashboard cursor should not follow selection")
     end,
     refresh_token_usage = function(force)
       table.insert(token_refreshes, force)
@@ -856,7 +1004,9 @@ if type(vim.api) == "table" then
       },
     }, { 3, 5 }, nil
   end
-  function controller:highlight_dashboard() end
+  function controller:highlight_dashboard()
+    highlighted_selected_row = controller.state.mission_dashboard_selected_row
+  end
   function controller:bind_dashboard_commands() end
   function controller:open_command_bar()
     return true
@@ -878,7 +1028,15 @@ if type(vim.api) == "table" then
 
   assert_true(controller:open_dashboard("/repo"))
   assert_equal(controller.state.mission_dashboard_selected_row, 3)
+  assert_equal(highlighted_selected_row, 3)
+  assert_false(dashboard_enter)
   assert_nil(output_entry)
+  assert_false(dashboard_options.cursorline)
+  assert_contains(dashboard_options.winhighlight, "Cursor:CoduxDashboardCursor")
+  assert_contains(dashboard_options.winhighlight, "CursorIM:CoduxDashboardCursor")
+  assert_equal(dashboard_cursor_highlight.fg, "NONE")
+  assert_equal(dashboard_cursor_highlight.bg, "NONE")
+  assert_equal(dashboard_cursor_highlight.blend, 100)
   assert_equal(#token_refreshes, 1)
   assert_true(token_refreshes[1])
   assert_true(search_opened)
@@ -888,6 +1046,7 @@ if type(vim.api) == "table" then
   vim.api.nvim_open_win = old_open_win
   vim.api.nvim_create_augroup = old_create_augroup
   vim.api.nvim_create_autocmd = old_create_autocmd
+  vim.api.nvim_set_hl = old_set_hl
   vim.schedule = old_schedule
   vim.o.mouse = old_mouse
 end

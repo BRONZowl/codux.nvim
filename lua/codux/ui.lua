@@ -155,7 +155,8 @@ function M.open_hidden_command_sink(opts)
     opts.on_create_buffer(bufnr)
   end
 
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, {
+  local focusable = opts.focusable == true
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, opts.enter == true, {
     relative = "editor",
     style = "minimal",
     border = "none",
@@ -163,7 +164,7 @@ function M.open_hidden_command_sink(opts)
     height = 1,
     col = vim.o.columns + 1,
     row = vim.o.lines + 1,
-    focusable = false,
+    focusable = focusable,
     zindex = 1,
   })
   if not win_ok then
