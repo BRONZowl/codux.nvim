@@ -1220,6 +1220,10 @@ do
     end
     return { name = name, window_id = "@1" }, nil
   end
+  function runtime:ensure_workspace_plan_mode(workspace)
+    assert_equal(workspace.name, "alpha-builder")
+    return true, nil
+  end
 
   assert_false(runtime:start_mission("Alpha", { project_root = "/repo" }))
   assert_equal(#calls, 2)
@@ -1255,6 +1259,7 @@ do
           safe_name = "alpha-builder",
           mission_role = "Builder",
           project_root = "/repo",
+          initial_mode = "execute",
         },
       },
     }
@@ -1319,12 +1324,13 @@ do
     }, nil
   end
   function runtime:ensure_workspace_plan_mode(workspace)
+    assert_equal(workspace.initial_mode, "plan")
     table.insert(calls, { name = "ensure_plan", workspace = workspace })
     return true, nil
   end
   function runtime:send_prompt_to_workspace(workspace, prompt)
     table.insert(calls, { name = "send_prompt", workspace = workspace, prompt = prompt })
-    return true, nil
+    error("start_mission should not prompt roles on startup")
   end
   function runtime:switch_tmux_window(window_id)
     table.insert(calls, { name = "focus", window_id = window_id })
@@ -1339,11 +1345,63 @@ do
   }))
   assert_equal(calls[1].name, "alpha-builder")
   assert_equal(calls[2].name, "ensure_plan")
-  assert_equal(calls[3].name, "send_prompt")
-  assert_contains(calls[3].prompt, "Start your Mission Control role now.")
-  assert_contains(calls[3].prompt, "Role: Builder")
-  assert_equal(calls[4].name, "focus")
-  assert_equal(calls[4].window_id, "@1")
+  assert_equal(calls[3].name, "focus")
+  assert_equal(calls[3].window_id, "@1")
+end
+
+do
+  local calls = {}
+  local runtime = runtime_mod.new({
+    notify = function() end,
+  })
+  function runtime:prepare_workspace(name, opts)
+    table.insert(calls, { name = name, opts = opts })
+    return {
+      name = name,
+      safe_name = name,
+      project_root = "/repo",
+      window_id = "@1",
+      git_branch = "",
+      initial_mode = opts.initial_mode,
+    }, nil
+  end
+  function runtime:switch_tmux_window(window_id)
+    table.insert(calls, { name = "focus", window_id = window_id })
+    return true
+  end
+
+  assert_true(runtime:create_workspace("review", { initial_mode = "execute", initial_prompt = "start now" }))
+  assert_equal(calls[1].name, "review")
+  assert_equal(calls[1].opts.initial_mode, "plan")
+  assert_nil(calls[1].opts.initial_prompt)
+  assert_equal(calls[2].name, "focus")
+end
+
+do
+  local calls = {}
+  local runtime = runtime_mod.new({
+    notify = function() end,
+  })
+  function runtime:prepare_workspace(name, opts)
+    table.insert(calls, { name = name, opts = opts })
+    return {
+      name = name,
+      safe_name = name,
+      project_root = opts.project_root,
+      window_id = "@1",
+      git_branch = "",
+      initial_mode = opts.initial_mode,
+    }, nil
+  end
+  function runtime:switch_tmux_window(window_id)
+    table.insert(calls, { name = "focus", window_id = window_id })
+    return true
+  end
+
+  assert_true(runtime:open_saved_workspace("review", "/repo"))
+  assert_equal(calls[1].name, "review")
+  assert_equal(calls[1].opts.initial_mode, "plan")
+  assert_equal(calls[2].name, "focus")
 end
 
 do
@@ -3280,11 +3338,13 @@ do
     assert_equal(builder.mission_objective, "Build it")
     assert_equal(architect.initial_mode, "plan")
     assert_equal(builder.initial_mode, "plan")
-    assert_equal(architect.codex_mode, "plan")
-    assert_equal(builder.codex_mode, "plan")
+    assert_equal(architect.codex_status, "idle")
+    assert_equal(builder.codex_status, "idle")
+    assert_nil(architect.codex_mode)
+    assert_nil(builder.codex_mode)
     assert_contains(table.concat(commands, "\n"), "git -C /repo status --porcelain")
     assert_contains(table.concat(commands, "\n"), "--listen")
-    assert_contains(table.concat(commands, "\n"), "Start your Mission Control role now.")
+    assert_equal(table.concat(commands, "\n"):find("Start your Mission Control role now.", 1, true), nil)
   end)
 end
 

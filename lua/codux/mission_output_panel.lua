@@ -1,5 +1,7 @@
 local Output = {}
 
+local ui = require("codux.ui")
+
 local function command_display(command)
   if type(command) == "table" then
     local parts = {}
@@ -56,37 +58,6 @@ local function mission_default_output_entry(mission)
     end
   end
   return active or idle or fallback
-end
-
-local function disable_completion(is_loaded_buf, bufnr)
-  if type(is_loaded_buf) == "function" and not is_loaded_buf(bufnr) then
-    return false
-  end
-
-  for _, option in ipairs({ "complete", "completefunc", "omnifunc", "thesaurusfunc", "tagfunc", "dictionary" }) do
-    pcall(vim.api.nvim_set_option_value, option, "", { buf = bufnr })
-  end
-
-  local buffer_vars = {
-    blink_cmp_enabled = false,
-    cmp_enabled = false,
-    codux_disable_completion = true,
-    completion = false,
-    copilot_enabled = false,
-    minicompletion_disable = true,
-  }
-
-  for key, value in pairs(buffer_vars) do
-    pcall(function()
-      vim.b[bufnr][key] = value
-    end)
-  end
-
-  return true
-end
-
-local function mark_internal_buffer(is_loaded_buf, bufnr)
-  return disable_completion(is_loaded_buf, bufnr)
 end
 
 function Output:dashboard_output_entry(item)
@@ -218,7 +189,7 @@ function Output:create_output_buffer(kind, lines)
     return nil
   end
 
-  mark_internal_buffer(self.is_loaded_buf, bufnr)
+  ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
   if type(lines) == "table" then
     self.ui.set_lines(bufnr, lines, { modifiable = true })
     self:highlight_output_panel(bufnr, lines)

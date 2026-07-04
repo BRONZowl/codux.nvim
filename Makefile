@@ -14,6 +14,7 @@ TEST_SPECS := \
 	tests/workspace_manager_spec.lua \
 	tests/workspace_ui_spec.lua \
 	tests/terminal_spec.lua \
+	tests/ui_spec.lua \
 	tests/token_monitor_spec.lua
 
 test:

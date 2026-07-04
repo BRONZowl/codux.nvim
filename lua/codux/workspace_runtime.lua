@@ -2628,7 +2628,7 @@ function M:start_mission(name, opts)
     else
       local workspace, workspace_error = self:prepare_workspace(workspace_name, {
         allow_existing = true,
-        initial_mode = entry.initial_mode or "plan",
+        initial_mode = "plan",
         permission_profile = entry.permission_profile or "auto",
         require_existing = true,
         project_root = entry.project_root or root,
@@ -2637,14 +2637,8 @@ function M:start_mission(name, opts)
       if workspace then
         local ok = true
         local plan_error = nil
-        if workspace.initial_mode == "plan" then
-          ok, plan_error = self:ensure_workspace_plan_mode(workspace)
-        end
-        if ok and opts.prompt_roles == true then
-          local role = mission_mod.role_from_entry(entry)
-          local prompt = entry.initial_prompt or mission_mod.role_prompt(mission.name or name, mission.objective, role)
-          ok, plan_error = self:send_prompt_to_workspace(workspace, prompt)
-        end
+        workspace.initial_mode = "plan"
+        ok, plan_error = self:ensure_workspace_plan_mode(workspace)
         if ok then
           started = started + 1
           table.insert(started_workspaces, workspace)
@@ -3136,8 +3130,7 @@ function M:create_workspace(name, opts)
   local workspace, error_message = self:prepare_workspace(name, {
     custom_instruction = opts.custom_instruction,
     resolved_instruction = opts.resolved_instruction,
-    initial_prompt = opts.initial_prompt,
-    initial_mode = opts.initial_mode,
+    initial_mode = "plan",
     permission_profile = opts.permission_profile,
     mission_id = opts.mission_id,
     mission_name = opts.mission_name,
@@ -3245,7 +3238,6 @@ function M:create_mission(mission_or_name, objective, opts)
     local workspace, workspace_error = self:prepare_workspace(role.workspace_name, {
       custom_instruction = role.instruction,
       resolved_instruction = role.instruction,
-      initial_prompt = role.initial_prompt,
       initial_mode = "plan",
       permission_profile = "auto",
       mission_id = mission.mission_id,
@@ -3273,6 +3265,7 @@ end
 function M:open_saved_workspace(name, project_root)
   local workspace, error_message = self:prepare_workspace(name, {
     allow_existing = true,
+    initial_mode = "plan",
     require_existing = true,
     project_root = project_root,
   })

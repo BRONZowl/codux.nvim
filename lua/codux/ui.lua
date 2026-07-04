@@ -108,6 +108,35 @@ function M.create_scratch_buffer(options)
   return bufnr
 end
 
+function M.disable_buffer_completion(bufnr, opts)
+  opts = type(opts) == "table" and opts or {}
+  local is_loaded_buf = type(opts.is_loaded_buf) == "function" and opts.is_loaded_buf or M.is_loaded_buf
+  if not is_loaded_buf(bufnr) then
+    return false
+  end
+
+  for _, option in ipairs({ "complete", "completefunc", "omnifunc", "thesaurusfunc", "tagfunc", "dictionary" }) do
+    pcall(vim.api.nvim_set_option_value, option, "", { buf = bufnr })
+  end
+
+  local buffer_vars = {
+    blink_cmp_enabled = false,
+    cmp_enabled = false,
+    codux_disable_completion = true,
+    completion = false,
+    copilot_enabled = false,
+    minicompletion_disable = true,
+  }
+
+  for key, value in pairs(buffer_vars) do
+    pcall(function()
+      vim.b[bufnr][key] = value
+    end)
+  end
+
+  return true
+end
+
 function M.open_hidden_command_sink(opts)
   opts = type(opts) == "table" and opts or {}
   local ui_impl = type(opts.ui) == "table" and opts.ui or M

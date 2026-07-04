@@ -126,14 +126,14 @@ do
   end
 
   assert_equal(by_key.o, "open_workspace")
+  assert_equal(by_key.p, "prompt_workspace")
   assert_equal(by_key.e, "edit_instructions")
   assert_equal(by_key.x, "close_workspace")
   assert_equal(by_key.d, "delete_workspace")
-  assert_nil(by_key.p)
   assert_nil(by_key.r)
   assert_nil(by_key.X)
   assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Open Workspace")
-  assert_nil(labels_by_key.p)
+  assert_equal(labels_by_key.p, "Prompt Workspace")
   assert_equal(labels_by_key.d, "Delete Workspace")
 end
 

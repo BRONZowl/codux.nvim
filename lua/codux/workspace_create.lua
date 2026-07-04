@@ -217,30 +217,9 @@ function M:update_instruction_mode_footer(win)
 end
 
 function M:disable_instruction_completion(bufnr)
-  if not self.is_loaded_buf(bufnr) then
-    return false
-  end
-
-  for _, option in ipairs({ "complete", "completefunc", "omnifunc", "thesaurusfunc", "tagfunc", "dictionary" }) do
-    pcall(vim.api.nvim_set_option_value, option, "", { buf = bufnr })
-  end
-
-  local buffer_vars = {
-    blink_cmp_enabled = false,
-    cmp_enabled = false,
-    codux_disable_completion = true,
-    completion = false,
-    copilot_enabled = false,
-    minicompletion_disable = true,
-  }
-
-  for key, value in pairs(buffer_vars) do
-    pcall(function()
-      vim.b[bufnr][key] = value
-    end)
-  end
-
-  return true
+  local disable_buffer_completion = type(self.ui) == "table" and self.ui.disable_buffer_completion
+    or require("codux.ui").disable_buffer_completion
+  return disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
 end
 
 function M:open_instruction_editor(request, opts)

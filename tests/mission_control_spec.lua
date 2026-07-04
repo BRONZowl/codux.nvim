@@ -938,7 +938,7 @@ do
   assert_equal(captured.name, "Alpha")
   assert_equal(captured.root, "/repo")
   assert_true(captured.opts.restart_inactive)
-  assert_true(captured.opts.prompt_roles)
+  assert_nil(captured.opts.prompt_roles)
   assert_true(captured.opts.focus_first)
   assert_equal(events[1], "close")
   assert_equal(events[2], "start")
