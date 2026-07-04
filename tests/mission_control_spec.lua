@@ -1323,10 +1323,15 @@ do
   local closed = false
   local refreshed_root
   local calls = {}
+  local remaining_entries = {}
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_project_root = "/repo",
     },
+    workspace_entries_for_project = function(root)
+      assert_equal(root, "/repo")
+      return remaining_entries
+    end,
     close_mission = function(name, root)
       table.insert(calls, "close:" .. tostring(name) .. ":" .. tostring(root))
       return true
@@ -1353,10 +1358,177 @@ do
   assert_false(closed)
 
   refreshed_root = nil
+  remaining_entries = {
+    {
+      name = "beta-builder",
+      mission_id = "mission:beta",
+      mission_name = "Beta",
+      mission_role = "Builder",
+    },
+  }
   assert_true(controller:delete_selected_mission({ name = "Alpha" }))
   assert_equal(calls[2], "delete:Alpha:/repo")
   assert_equal(refreshed_root, "/repo")
   assert_false(closed)
+end
+
+do
+  local events = {}
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_project_root = "/repo",
+    },
+    workspace_entries_for_project = function(root)
+      assert_equal(root, "/repo")
+      return {}
+    end,
+    delete_mission = function(name, root)
+      table.insert(events, "delete:" .. tostring(name) .. ":" .. tostring(root))
+      return true
+    end,
+  })
+  function controller:close_dashboard()
+    table.insert(events, "close_dashboard")
+    return true
+  end
+  function controller:refresh_visible_dashboard()
+    table.insert(events, "refresh")
+    return true
+  end
+  function controller:confirm_delete_mission()
+    return true
+  end
+
+  assert_true(controller:delete_selected_mission({ name = "Alpha" }))
+  assert_equal(events[1], "delete:Alpha:/repo")
+  assert_equal(events[2], "close_dashboard")
+  assert_nil(events[3])
+end
+
+do
+  local events = {}
+  local confirmed = false
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_project_root = "/repo",
+    },
+    workspace_entries_for_project = function()
+      error("dashboard should not update when delete is canceled or fails")
+    end,
+    delete_mission = function(name, root)
+      table.insert(events, "delete:" .. tostring(name) .. ":" .. tostring(root))
+      return false
+    end,
+  })
+  function controller:close_dashboard()
+    table.insert(events, "close_dashboard")
+    return true
+  end
+  function controller:refresh_visible_dashboard()
+    table.insert(events, "refresh")
+    return true
+  end
+  function controller:confirm_delete_mission()
+    return confirmed
+  end
+
+  assert_false(controller:delete_selected_mission({ name = "Alpha" }))
+  assert_nil(events[1])
+
+  confirmed = true
+  assert_false(controller:delete_selected_mission({ name = "Alpha" }))
+  assert_equal(events[1], "delete:Alpha:/repo")
+  assert_nil(events[2])
+end
+
+do
+  local deleted = false
+  local events = {}
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_buf = 22,
+    },
+    is_loaded_buf = function(bufnr)
+      return bufnr == 22
+    end,
+    workspace_entries_for_project = function(root)
+      assert_equal(root, "/repo")
+      if deleted then
+        return {}
+      end
+      return {
+        {
+          name = "alpha-builder",
+          mission_id = "mission:alpha",
+          mission_name = "Alpha",
+          mission_role = "Builder",
+        },
+      }
+    end,
+    delete_mission = function(name, root)
+      deleted = true
+      table.insert(events, "delete:" .. tostring(name) .. ":" .. tostring(root))
+      return true
+    end,
+  })
+  function controller:close_dashboard()
+    table.insert(events, "close_dashboard")
+    return true
+  end
+  function controller:refresh_visible_dashboard()
+    table.insert(events, "refresh")
+    return true
+  end
+  function controller:confirm_delete_mission()
+    return true
+  end
+
+  assert_true(controller:delete_saved_mission("Alpha", "/repo"))
+  assert_equal(events[1], "delete:Alpha:/repo")
+  assert_equal(events[2], "close_dashboard")
+  assert_nil(events[3])
+end
+
+do
+  local deleted = false
+  local events = {}
+  local controller = mission_control_mod.new({
+    is_loaded_buf = function()
+      return false
+    end,
+    workspace_entries_for_project = function(root)
+      assert_equal(root, "/repo")
+      return {
+        {
+          name = "alpha-builder",
+          mission_id = "mission:alpha",
+          mission_name = "Alpha",
+          mission_role = "Builder",
+        },
+      }
+    end,
+    delete_mission = function(name, root)
+      deleted = true
+      table.insert(events, "delete:" .. tostring(name) .. ":" .. tostring(root))
+      return true
+    end,
+  })
+  function controller:close_dashboard()
+    table.insert(events, "close_dashboard")
+    return true
+  end
+  function controller:refresh_visible_dashboard()
+    table.insert(events, "refresh")
+    return true
+  end
+  function controller:confirm_delete_mission()
+    return true
+  end
+
+  assert_true(controller:delete_saved_mission("Alpha", "/repo"))
+  assert_true(deleted)
+  assert_equal(events[1], "delete:Alpha:/repo")
+  assert_nil(events[2])
 end
 
 do

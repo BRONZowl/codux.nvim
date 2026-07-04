@@ -1403,7 +1403,12 @@ function M:delete_saved_mission(name, root, opts)
     return false
   end
 
-  return self.delete_mission(mission.name or mission.mission_id, root)
+  local ok = self.delete_mission(mission.name or mission.mission_id, root)
+  local dashboard_root = self.state.mission_dashboard_project_root or root
+  if ok and dashboard_root == root and self.is_loaded_buf(self.state.mission_dashboard_buf) then
+    self:update_dashboard_after_mission_delete(dashboard_root)
+  end
+  return ok
 end
 
 function M:close_saved_mission(name, root)
@@ -1971,6 +1976,25 @@ function M:refresh_visible_dashboard(root)
   return self:open_dashboard(root)
 end
 
+function M:mission_count(root)
+  local entries, error_message = self.workspace_entries_for_project(root)
+  if error_message then
+    return nil, error_message
+  end
+  return #self.mission.group_entries(entries)
+end
+
+function M:update_dashboard_after_mission_delete(root)
+  local remaining_count, error_message = self:mission_count(root)
+  if error_message then
+    return self:refresh_visible_dashboard(root)
+  end
+  if remaining_count == 0 then
+    return self:close_dashboard()
+  end
+  return self:refresh_visible_dashboard(root)
+end
+
 function M:edit_selected_mission(mission)
   local root = self.state.mission_dashboard_project_root or self.project_root()
   mission = mission or self:selected_mission()
@@ -2005,7 +2029,7 @@ function M:delete_selected_mission(mission)
   end
   local ok = self.delete_mission(mission.name or mission.mission_id, root)
   if ok then
-    self:refresh_visible_dashboard(root)
+    self:update_dashboard_after_mission_delete(root)
   end
   return ok
 end
