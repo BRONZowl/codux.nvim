@@ -1334,6 +1334,75 @@ do
   vim.fn.confirm = old_confirm
 end
 
+do
+  local old_mouse = vim.o.mouse
+  vim.o.mouse = "a"
+  local controller = mission_control_mod.new({ state = {} })
+
+  assert_true(controller:lock_dashboard_mouse())
+  assert_equal(vim.o.mouse, "")
+  assert_equal(controller.state.mission_dashboard_saved_mouse, "a")
+
+  vim.o.mouse = "n"
+  assert_true(controller:lock_dashboard_mouse())
+  assert_equal(vim.o.mouse, "")
+  assert_equal(controller.state.mission_dashboard_saved_mouse, "a")
+
+  assert_true(controller:restore_dashboard_mouse())
+  assert_equal(vim.o.mouse, "a")
+  assert_nil(controller.state.mission_dashboard_saved_mouse)
+  vim.o.mouse = old_mouse
+end
+
+if type(vim.api) == "table" then
+  local old_mouse = vim.o.mouse
+  local old_open_win = vim.api.nvim_open_win
+  local deleted_buf
+  vim.o.mouse = "a"
+  vim.api.nvim_open_win = function()
+    error("open failed")
+  end
+
+  local controller = mission_control_mod.new({
+    notify = function() end,
+    ui = {
+      create_scratch_buffer = function()
+        return 33
+      end,
+      set_lines = function() end,
+      close_window = function() end,
+      delete_buffer = function(bufnr)
+        deleted_buf = bufnr
+      end,
+    },
+  })
+  function controller:dashboard_lines()
+    return { "Mission" }, {}, {}, nil
+  end
+  function controller:highlight_dashboard() end
+
+  assert_false(controller:open_dashboard("/repo"))
+  assert_equal(vim.o.mouse, "a")
+  assert_nil(controller.state.mission_dashboard_saved_mouse)
+  assert_equal(deleted_buf, 33)
+
+  vim.api.nvim_open_win = old_open_win
+  vim.o.mouse = old_mouse
+end
+
+if type(vim.api) == "table" then
+  local old_mouse = vim.o.mouse
+  local controller = mission_control_mod.new({ state = {} })
+  vim.o.mouse = "a"
+
+  assert_true(controller:lock_dashboard_mouse())
+  assert_equal(vim.o.mouse, "")
+  assert_true(controller:close_dashboard())
+  assert_equal(vim.o.mouse, "a")
+  assert_nil(controller.state.mission_dashboard_saved_mouse)
+  vim.o.mouse = old_mouse
+end
+
 if type(vim.api) == "table" then
   local captured_mission
   local controller = mission_control_mod.new({

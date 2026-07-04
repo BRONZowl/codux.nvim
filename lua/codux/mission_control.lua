@@ -1645,6 +1645,23 @@ function M:open_search_input(opts)
   return true
 end
 
+function M:lock_dashboard_mouse()
+  if self.state.mission_dashboard_saved_mouse == nil then
+    self.state.mission_dashboard_saved_mouse = vim.o.mouse
+  end
+  vim.o.mouse = ""
+  return true
+end
+
+function M:restore_dashboard_mouse()
+  local saved = self.state.mission_dashboard_saved_mouse
+  self.state.mission_dashboard_saved_mouse = nil
+  if saved ~= nil then
+    vim.o.mouse = saved
+  end
+  return true
+end
+
 function M:close_dashboard()
   self:stop_monitor_timer()
   if self.state.mission_dashboard_resize_augroup then
@@ -1706,6 +1723,7 @@ function M:close_dashboard()
   self.state.mission_dashboard_search_confirmed = false
   self.state.mission_dashboard_project_root = nil
   self.state.mission_dashboard_resize_augroup = nil
+  self:restore_dashboard_mouse()
   return true
 end
 
@@ -2414,6 +2432,7 @@ function M:open_dashboard(root)
     return false
   end
   ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
+  self:lock_dashboard_mouse()
 
   self.ui.set_lines(bufnr, lines, { modifiable = true })
   self:highlight_dashboard(bufnr, lines, items)
@@ -2424,6 +2443,7 @@ function M:open_dashboard(root)
     selected_item = initial_selected_item,
   }))
   if not win_ok then
+    self:restore_dashboard_mouse()
     self.ui.delete_buffer(bufnr)
     self.notify("Failed to open Codux missions dashboard", vim.log.levels.ERROR)
     return false
