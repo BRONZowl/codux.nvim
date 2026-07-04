@@ -55,6 +55,7 @@ local defaults = {
     review_selection = "<leader>zs",
     diagnostics = "<leader>zd",
     diff = "<leader>zg",
+    mission = "<leader>zm",
     missions = "<leader>zM",
     mode = "<leader>zp",
   },

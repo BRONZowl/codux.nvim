@@ -1778,7 +1778,7 @@ if type(vim.api) == "table" then
   assert_equal(#profile_calls, 3)
 
   local mission_map = vim.fn.maparg("<leader>zm", "n", false, true)
-  assert_true(vim.tbl_isempty(mission_map))
+  assert_equal(mission_map.desc, "create codux mission")
   local workspace_create_map = vim.fn.maparg("<leader>zw", "n", false, true)
   assert_true(vim.tbl_isempty(workspace_create_map))
   local workspaces_map = vim.fn.maparg("<leader>zW", "n", false, true)
