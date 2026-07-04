@@ -1292,6 +1292,7 @@ function M:verify_workspace_launch(workspace, opts)
   local window_name = workspace.tmux_window or workspace.window_name or M.workspace_window_name(safe_name)
   local attempts = math.max(1, tonumber(opts.attempts) or 24)
   local sleep_ms = math.max(1, tonumber(opts.sleep_ms) or 500)
+  local require_codex = opts.require_codex == true
   local last_error = "workspace did not become ready"
 
   for attempt = 1, attempts do
@@ -1315,6 +1316,9 @@ function M:verify_workspace_launch(workspace, opts)
           return true, nil
         end
         if output == "not_running" then
+          if not require_codex then
+            return true, nil
+          end
           last_error = "workspace Codex session is not running"
         else
           last_error = remote_error or output or "workspace Neovim server is not reachable"
@@ -3104,6 +3108,7 @@ function M:prepare_workspace(name, opts)
     local verify_ok, verify_error = self:verify_workspace_launch(workspace, {
       attempts = opts.launch_verify_attempts,
       sleep_ms = opts.launch_verify_sleep_ms,
+      require_codex = opts.require_codex_ready == true,
     })
     if not verify_ok then
       if creating_worktree then
