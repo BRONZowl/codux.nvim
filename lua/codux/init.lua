@@ -74,6 +74,30 @@ local defaults = {
   target_providers = {},
 }
 
+local permission_profiles = {
+  {
+    profile = "default",
+    selector_label = "Default",
+    keyed_label = "default",
+    key = "d",
+    desc = "Open Codex Default",
+  },
+  {
+    profile = "auto",
+    selector_label = "Autopilot",
+    keyed_label = "auto",
+    key = "a",
+    desc = "Open Codex Auto",
+  },
+  {
+    profile = "danger",
+    selector_label = "Full Access",
+    keyed_label = "full",
+    key = "f",
+    desc = "Open Codex Full Access",
+  },
+}
+
 local config = vim.deepcopy(defaults)
 local state = {
   buf = nil,
@@ -206,19 +230,24 @@ function M._v5.output_looks_like_question(lines, first_index)
 end
 
 function M._v5.permission_profile_choices()
-  return {
-    { label = "Default", profile = "default" },
-    { label = "Autopilot", profile = "auto" },
-    { label = "Full Access", profile = "danger" },
-  }
+  local choices = {}
+  for _, spec in ipairs(permission_profiles) do
+    table.insert(choices, { label = spec.selector_label, profile = spec.profile })
+  end
+  return choices
 end
 
 function M._v5.keyed_permission_profile_choices()
-  return {
-    { key = "d", label = "default", profile = "default", desc = "Open Codex Default" },
-    { key = "a", label = "auto", profile = "auto", desc = "Open Codex Auto" },
-    { key = "f", label = "full", profile = "danger", desc = "Open Codex Full Access" },
-  }
+  local choices = {}
+  for _, spec in ipairs(permission_profiles) do
+    table.insert(choices, {
+      key = spec.key,
+      label = spec.keyed_label,
+      profile = spec.profile,
+      desc = spec.desc,
+    })
+  end
+  return choices
 end
 
 function M._v5.should_select_permission_profile(job_id)
@@ -230,14 +259,15 @@ function M._v5.open_permission_profile_choice(choice, opts)
   if type(choice) ~= "table" then
     return false
   end
-  if choice.profile == "auto" and type(opts.open_auto) == "function" then
-    return opts.open_auto(opts.initial_prompt)
-  end
-  if choice.profile == "danger" and type(opts.open_danger) == "function" then
-    return opts.open_danger(opts.initial_prompt)
-  end
-  if type(opts.open_default) == "function" then
-    return opts.open_default(opts.initial_prompt)
+
+  local openers = {
+    default = opts.open_default,
+    auto = opts.open_auto,
+    danger = opts.open_danger,
+  }
+  local opener = openers[choice.profile]
+  if type(opener) == "function" then
+    return opener(opts.initial_prompt)
   end
   return false
 end
@@ -979,7 +1009,7 @@ function M.open(opts)
   })
 end
 
-function M.open_with_profile_menu(opts)
+function M.open_with_keyed_profile_menu(opts)
   opts = type(opts) == "table" and opts or {}
   if not M._v5.should_select_permission_profile(state.job_id) then
     return terminal:open(opts)
@@ -991,6 +1021,10 @@ function M.open_with_profile_menu(opts)
     open_auto = M.open_workspace_auto,
     open_danger = M.open_danger_full_access,
   })
+end
+
+function M.open_with_profile_menu(opts)
+  return M.open_with_keyed_profile_menu(opts)
 end
 
 function M.open_workspace_session(workspace, initial_prompt, opts)
@@ -1740,7 +1774,7 @@ function M.setup(opts)
 
   local mappings = type(config.mappings) == "table" and config.mappings or {}
   refresh_which_key()
-  set_mapping("n", mappings.open, M.open_with_profile_menu, "open codex")
+  set_mapping("n", mappings.open, M.open_with_keyed_profile_menu, "open codex")
   set_mapping("n", mappings.review_file, M.send_file_review, "send file/folder to codex")
   set_mapping("n", mappings.review_selection, M.send_selection, "send selection to codex")
   set_mapping("v", mappings.review_selection, M.send_selection, "send selection to codex")

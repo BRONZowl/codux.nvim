@@ -201,7 +201,7 @@
 :Codux
 ```
 
-In LazyVim, `<leader>` is usually Space. Codux also maps open to `<leader>zc`; press `d` for default, `a` for auto, or `f` for full access.
+In LazyVim, `<leader>` is usually Space. Codux also maps open to `<leader>zc`; that key opens a fixed picker where `d` is default, `a` is auto, and `f` is full access.
 
 3. Install the Codex CLI and sign in if `codex` is not already available:
 
@@ -269,7 +269,7 @@ Codux sends requested files, selections, diagnostics, and health output through 
 <th>Command</th>
 </tr>
 <tr>
-<td>Open or focus Codex; choose <code>d</code> default, <code>a</code> auto, or <code>f</code> full when Codex is not running</td>
+<td>Open or focus Codex; <code>&lt;leader&gt;zc</code> uses <code>d</code> default, <code>a</code> auto, or <code>f</code> full when Codex is not running</td>
 <td><code>&lt;leader&gt;zc</code></td>
 <td><code>:Codux</code></td>
 </tr>

@@ -8,6 +8,7 @@ TEST_SPECS := \
 	tests/mission_spec.lua \
 	tests/mission_control_spec.lua \
 	tests/mission_output_panel_spec.lua \
+	tests/open_profile_spec.lua \
 	tests/prompt_actions_spec.lua \
 	tests/workspace_create_spec.lua \
 	tests/workspace_runtime_spec.lua \
