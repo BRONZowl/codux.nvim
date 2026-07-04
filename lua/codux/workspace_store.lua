@@ -275,6 +275,7 @@ function Store:normalize_record(record, safe_name, root)
     mission_objective = record.mission_objective,
     tmux_window = window_name,
     tmux_target = record.tmux_target,
+    nvim_server = record.nvim_server,
     custom_instruction = record.custom_instruction,
     resolved_instruction = record.resolved_instruction,
     permission_profile = record.permission_profile or "default",

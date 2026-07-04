@@ -112,6 +112,26 @@ local function path_token(value)
   return value:sub(1, 96)
 end
 
+local launch_socket_counter = 0
+
+local function short_path_token(value, max_length)
+  max_length = math.max(1, tonumber(max_length) or 32)
+  return path_token(value):sub(1, max_length)
+end
+
+local function launch_socket_token()
+  launch_socket_counter = (launch_socket_counter + 1) % 65536
+  local stamp = os.time() % 1048576
+  local uv = vim.uv or vim.loop
+  if type(uv) == "table" and type(uv.hrtime) == "function" then
+    local ok, value = pcall(uv.hrtime)
+    if ok and type(value) == "number" then
+      stamp = value % 1048576
+    end
+  end
+  return string.format("%05x%04x", stamp, launch_socket_counter)
+end
+
 local function vimscript_string(value)
   value = tostring(value or "")
   value = value:gsub("\\", "\\\\")
@@ -1065,6 +1085,19 @@ function M:workspace_server_path(root, safe_name)
   return self:workspace_server_dir() .. "/" .. path_token(root) .. "-" .. path_token(safe_name) .. ".sock"
 end
 
+function M:workspace_launch_server_path(root, safe_name)
+  local root_token = path_token(root)
+  root_token = root_token:sub(math.max(1, #root_token - 11))
+  return self:workspace_server_dir()
+    .. "/ws-"
+    .. short_path_token(safe_name, 36)
+    .. "-"
+    .. root_token
+    .. "-"
+    .. launch_socket_token()
+    .. ".sock"
+end
+
 function M:remote_luaeval(server, lua_expression, opts)
   opts = type(opts) == "table" and opts or {}
   if type(server) ~= "string" or server == "" then
@@ -1189,7 +1222,7 @@ function M:ensure_workspace_remote(entry, opts)
         last_error = "workspace is inactive"
       elseif self:status_for_window(window_id) == "active" then
         entry.window_id = window_id
-        entry.nvim_server = self:workspace_server_path(root, safe_name)
+        entry.nvim_server = entry.nvim_server or self:workspace_server_path(root, safe_name)
         return entry, nil
       else
         last_error = "workspace is inactive"
@@ -1248,6 +1281,53 @@ function M:ensure_workspace_plan_mode(entry, opts)
   end
 
   return false, remote_error or output or "Failed to switch workspace to plan mode"
+end
+
+function M:verify_workspace_launch(workspace, opts)
+  opts = type(opts) == "table" and opts or {}
+  workspace = type(workspace) == "table" and workspace or {}
+  local safe_name = workspace.safe_name or workspace.name
+  local root = workspace.project_root
+  local server = workspace.nvim_server or self:workspace_server_path(root, safe_name)
+  local window_name = workspace.tmux_window or workspace.window_name or M.workspace_window_name(safe_name)
+  local attempts = math.max(1, tonumber(opts.attempts) or 24)
+  local sleep_ms = math.max(1, tonumber(opts.sleep_ms) or 500)
+  local last_error = "workspace did not become ready"
+
+  for attempt = 1, attempts do
+    local session = self:current_tmux_session()
+    if not session then
+      last_error = "no tmux session running"
+    else
+      local window_id = self:tmux_window_id(session, window_name)
+      if not window_id then
+        last_error = "workspace tmux window disappeared"
+      elseif self:status_for_window(window_id) ~= "active" then
+        last_error = "workspace Neovim process is not running"
+      else
+        workspace.window_id = window_id
+        local output, remote_error = self:remote_luaeval(
+          server,
+          "require('codux')._v5.remote_workspace_status()",
+          { attempts = 1 }
+        )
+        if output == "ready" then
+          return true, nil
+        end
+        if output == "not_running" then
+          last_error = "workspace Codex session is not running"
+        else
+          last_error = remote_error or output or "workspace Neovim server is not reachable"
+        end
+      end
+    end
+
+    if attempt < attempts then
+      pcall(vim.fn.sleep, tostring(sleep_ms) .. "m")
+    end
+  end
+
+  return false, last_error
 end
 
 function M:normalize_codex_mode(mode)
@@ -2926,7 +3006,6 @@ function M:prepare_workspace(name, opts)
   workspace.safe_name = workspace.safe_name or safe_name_or_error
   workspace.window_name = M.workspace_window_name(workspace.safe_name)
   workspace.tmux_target = M.tmux_target(session, workspace.window_name)
-  workspace.nvim_server = self:workspace_server_path(workspace.project_root, workspace.safe_name)
   workspace.initial_mode = initial_mode or workspace.initial_mode
   local saved_workspace = type(existing) == "table" or (opts.require_existing and file_instruction ~= nil)
   workspace.open_visible = not saved_workspace
@@ -2942,6 +3021,16 @@ function M:prepare_workspace(name, opts)
   end
   if saved_workspace then
     self:resolve_workspace_resume_session(workspace)
+  end
+
+  local existing_window_id = self:tmux_window_id(session, workspace.window_name)
+  local restarting_inactive = opts.restart_inactive == true
+    and existing_window_id ~= nil
+    and inactive_like_status(self:status_for_window(existing_window_id))
+  if existing_window_id and not restarting_inactive then
+    workspace.nvim_server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name)
+  else
+    workspace.nvim_server = self:workspace_launch_server_path(workspace.project_root, workspace.safe_name)
   end
 
   local window_id, created = self:ensure_tmux_window(session, workspace.project_root, workspace.window_name, self:nvim_command(workspace), {
@@ -2989,7 +3078,9 @@ function M:prepare_workspace(name, opts)
   if inactive_like_status(workspace.status) then
     workspace.codex_mode = nil
   end
+  local had_initial_prompt = workspace.initial_prompt ~= nil
   workspace.initial_prompt = nil
+  local previous_project = vim.deepcopy(project)
   project.workspaces[workspace.safe_name] = self:state_record(workspace, existing)
   project.updated_at = self:timestamp()
 
@@ -3005,6 +3096,42 @@ function M:prepare_workspace(name, opts)
       self:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
     end
     return nil, write_error
+  end
+
+  local should_verify_launch = created == true
+    and (opts.verify_launch == true or had_initial_prompt or type(workspace.mission_id) == "string")
+  if should_verify_launch then
+    local verify_ok, verify_error = self:verify_workspace_launch(workspace, {
+      attempts = opts.launch_verify_attempts,
+      sleep_ms = opts.launch_verify_sleep_ms,
+    })
+    if not verify_ok then
+      if creating_worktree then
+        state_data.projects[root] = previous_project
+        self:write_state(state_data)
+        self:kill_tmux_window(window_id)
+        if wrote_new_instruction_file then
+          self:delete_instruction_file(workspace.project_root, workspace.safe_name)
+        end
+        self:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      else
+        local current_project = self:project_state(state_data, root)
+        local record = current_project.workspaces[workspace.safe_name]
+        if type(record) == "table" then
+          record.status = "inactive"
+          record.codex_status = "idle"
+          record.codex_mode = nil
+          record.tmux_target = nil
+          record.last_reconciled_at = self:timestamp()
+          current_project.updated_at = record.last_reconciled_at
+          self:write_state(state_data)
+        end
+        if created then
+          self:kill_tmux_window(window_id)
+        end
+      end
+      return nil, verify_error or "workspace did not become ready"
+    end
   end
 
   return workspace, nil

@@ -973,6 +973,10 @@ function M._v5.remote_show_existing_codex_terminal()
   return terminal:open_window(true) and "ok" or "failed"
 end
 
+function M._v5.remote_workspace_status()
+  return terminal:terminal_running() and "ready" or "not_running"
+end
+
 function M._v5.suppress_startup_plan_warning_for_workspace(workspace)
   return type(workspace) == "table" and type(workspace.mission_id) == "string" and workspace.mission_id ~= ""
 end

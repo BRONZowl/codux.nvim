@@ -2594,6 +2594,22 @@ do
 end
 
 do
+  local store = workspace_store_mod.new({
+    get_workspace_config = function()
+      return default_workspace_config().workspaces
+    end,
+  })
+  local normalized = store:normalize_record({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    nvim_server = "/run/user/1000/codux/ws-review.sock",
+  }, "review", "/repo")
+
+  assert_equal(normalized.nvim_server, "/run/user/1000/codux/ws-review.sock")
+end
+
+do
   local runtime = runtime_with_tmux({
     ["tmux list-panes -t @1 -F #{pane_current_command}"] = { "bash\nnvim\n", 0 },
   })
@@ -2643,7 +2659,7 @@ end
 do
   with_workspace_prepare_env(function()
     local commands = {}
-    local expected_server
+    local expected_server = "/tmp/stale-review.sock"
     local runtime = workspace_prepare_runtime({
       system = function(args)
         local command = table.concat(args, " ")
@@ -2663,8 +2679,6 @@ do
         return "", 1
       end,
     })
-    expected_server = runtime:workspace_server_path("/repo", "review")
-
     local ok, error_message = runtime:send_prompt_to_workspace({
       name = "review",
       safe_name = "review",
@@ -2677,7 +2691,7 @@ do
     assert_contains(command_text, "remote_send_to_codex")
     assert_contains(command_text, "  /plan  ")
     assert_contains(command_text, expected_server)
-    assert_equal(command_text:find("/tmp/stale-review.sock", 1, true), nil)
+    assert_equal(command_text:find(runtime:workspace_server_path("/repo", "review"), 1, true), nil)
   end)
 end
 
@@ -2685,7 +2699,7 @@ do
   with_workspace_prepare_env(function()
     local commands = {}
     local pane_checks = 0
-    local expected_server
+    local expected_server = "/tmp/stale-review.sock"
     local runtime = workspace_prepare_runtime({
       system = function(args)
         local command = table.concat(args, " ")
@@ -2709,8 +2723,6 @@ do
         return "", 1
       end,
     })
-    expected_server = runtime:workspace_server_path("/repo", "review")
-
     local ok, error_message = runtime:ensure_workspace_plan_mode({
       name = "review",
       safe_name = "review",
@@ -2722,7 +2734,7 @@ do
     local command_text = table.concat(commands, "\n")
     assert_contains(command_text, "remote_ensure_plan_mode")
     assert_contains(command_text, expected_server)
-    assert_equal(command_text:find("/tmp/stale-review.sock", 1, true), nil)
+    assert_equal(command_text:find(runtime:workspace_server_path("/repo", "review"), 1, true), nil)
     assert_equal(pane_checks, 2)
   end)
 end
@@ -2791,7 +2803,7 @@ end
 do
   with_workspace_prepare_env(function()
     local commands = {}
-    local expected_server
+    local expected_server = "/tmp/stale-review.sock"
     local runtime = workspace_prepare_runtime({
       system = function(args)
         local command = table.concat(args, " ")
@@ -2820,8 +2832,6 @@ do
         return "", 1
       end,
     })
-    expected_server = runtime:workspace_server_path("/repo", "review")
-
     local preview, error_message = runtime:workspace_interactive_preview({
       name = "review",
       safe_name = "review",
@@ -2836,7 +2846,7 @@ do
     assert_contains(command_text, expected_server)
     assert_contains(command_text, "tmux new-session -d -t session -s codux-preview-test")
     assert_contains(command_text, "tmux select-window -t codux-preview-test:review")
-    assert_equal(command_text:find("/tmp/stale-review.sock", 1, true), nil)
+    assert_equal(command_text:find(runtime:workspace_server_path("/repo", "review"), 1, true), nil)
     assert_equal(command_text:find(" codex ", 1, true), nil)
   end)
 end
@@ -3379,6 +3389,53 @@ end
 if type(vim.api) == "table" then
   local bufnr = vim.api.nvim_create_buf(false, true)
   local rendered_lines
+  local on_exit
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_buf = bufnr,
+      mission_dashboard_output_win = 13,
+    },
+    is_loaded_buf = function(target)
+      return target == bufnr and vim.api.nvim_buf_is_loaded(target)
+    end,
+    ui = {
+      set_lines = function(_, lines)
+        rendered_lines = lines
+      end,
+    },
+    workspace_interactive_preview = function()
+      return {
+        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
+        preview_session = "codux-preview-test",
+      }, nil
+    end,
+    termopen = function(_, opts)
+      on_exit = opts.on_exit
+      return 77
+    end,
+    jobstop = function()
+      return true
+    end,
+  })
+
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "idle",
+  }))
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "inactive",
+  }))
+  on_exit(77, 2)
+  assert_equal(table.concat(rendered_lines, "\n"), "workspace inactive...")
+  vim.api.nvim_buf_delete(bufnr, { force = true })
+end
+
+if type(vim.api) == "table" then
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  local rendered_lines
   local closed_preview
   local termopen_calls = 0
   local controller = mission_control_mod.new({
@@ -3524,6 +3581,38 @@ if type(vim.api) == "table" then
   assert_equal(rendered_text:find("Ctrl-o workspace", 1, true), nil)
   assert_equal(rendered_text:find("Ctrl-q", 1, true), nil)
   vim.api.nvim_buf_delete(bufnr, { force = true })
+end
+
+if type(vim.api) == "table" then
+  local terminal_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_call(terminal_buf, function()
+    vim.fn.termopen({ "sh", "-c", "printf stale-terminal; exit 0" })
+  end)
+  vim.wait(100)
+
+  local controller = mission_control_mod.new({
+    namespace = vim.api.nvim_create_namespace("codux.mission_output.replace_terminal.test"),
+    state = {
+      mission_dashboard_output_buf = terminal_buf,
+      mission_dashboard_output_win = 13,
+      mission_dashboard_output_buf_kind = "terminal",
+    },
+    is_valid_win = function()
+      return false
+    end,
+  })
+
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "inactive",
+  }))
+  assert_true(controller.state.mission_dashboard_output_buf ~= terminal_buf)
+  assert_equal(vim.api.nvim_get_option_value("buftype", { buf = controller.state.mission_dashboard_output_buf }), "nofile")
+  local lines = vim.api.nvim_buf_get_lines(controller.state.mission_dashboard_output_buf, 0, -1, false)
+  assert_equal(table.concat(lines, "\n"), "workspace inactive...")
+  assert_false(vim.api.nvim_buf_is_valid(terminal_buf))
+  vim.api.nvim_buf_delete(controller.state.mission_dashboard_output_buf, { force = true })
 end
 
 do
@@ -6461,6 +6550,9 @@ do
         if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
           return "nvim\n", 0
         end
+        if command:find("remote_workspace_status", 1, true) then
+          return "ready\n", 0
+        end
         return "", 1
       end,
     })
@@ -6518,6 +6610,9 @@ do
         if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
           return "nvim\n", 0
         end
+        if command:find("remote_workspace_status", 1, true) then
+          return "ready\n", 0
+        end
         return "", 1
       end,
     })
@@ -6541,6 +6636,84 @@ do
     assert_equal(record.mission_id, "mission:mission")
     assert_equal(record.mission_role, "Builder")
     assert_equal(record.mission_objective, "Build it")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local created = false
+    local killed = false
+    local removed_worktree = false
+    local deleted_branch = false
+    local deleted_instruction = false
+    local store = workspace_store({
+      delete_instruction_file = function(_, root, safe_name)
+        deleted_instruction = root == "/codux-worktrees/mission-builder" and safe_name == "mission-builder"
+        return true, nil
+      end,
+    })
+    local runtime = workspace_prepare_runtime({
+      store = store.store,
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-builder" then
+          return "", 1
+        end
+        if command == "git -C /repo worktree add -b dev/mission-builder /codux-worktrees/mission-builder main" then
+          return "", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          if created then
+            return "@1\tmission-builder\n", 0
+          end
+          return "", 0
+        end
+        if command:find("tmux new%-window", 1, false) == 1 then
+          created = true
+          return "", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        if command:find("remote_workspace_status", 1, true) then
+          return "not_running\n", 0
+        end
+        if command == "tmux kill-window -t @1" then
+          killed = true
+          return "", 0
+        end
+        if command == "git -C /repo worktree remove --force /codux-worktrees/mission-builder" then
+          removed_worktree = true
+          return "", 0
+        end
+        if command == "git -C /repo branch -D dev/mission-builder" then
+          deleted_branch = true
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+
+    local workspace, error_message = runtime:prepare_workspace("mission-builder", {
+      resolved_instruction = "builder instructions",
+      initial_prompt = "start building",
+      permission_profile = "auto",
+      mission_id = "mission:mission",
+      mission_name = "Mission",
+      mission_role = "Builder",
+      launch_verify_attempts = 1,
+    })
+
+    assert_nil(workspace)
+    assert_equal(error_message, "workspace Codex session is not running")
+    assert_true(killed)
+    assert_true(deleted_instruction)
+    assert_true(removed_worktree)
+    assert_true(deleted_branch)
+    assert_nil(store.state_data().projects["/codux-worktrees/mission-builder"].workspaces["mission-builder"])
   end)
 end
 
@@ -6636,6 +6809,9 @@ do
         end
         if command == "tmux list-panes -t @2 -F #{pane_current_command}" then
           return "nvim\n", 0
+        end
+        if command:find("remote_workspace_status", 1, true) then
+          return "ready\n", 0
         end
         return "", 1
       end,
@@ -7129,16 +7305,15 @@ do
       project_root = "/repo",
       restart_inactive = true,
     })
-    local expected_server = runtime:workspace_server_path("/repo", "review")
     assert_nil(error_message)
     assert_equal(workspace.window_id, "@2")
-    assert_equal(workspace.nvim_server, expected_server)
+    assert_contains(workspace.nvim_server, "/codux/ws-review-repo-")
     assert_true(killed)
     assert_true(created)
     local command_text = table.concat(commands, "\n")
     assert_contains(command_text, "tmux kill-window -t @1")
     assert_contains(command_text, "--listen")
-    assert_contains(command_text, expected_server)
+    assert_contains(command_text, workspace.nvim_server)
     assert_equal(command_text:find("/tmp/stale-review.sock", 1, true), nil)
   end)
 end
@@ -7236,7 +7411,8 @@ do
     assert_equal(workspace.target_type, "directory")
     assert_contains(new_window_command, "'nvim' --listen")
     assert_contains(new_window_command, 'initial_mode="plan"')
-    assert_contains(new_window_command, "/codux/repo-review.sock' '.'")
+    assert_contains(new_window_command, "/codux/ws-review-repo-")
+    assert_contains(new_window_command, "' '.'")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.initial_mode, "plan")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.target_path, "/repo")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.target_type, "directory")
@@ -7332,7 +7508,8 @@ do
     assert_equal(workspace.target_path, "/repo/file.lua")
     assert_equal(workspace.target_type, "file")
     assert_contains(new_window_command, "'nvim' --listen")
-    assert_contains(new_window_command, "/codux/repo-review.sock' '/repo/file.lua'")
+    assert_contains(new_window_command, "/codux/ws-review-repo-")
+    assert_contains(new_window_command, "' '/repo/file.lua'")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.target_path, "/repo/file.lua")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.target_type, "file")
   end)
