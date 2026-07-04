@@ -3182,13 +3182,8 @@ function M:create_workspace(name, opts)
     return false
   end
 
-  if not self:switch_tmux_window(workspace.window_id) then
-    self.notify("Failed to switch to Codux workspace " .. workspace.name, vim.log.levels.ERROR)
-    return false
-  end
-
   local branch = workspace.git_branch ~= "" and " on " .. workspace.git_branch or ""
-  self.notify("Opened Codux workspace " .. workspace.name .. branch)
+  self.notify("Created Codux workspace " .. workspace.name .. branch)
   return true
 end
 

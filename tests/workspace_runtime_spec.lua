@@ -1514,7 +1514,7 @@ do
   assert_equal(calls[1].name, "review")
   assert_equal(calls[1].opts.initial_mode, "plan")
   assert_nil(calls[1].opts.initial_prompt)
-  assert_equal(calls[2].name, "focus")
+  assert_nil(calls[2])
 end
 
 do
