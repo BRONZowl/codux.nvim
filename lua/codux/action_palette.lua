@@ -89,6 +89,9 @@ function M.new(opts)
     open_error = opts.open_error or "Failed to open Codux actions",
     after_create_buffer = type(opts.after_create_buffer) == "function" and opts.after_create_buffer or nil,
     run_action = type(opts.run_action) == "function" and opts.run_action or noop,
+    key_only = opts.key_only == true,
+    sink_win_key = opts.sink_win_key or "__action_palette_sink_win",
+    sink_buf_key = opts.sink_buf_key or "__action_palette_sink_buf",
   }
 
   return setmetatable(controller, M)
@@ -113,7 +116,15 @@ end
 function M:close()
   self.ui.close_window(self:win())
   self.ui.delete_buffer(self:buf())
+  if self.key_only then
+    self.ui.close_window(self.state[self.sink_win_key])
+    self.ui.delete_buffer(self.state[self.sink_buf_key])
+  end
   self:clear_state()
+  if self.key_only then
+    self.state[self.sink_win_key] = nil
+    self.state[self.sink_buf_key] = nil
+  end
   return true
 end
 
@@ -156,6 +167,10 @@ function M:render(...)
 end
 
 function M:run_highlighted()
+  if self.key_only then
+    return false
+  end
+
   local win = self:win()
   if not self.is_valid_win(win) then
     return false
@@ -174,6 +189,10 @@ function M:run_highlighted()
 end
 
 function M:move_cursor(delta)
+  if self.key_only then
+    return false
+  end
+
   local win = self:win()
   if not self.is_valid_win(win) then
     return false
@@ -198,21 +217,23 @@ function M:bind_keys(bufnr, target, context)
   self.bind_close_keys(bufnr, function()
     return self:close()
   end, "Close Codux " .. action_label .. " Actions", "n", { escape = true, q = true })
-  self.set_buffer_keymap(bufnr, "n", "<CR>", function()
-    return self:run_highlighted()
-  end, "Run Codux " .. action_label .. " Action")
-  self.set_buffer_keymap(bufnr, "n", "j", function()
-    return self:move_cursor(1)
-  end, "Next Codux " .. action_label .. " Action", { nowait = true })
-  self.set_buffer_keymap(bufnr, "n", "<Down>", function()
-    return self:move_cursor(1)
-  end, "Next Codux " .. action_label .. " Action", { nowait = true })
-  self.set_buffer_keymap(bufnr, "n", "k", function()
-    return self:move_cursor(-1)
-  end, "Previous Codux " .. action_label .. " Action", { nowait = true })
-  self.set_buffer_keymap(bufnr, "n", "<Up>", function()
-    return self:move_cursor(-1)
-  end, "Previous Codux " .. action_label .. " Action", { nowait = true })
+  if not self.key_only then
+    self.set_buffer_keymap(bufnr, "n", "<CR>", function()
+      return self:run_highlighted()
+    end, "Run Codux " .. action_label .. " Action")
+    self.set_buffer_keymap(bufnr, "n", "j", function()
+      return self:move_cursor(1)
+    end, "Next Codux " .. action_label .. " Action", { nowait = true })
+    self.set_buffer_keymap(bufnr, "n", "<Down>", function()
+      return self:move_cursor(1)
+    end, "Next Codux " .. action_label .. " Action", { nowait = true })
+    self.set_buffer_keymap(bufnr, "n", "k", function()
+      return self:move_cursor(-1)
+    end, "Previous Codux " .. action_label .. " Action", { nowait = true })
+    self.set_buffer_keymap(bufnr, "n", "<Up>", function()
+      return self:move_cursor(-1)
+    end, "Previous Codux " .. action_label .. " Action", { nowait = true })
+  end
 
   for _, action_item in ipairs(self:items_list()) do
     local bound_action = action_item.action
@@ -248,7 +269,12 @@ function M:open(target, context)
   self:assign_open_state(target, context, action_items, bufnr)
   self:render(target, context)
 
-  local win_ok, win = pcall(self.open_win, bufnr, true, self.window_config(target, #action_items, context))
+  local config = self.window_config(target, #action_items, context)
+  config = type(config) == "table" and vim.deepcopy(config) or {}
+  if self.key_only then
+    config.focusable = false
+  end
+  local win_ok, win = pcall(self.open_win, bufnr, not self.key_only, config)
   if not win_ok then
     self:close()
     self.notify(value_from(self.open_error, target, context), vim.log.levels.ERROR)
@@ -261,11 +287,36 @@ function M:open(target, context)
     relativenumber = false,
     signcolumn = "no",
     winfixbuf = true,
-    cursorline = true,
-    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
+    cursorline = not self.key_only,
+    winhighlight = self.key_only
+        and "FloatBorder:WhichKey,FloatTitle:WhichKey,Cursor:CoduxActionPaletteCursor,CursorIM:CoduxActionPaletteCursor"
+      or "FloatBorder:WhichKey,FloatTitle:WhichKey",
   })
-  self:bind_keys(bufnr, target, context)
-  self.set_window_cursor(win, { 1, 0 })
+  if self.key_only and vim.api and type(vim.api.nvim_set_hl) == "function" then
+    pcall(vim.api.nvim_set_hl, 0, "CoduxActionPaletteCursor", { fg = "NONE", bg = "NONE", blend = 100 })
+  end
+  if self.key_only then
+    local sink_buf, sink_win = ui.open_hidden_command_sink({
+      ui = self.ui,
+      filetype = "codux-actions-sink",
+      enter = true,
+      focusable = true,
+      open_win = self.open_win,
+      bind = function(target_bufnr)
+        self:bind_keys(target_bufnr, target, context)
+      end,
+    })
+    if not sink_buf then
+      self:close()
+      self.notify(value_from(self.open_error, target, context), vim.log.levels.ERROR)
+      return false
+    end
+    self.state[self.sink_buf_key] = sink_buf
+    self.state[self.sink_win_key] = sink_win
+  else
+    self:bind_keys(bufnr, target, context)
+    self.set_window_cursor(win, { 1, 0 })
+  end
   return true
 end
 

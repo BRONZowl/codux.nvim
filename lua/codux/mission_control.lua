@@ -226,7 +226,10 @@ function M:action_palette_controller()
     namespace = self.namespace,
     win_key = "mission_dashboard_action_win",
     buf_key = "mission_dashboard_action_buf",
+    sink_win_key = "mission_dashboard_action_sink_win",
+    sink_buf_key = "mission_dashboard_action_sink_buf",
     items_key = "mission_dashboard_action_items",
+    key_only = true,
     create_buffer_options = {
       bufhidden = "wipe",
       filetype = "codux-missions-actions",
@@ -265,6 +268,8 @@ function M:action_palette_controller()
     clear_state = function(palette)
       palette.state.mission_dashboard_action_win = nil
       palette.state.mission_dashboard_action_buf = nil
+      palette.state.mission_dashboard_action_sink_win = nil
+      palette.state.mission_dashboard_action_sink_buf = nil
       palette.state.mission_dashboard_action_items = {}
       palette.state.mission_dashboard_action_mission = nil
       palette.state.mission_dashboard_action_workspace = nil

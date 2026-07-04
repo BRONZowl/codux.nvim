@@ -194,4 +194,147 @@ do
   vim.api = old_api
 end
 
+do
+  local old_api = vim.api
+  local opened = {}
+  local cursor_set
+  local cursor_highlight
+  vim.api = {
+    nvim_open_win = function(bufnr, enter, config)
+      table.insert(opened, {
+        bufnr = bufnr,
+        enter = enter,
+        config = config,
+      })
+      return bufnr + 100
+    end,
+    nvim_win_set_cursor = function(_, cursor)
+      cursor_set = cursor
+      return true
+    end,
+    nvim_set_hl = function(_, name, opts)
+      if name == "CoduxActionPaletteCursor" then
+        cursor_highlight = opts
+      end
+    end,
+    nvim_buf_clear_namespace = function() end,
+    nvim_buf_add_highlight = function() end,
+  }
+
+  local state = {}
+  local window_options = {}
+  local closed = {}
+  local deleted = {}
+  local bound = {}
+  local create_count = 0
+  local ran_action
+  local controller = action_palette_mod.new({
+    state = state,
+    win_key = "action_win",
+    buf_key = "action_buf",
+    sink_win_key = "action_sink_win",
+    sink_buf_key = "action_sink_buf",
+    items_key = "action_items",
+    target_key = "action_target",
+    namespace = 56,
+    key_only = true,
+    ui = {
+      create_scratch_buffer = function(options)
+        create_count = create_count + 1
+        if create_count == 1 then
+          assert_equal(options.filetype, "codux-test-actions")
+          return 31
+        end
+        assert_equal(options.filetype, "codux-actions-sink")
+        return 32
+      end,
+      set_lines = function() end,
+      set_window_options = function(win, options)
+        window_options[win] = options
+      end,
+      close_window = function(win)
+        table.insert(closed, win)
+      end,
+      delete_buffer = function(bufnr)
+        table.insert(deleted, bufnr)
+      end,
+    },
+    is_valid_win = function(win)
+      return win == 131
+    end,
+    is_loaded_buf = function(bufnr)
+      return bufnr == 31
+    end,
+    set_window_cursor = function(_, cursor)
+      cursor_set = cursor
+      return true
+    end,
+    set_buffer_keymap = function(bufnr, mode, lhs, rhs, desc, opts)
+      assert_equal(bufnr, 32)
+      assert_equal(mode, "n")
+      bound[lhs] = { rhs = rhs, desc = desc, opts = opts }
+    end,
+    bind_close_keys = function(bufnr, close_fn, _, _, opts)
+      assert_equal(bufnr, 32)
+      bound.close = close_fn
+      assert_true(opts.escape)
+      assert_true(opts.q)
+    end,
+    create_buffer_options = {
+      bufhidden = "wipe",
+      filetype = "codux-test-actions",
+      buftype = "nofile",
+      swapfile = false,
+      modifiable = false,
+    },
+    items = function()
+      return {
+        { key = "r", action = "rename", label = "Rename Workspace" },
+      }
+    end,
+    line_for = function(item)
+      return item.key .. "  " .. item.label
+    end,
+    window_config = function()
+      return { height = 1 }
+    end,
+    action_label = "Workspace",
+    run_action = function(action, target)
+      ran_action = tostring(action) .. ":" .. tostring(target.name)
+      return true
+    end,
+  })
+
+  assert_true(controller:open({ name = "review" }))
+  assert_equal(opened[1].bufnr, 31)
+  assert_false(opened[1].enter)
+  assert_false(opened[1].config.focusable)
+  assert_equal(opened[2].bufnr, 32)
+  assert_true(opened[2].enter)
+  assert_equal(window_options[131].cursorline, false)
+  assert_equal(window_options[131].winhighlight, "FloatBorder:WhichKey,FloatTitle:WhichKey,Cursor:CoduxActionPaletteCursor,CursorIM:CoduxActionPaletteCursor")
+  assert_equal(cursor_highlight.blend, 100)
+  assert_equal(cursor_set, nil)
+  assert_equal(bound["<CR>"], nil)
+  assert_equal(bound.j, nil)
+  assert_equal(bound.k, nil)
+  assert_equal(bound["<Down>"], nil)
+  assert_equal(bound["<Up>"], nil)
+  assert_equal(bound.r.desc, "Rename Workspace Codux Workspace")
+  assert_false(controller:move_cursor(1))
+  assert_false(controller:run_highlighted())
+  assert_true(bound.r.rhs())
+  assert_equal(ran_action, "rename:review")
+  assert_true(bound.close())
+  assert_equal(closed[1], 131)
+  assert_equal(closed[2], 132)
+  assert_equal(deleted[1], 31)
+  assert_equal(deleted[2], 32)
+  assert_equal(state.action_win, nil)
+  assert_equal(state.action_buf, nil)
+  assert_equal(state.action_sink_win, nil)
+  assert_equal(state.action_sink_buf, nil)
+  vim.api = old_api
+end
+
 print("action_palette_spec.lua: ok")

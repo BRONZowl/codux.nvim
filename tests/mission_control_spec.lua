@@ -1127,11 +1127,22 @@ end
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
   local old_win_set_cursor = vim.api.nvim_win_set_cursor
-  local window_options
-  vim.api.nvim_open_win = function()
-    return 41
+  local opened = {}
+  local window_options = {}
+  local cursor_set
+  local bound = {}
+  local created = 0
+  local ran_action
+  vim.api.nvim_open_win = function(bufnr, enter, config)
+    table.insert(opened, {
+      bufnr = bufnr,
+      enter = enter,
+      config = config,
+    })
+    return bufnr + 10
   end
-  vim.api.nvim_win_set_cursor = function()
+  vim.api.nvim_win_set_cursor = function(_, cursor)
+    cursor_set = cursor
     return true
   end
 
@@ -1157,21 +1168,41 @@ if type(vim.api) == "table" then
     end,
     ui = {
       create_scratch_buffer = function()
-        return 31
+        created = created + 1
+        return created == 1 and 31 or 32
       end,
       set_lines = function() end,
       close_window = function() end,
       delete_buffer = function() end,
-      set_window_options = function(_, opts)
-        window_options = opts
+      set_window_options = function(win, opts)
+        window_options[win] = opts
       end,
     },
     bind_close_keys = function() end,
-    set_buffer_keymap = function() end,
+    set_buffer_keymap = function(_, _, lhs, rhs)
+      bound[lhs] = rhs
+    end,
   })
+  function controller:start_selected_mission(mission)
+    ran_action = "start:" .. tostring(mission.name)
+    return true
+  end
 
   assert_true(controller:open_action_palette_for({ name = "Alpha" }, "mission"))
-  assert_equal(window_options.winhighlight, "FloatBorder:WhichKey,FloatTitle:WhichKey")
+  assert_equal(opened[1].bufnr, 31)
+  assert_false(opened[1].enter)
+  assert_false(opened[1].config.focusable)
+  assert_equal(opened[2].bufnr, 32)
+  assert_true(opened[2].enter)
+  assert_equal(window_options[41].cursorline, false)
+  assert_contains(window_options[41].winhighlight, "Cursor:CoduxActionPaletteCursor")
+  assert_equal(cursor_set, nil)
+  assert_equal(bound["<CR>"], nil)
+  assert_equal(bound.j, nil)
+  assert_equal(bound.k, nil)
+  assert_true(type(bound.s) == "function")
+  assert_true(bound.s())
+  assert_equal(ran_action, "start:Alpha")
   vim.api.nvim_open_win = old_open_win
   vim.api.nvim_win_set_cursor = old_win_set_cursor
 end
@@ -1272,10 +1303,6 @@ do
 end
 
 do
-  local current_cursor = { 1, 0 }
-  local cursor_set
-  local ran_action
-  local closed = false
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_action_win = 30,
@@ -1286,47 +1313,17 @@ do
     is_valid_win = function(win)
       return win == 30
     end,
-    get_window_cursor = function()
-      return current_cursor
-    end,
-    set_window_cursor = function(_, cursor)
-      cursor_set = cursor
-      current_cursor = cursor
-      return true
-    end,
     ui = {
-      close_window = function()
-        closed = true
-      end,
+      close_window = function() end,
       delete_buffer = function() end,
     },
   })
-  function controller:edit_selected_mission(mission)
-    ran_action = "edit:" .. tostring(mission.name)
-    return true
-  end
-  function controller:view_mission_objective(mission)
-    ran_action = "view:" .. tostring(mission.name)
-    return true
-  end
-  function controller:start_selected_mission(mission)
-    ran_action = "start:" .. tostring(mission.name)
-    return true
-  end
 
-  assert_true(controller:move_action_cursor(1))
-  assert_equal(cursor_set[1], 2)
-  assert_true(controller:move_action_cursor(-1))
-  assert_equal(cursor_set[1], 1)
-
-  assert_true(controller:run_highlighted_action())
-  assert_equal(ran_action, "start:Alpha")
-  assert_true(closed)
-  assert_nil(controller.state.mission_dashboard_action_win)
+  assert_false(controller:move_action_cursor(1))
+  assert_false(controller:run_highlighted_action())
 end
 
 do
-  local current_cursor = { 1, 0 }
   local ran_action
   local entry = { name = "alpha-builder", safe_name = "alpha-builder" }
   local controller = mission_control_mod.new({
@@ -1340,9 +1337,6 @@ do
     is_valid_win = function(win)
       return win == 30
     end,
-    get_window_cursor = function()
-      return current_cursor
-    end,
     ui = {
       close_window = function() end,
       delete_buffer = function() end,
@@ -1354,8 +1348,8 @@ do
   })
   function controller:close_dashboard() end
 
-  assert_true(controller:run_highlighted_action())
-  assert_equal(ran_action, "open:alpha-builder")
+  assert_false(controller:run_highlighted_action())
+  assert_equal(ran_action, nil)
 end
 
 do
