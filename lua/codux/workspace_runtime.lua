@@ -3175,6 +3175,7 @@ function M:create_workspace(name, opts)
   local workspace, error_message = self:prepare_workspace(name, {
     custom_instruction = opts.custom_instruction,
     resolved_instruction = opts.resolved_instruction,
+    initial_prompt = opts.initial_prompt,
     initial_mode = "plan",
     permission_profile = opts.permission_profile,
     mission_id = opts.mission_id,
@@ -3278,6 +3279,7 @@ function M:create_mission(mission_or_name, objective, opts)
     local workspace, workspace_error = self:prepare_workspace(role.workspace_name, {
       custom_instruction = role.instruction,
       resolved_instruction = role.instruction,
+      initial_prompt = role.initial_prompt,
       initial_mode = "plan",
       permission_profile = "auto",
       mission_id = mission.mission_id,

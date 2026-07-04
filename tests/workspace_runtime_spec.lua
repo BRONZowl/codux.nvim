@@ -1561,7 +1561,7 @@ do
   assert_true(runtime:create_workspace("review", { initial_mode = "execute", initial_prompt = "start now" }))
   assert_equal(calls[1].name, "review")
   assert_equal(calls[1].opts.initial_mode, "plan")
-  assert_nil(calls[1].opts.initial_prompt)
+  assert_equal(calls[1].opts.initial_prompt, "start now")
   assert_nil(calls[2])
 end
 
@@ -3577,13 +3577,13 @@ do
     assert_equal(builder.mission_objective, "Build it")
     assert_equal(architect.initial_mode, "plan")
     assert_equal(builder.initial_mode, "plan")
-    assert_equal(architect.codex_status, "idle")
-    assert_equal(builder.codex_status, "idle")
-    assert_nil(architect.codex_mode)
-    assert_nil(builder.codex_mode)
+    assert_equal(architect.codex_status, "working")
+    assert_equal(builder.codex_status, "working")
+    assert_equal(architect.codex_mode, "plan")
+    assert_equal(builder.codex_mode, "plan")
     assert_contains(table.concat(commands, "\n"), "git -C /repo status --porcelain")
     assert_contains(table.concat(commands, "\n"), "--listen")
-    assert_equal(table.concat(commands, "\n"):find("Start your Mission Control role now.", 1, true), nil)
+    assert_contains(table.concat(commands, "\n"), "Start your Mission Control role now.")
   end)
 end
 
