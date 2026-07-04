@@ -1568,6 +1568,49 @@ function M:create_output_buffer(kind, lines)
   return bufnr
 end
 
+function M:output_window_buffer()
+  if not self.is_valid_win(self.state.mission_dashboard_output_win) then
+    return nil
+  end
+
+  local ok, current = pcall(vim.api.nvim_win_get_buf, self.state.mission_dashboard_output_win)
+  return ok and current or nil
+end
+
+function M:set_output_window_buffer(bufnr)
+  local win = self.state.mission_dashboard_output_win
+  if not self.is_valid_win(win) then
+    return true
+  end
+
+  local current = self:output_window_buffer()
+  if current == nil then
+    return true
+  end
+  if current == bufnr then
+    return true
+  end
+
+  local had_winfixbuf = false
+  local winfix_ok, winfixbuf = pcall(vim.api.nvim_get_option_value, "winfixbuf", { win = win })
+  if winfix_ok then
+    had_winfixbuf = winfixbuf == true
+    if had_winfixbuf then
+      pcall(vim.api.nvim_set_option_value, "winfixbuf", false, { win = win })
+    end
+  end
+
+  local set_ok = pcall(vim.api.nvim_win_set_buf, win, bufnr)
+  if winfix_ok and had_winfixbuf and self.is_valid_win(win) then
+    pcall(vim.api.nvim_set_option_value, "winfixbuf", true, { win = win })
+  end
+  if not set_ok then
+    return false
+  end
+
+  return self:output_window_buffer() == bufnr
+end
+
 function M:replace_output_buffer(kind, lines)
   local old_buf = self.state.mission_dashboard_output_buf
   local bufnr = self:create_output_buffer(kind, lines)
@@ -1579,11 +1622,13 @@ function M:replace_output_buffer(kind, lines)
     return true
   end
 
+  if not self:set_output_window_buffer(bufnr) then
+    self.ui.delete_buffer(bufnr)
+    return false
+  end
+
   self.state.mission_dashboard_output_buf = bufnr
   self.state.mission_dashboard_output_buf_kind = kind
-  if self.is_valid_win(self.state.mission_dashboard_output_win) then
-    pcall(vim.api.nvim_win_set_buf, self.state.mission_dashboard_output_win, bufnr)
-  end
   if old_buf ~= bufnr then
     self.ui.delete_buffer(old_buf)
   end
