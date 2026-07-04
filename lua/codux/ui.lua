@@ -140,6 +140,7 @@ end
 function M.open_hidden_command_sink(opts)
   opts = type(opts) == "table" and opts or {}
   local ui_impl = type(opts.ui) == "table" and opts.ui or M
+  local open_win = type(opts.open_win) == "function" and opts.open_win or vim.api.nvim_open_win
   local bufnr = ui_impl.create_scratch_buffer({
     bufhidden = "wipe",
     filetype = opts.filetype,
@@ -148,7 +149,7 @@ function M.open_hidden_command_sink(opts)
     modifiable = false,
   })
   if not bufnr then
-    return nil, nil
+    return nil, nil, "create"
   end
 
   if type(opts.on_create_buffer) == "function" then
@@ -156,7 +157,7 @@ function M.open_hidden_command_sink(opts)
   end
 
   local focusable = opts.focusable == true
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, opts.enter == true, {
+  local win_ok, win = pcall(open_win, bufnr, opts.enter == true, {
     relative = "editor",
     style = "minimal",
     border = "none",
@@ -169,7 +170,7 @@ function M.open_hidden_command_sink(opts)
   })
   if not win_ok then
     ui_impl.delete_buffer(bufnr)
-    return nil, nil
+    return nil, nil, "open"
   end
 
   ui_impl.set_window_options(win, {
@@ -276,6 +277,7 @@ function M.key_choice_menu(opts, callback, deps)
   local win
   local sink_win
   local sink_bufnr
+  local sink_error
   local bufnr = create_scratch_buffer({
     bufhidden = "wipe",
     buftype = "nofile",
@@ -335,58 +337,40 @@ function M.key_choice_menu(opts, callback, deps)
     winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey,Cursor:CoduxKeyChoiceCursor,CursorIM:CoduxKeyChoiceCursor",
   })
 
-  sink_bufnr = create_scratch_buffer({
-    bufhidden = "wipe",
-    buftype = "nofile",
+  sink_bufnr, sink_win, sink_error = M.open_hidden_command_sink({
+    ui = {
+      create_scratch_buffer = create_scratch_buffer,
+      delete_buffer = delete_buffer,
+      set_window_options = set_window_options,
+    },
     filetype = (opts.filetype or "codux-key-choice") .. "-sink",
-    swapfile = false,
-    modifiable = false,
+    enter = true,
+    focusable = true,
+    open_win = open_win,
+    bind = function(target_bufnr)
+      bind_close_keys(target_bufnr, function()
+        return close_menu(nil)
+      end, opts.cancel_desc or "Cancel Codux Menu", "n", { escape = true, q = true })
+      for _, choice in ipairs(choices) do
+        local key = choice.key
+        if type(key) == "string" and key ~= "" then
+          local bound_choice = choice
+          set_keymap(target_bufnr, "n", key, function()
+            return close_menu(bound_choice)
+          end, tostring(choice.desc or choice.label or "Select Codux Menu Item"), { nowait = true })
+        end
+      end
+    end,
   })
   if not sink_bufnr then
     close_window(win)
     delete_buffer(bufnr)
-    notify(opts.create_error or "Failed to create Codux menu", vim.log.levels.ERROR)
-    return false
-  end
-
-  local sink_ok, sink_winid = pcall(open_win, sink_bufnr, true, {
-    relative = "editor",
-    style = "minimal",
-    border = "none",
-    width = 1,
-    height = 1,
-    col = vim.o.columns + 1,
-    row = vim.o.lines + 1,
-    focusable = true,
-    zindex = 1,
-  })
-  if not sink_ok then
-    close_window(win)
-    delete_buffer(bufnr)
-    delete_buffer(sink_bufnr)
-    notify(opts.open_error or "Failed to open Codux menu", vim.log.levels.ERROR)
-    return false
-  end
-  sink_win = sink_winid
-
-  set_window_options(sink_win, {
-    number = false,
-    relativenumber = false,
-    signcolumn = "no",
-    winfixbuf = true,
-  })
-
-  bind_close_keys(sink_bufnr, function()
-    return close_menu(nil)
-  end, opts.cancel_desc or "Cancel Codux Menu", "n", { escape = true, q = true })
-  for _, choice in ipairs(choices) do
-    local key = choice.key
-    if type(key) == "string" and key ~= "" then
-      local bound_choice = choice
-      set_keymap(sink_bufnr, "n", key, function()
-        return close_menu(bound_choice)
-      end, tostring(choice.desc or choice.label or "Select Codux Menu Item"), { nowait = true })
+    if sink_error == "open" then
+      notify(opts.open_error or "Failed to open Codux menu", vim.log.levels.ERROR)
+    else
+      notify(opts.create_error or "Failed to create Codux menu", vim.log.levels.ERROR)
     end
+    return false
   end
 
   return true

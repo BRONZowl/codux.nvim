@@ -37,6 +37,76 @@ if type(vim.api) == "table" then
 end
 
 do
+  local created_options
+  local opened_config
+  local opened_enter
+  local window_options
+  local bound_bufnr
+  local bufnr, win, err = ui.open_hidden_command_sink({
+    ui = {
+      create_scratch_buffer = function(options)
+        created_options = options
+        return 51
+      end,
+      delete_buffer = function() end,
+      set_window_options = function(target_win, options)
+        assert_equal(target_win, 71)
+        window_options = options
+      end,
+    },
+    filetype = "codux-test-sink",
+    enter = true,
+    focusable = true,
+    open_win = function(target_bufnr, enter, config)
+      assert_equal(target_bufnr, 51)
+      opened_enter = enter
+      opened_config = config
+      return 71
+    end,
+    bind = function(target_bufnr)
+      bound_bufnr = target_bufnr
+    end,
+  })
+
+  assert_equal(bufnr, 51)
+  assert_equal(win, 71)
+  assert_nil(err)
+  assert_equal(created_options.filetype, "codux-test-sink")
+  assert_true(opened_enter)
+  assert_true(opened_config.focusable)
+  assert_equal(opened_config.width, 1)
+  assert_equal(opened_config.height, 1)
+  assert_equal(window_options.signcolumn, "no")
+  assert_equal(bound_bufnr, 51)
+end
+
+do
+  local deleted_bufnr
+  local bufnr, win, err = ui.open_hidden_command_sink({
+    ui = {
+      create_scratch_buffer = function()
+        return 52
+      end,
+      delete_buffer = function(target_bufnr)
+        deleted_bufnr = target_bufnr
+      end,
+      set_window_options = function()
+        error("window options should not be set after open failure")
+      end,
+    },
+    filetype = "codux-test-sink",
+    open_win = function()
+      error("open failed")
+    end,
+  })
+
+  assert_nil(bufnr)
+  assert_nil(win)
+  assert_equal(err, "open")
+  assert_equal(deleted_bufnr, 52)
+end
+
+do
   local lines = ui.key_choice_lines({
     { key = "d", label = "default" },
     { key = "a", label = "auto" },
