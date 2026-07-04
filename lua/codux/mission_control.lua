@@ -2420,6 +2420,9 @@ function M:open_question_note_input(entry, label)
   end
 
   label = label or (entry and (entry.mission_role or entry.name or entry.safe_name)) or "workspace"
+  local function restore_dashboard_focus()
+    self:focus_mission_list()
+  end
   return prompt_fn({
     prompt = "Note " .. tostring(label) .. ": ",
     filetype = "codux-mission-question-note",
@@ -2432,6 +2435,7 @@ function M:open_question_note_input(entry, label)
     local note = trim(input)
     if note == "" then
       self.notify("Note is required", vim.log.levels.WARN)
+      restore_dashboard_focus()
       return
     end
 
@@ -2439,8 +2443,10 @@ function M:open_question_note_input(entry, label)
     if ok then
       self.notify("Sent note to " .. tostring(label))
       self:render_dashboard()
+      restore_dashboard_focus()
     else
       self.notify(error_message or "Failed to send question note", vim.log.levels.ERROR)
+      restore_dashboard_focus()
     end
   end, {
     notify = self.notify,

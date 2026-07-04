@@ -2024,8 +2024,19 @@ do
     return true
   end
   local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_win = 10,
+      mission_dashboard_command_win = 30,
+    },
     notify = function(message)
       table.insert(calls, "notify:" .. tostring(message))
+    end,
+    is_valid_win = function(win)
+      return win == 10 or win == 30
+    end,
+    set_current_win = function(win)
+      table.insert(calls, "focus:" .. tostring(win))
+      return true
     end,
     ui = {
       single_line_prompt = function(opts, callback)
@@ -2061,6 +2072,7 @@ do
   assert_equal(calls[2], "note:alpha-builder:ship this plan")
   assert_equal(calls[3], "notify:Sent note to Builder")
   assert_equal(calls[4], "render")
+  assert_equal(calls[5], "focus:30")
   ui_mod.key_choice_menu = old_key_choice_menu
 end
 
@@ -2104,10 +2116,22 @@ end
 do
   local calls = {}
   local notifications = {}
+  local focused_win
   local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "question" }
   local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_win = 10,
+      mission_dashboard_command_win = 30,
+    },
     notify = function(message)
       table.insert(notifications, message)
+    end,
+    is_valid_win = function(win)
+      return win == 10 or win == 30
+    end,
+    set_current_win = function(win)
+      focused_win = win
+      return true
     end,
     ui = {
       single_line_prompt = function(opts, callback)
@@ -2146,6 +2170,49 @@ do
   assert_true(controller:open_question_note_input(entry, "Builder"))
   assert_contains(notifications[#notifications], "Note is required")
   assert_equal(#calls, 0)
+  assert_equal(focused_win, 30)
+end
+
+do
+  local notifications = {}
+  local focused_win
+  local rendered = false
+  local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "question" }
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_win = 10,
+      mission_dashboard_command_win = 30,
+    },
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    is_valid_win = function(win)
+      return win == 10 or win == 30
+    end,
+    set_current_win = function(win)
+      focused_win = win
+      return true
+    end,
+    ui = {
+      single_line_prompt = function(opts, callback)
+        assert_true(opts.insert_input)
+        callback("needs more detail")
+        return true
+      end,
+    },
+    submit_workspace_question_note = function()
+      return false, "note failed"
+    end,
+  })
+  function controller:render_dashboard()
+    rendered = true
+    return true
+  end
+
+  assert_true(controller:open_question_note_input(entry, "Builder"))
+  assert_equal(notifications[#notifications], "note failed")
+  assert_false(rendered)
+  assert_equal(focused_win, 30)
 end
 
 do
