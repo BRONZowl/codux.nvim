@@ -1070,10 +1070,14 @@ end
 
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
-  local launch_callback
+  local yes_callback
   local calls = {}
-  vim.api.nvim_open_win = function()
-    return 44
+  local opened = {}
+  local window_options = {}
+  local created = 0
+  vim.api.nvim_open_win = function(bufnr, enter, config)
+    table.insert(opened, { bufnr = bufnr, enter = enter, config = config })
+    return bufnr + 100
   end
 
   local controller = mission_control_mod.new({
@@ -1084,20 +1088,23 @@ if type(vim.api) == "table" then
     },
     ui = {
       create_scratch_buffer = function()
-        return 43
+        created = created + 1
+        return created == 1 and 43 or 44
       end,
       set_lines = function() end,
-      set_window_options = function() end,
-      close_window = function()
-        table.insert(calls, "close_window")
+      set_window_options = function(win, opts)
+        window_options[win] = opts
       end,
-      delete_buffer = function()
-        table.insert(calls, "delete_buffer")
+      close_window = function(win)
+        table.insert(calls, "close_window:" .. tostring(win))
+      end,
+      delete_buffer = function(bufnr)
+        table.insert(calls, "delete_buffer:" .. tostring(bufnr))
       end,
     },
     set_buffer_keymap = function(_, _, lhs, rhs)
-      if lhs == "<CR>" then
-        launch_callback = rhs
+      if lhs == "y" then
+        yes_callback = rhs
       end
     end,
     bind_close_keys = function() end,
@@ -1112,22 +1119,36 @@ if type(vim.api) == "table" then
   end
 
   assert_true(controller:open_preview({ name = "Alpha" }))
-  assert_true(type(launch_callback) == "function")
-  launch_callback()
-  assert_equal(calls[1], "close_window")
-  assert_equal(calls[2], "delete_buffer")
-  assert_equal(calls[3], "create_mission")
-  assert_equal(calls[4], "refresh_dashboard")
+  assert_equal(opened[1].bufnr, 43)
+  assert_false(opened[1].enter)
+  assert_false(opened[1].config.focusable)
+  assert_contains(opened[1].config.footer, "y yes")
+  assert_contains(opened[1].config.footer, "n no")
+  assert_contains(opened[1].config.footer, "e edit instruction")
+  assert_equal(opened[2].bufnr, 44)
+  assert_true(opened[2].enter)
+  assert_true(opened[2].config.focusable)
+  assert_false(window_options[143].cursorline)
+  assert_contains(window_options[143].winhighlight, "Cursor:CoduxMissionPreviewCursor")
+  assert_true(type(yes_callback) == "function")
+  yes_callback()
+  assert_equal(calls[1], "close_window:143")
+  assert_equal(calls[2], "close_window:144")
+  assert_equal(calls[3], "delete_buffer:43")
+  assert_equal(calls[4], "delete_buffer:44")
+  assert_equal(calls[5], "create_mission")
+  assert_equal(calls[6], "refresh_dashboard")
 
   vim.api.nvim_open_win = old_open_win
 end
 
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
-  local launch_callback
+  local yes_callback
   local dashboard_refreshed = false
-  vim.api.nvim_open_win = function()
-    return 46
+  local created = 0
+  vim.api.nvim_open_win = function(bufnr)
+    return bufnr + 100
   end
 
   local controller = mission_control_mod.new({
@@ -1138,7 +1159,8 @@ if type(vim.api) == "table" then
     },
     ui = {
       create_scratch_buffer = function()
-        return 45
+        created = created + 1
+        return created == 1 and 45 or 46
       end,
       set_lines = function() end,
       set_window_options = function() end,
@@ -1146,8 +1168,8 @@ if type(vim.api) == "table" then
       delete_buffer = function() end,
     },
     set_buffer_keymap = function(_, _, lhs, rhs)
-      if lhs == "<CR>" then
-        launch_callback = rhs
+      if lhs == "y" then
+        yes_callback = rhs
       end
     end,
     bind_close_keys = function() end,
@@ -1161,9 +1183,80 @@ if type(vim.api) == "table" then
   end
 
   assert_true(controller:open_preview({ name = "Alpha" }))
-  assert_true(type(launch_callback) == "function")
-  launch_callback()
+  assert_true(type(yes_callback) == "function")
+  yes_callback()
   assert_false(dashboard_refreshed)
+
+  vim.api.nvim_open_win = old_open_win
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
+  local no_callback
+  local edit_callback
+  local calls = {}
+  local created = 0
+  vim.api.nvim_open_win = function(bufnr)
+    return bufnr + 100
+  end
+
+  local controller = mission_control_mod.new({
+    mission = {
+      preview_lines = function()
+        return { "Mission preview" }
+      end,
+    },
+    ui = {
+      create_scratch_buffer = function()
+        created = created + 1
+        return created == 1 and 47 or 48
+      end,
+      set_lines = function() end,
+      set_window_options = function() end,
+      close_window = function(win)
+        table.insert(calls, "close_window:" .. tostring(win))
+      end,
+      delete_buffer = function(bufnr)
+        table.insert(calls, "delete_buffer:" .. tostring(bufnr))
+      end,
+    },
+    set_buffer_keymap = function(_, _, lhs, rhs)
+      if lhs == "n" then
+        no_callback = rhs
+      elseif lhs == "e" then
+        edit_callback = rhs
+      elseif lhs == "<CR>" then
+        error("mission preview should not bind Enter")
+      end
+    end,
+    bind_close_keys = function() end,
+    create_mission = function()
+      error("no/edit preview actions should not create a mission")
+    end,
+  })
+  function controller:open_objective_editor(name, objective)
+    table.insert(calls, "edit:" .. tostring(name) .. ":" .. tostring(objective))
+    return true
+  end
+
+  assert_true(controller:open_preview({ name = "Alpha", objective = "Build it" }))
+  assert_true(type(no_callback) == "function")
+  assert_true(no_callback())
+  assert_equal(calls[1], "close_window:147")
+  assert_equal(calls[2], "close_window:148")
+  assert_equal(calls[3], "delete_buffer:47")
+  assert_equal(calls[4], "delete_buffer:48")
+
+  calls = {}
+  created = 0
+  assert_true(controller:open_preview({ name = "Alpha", objective = "Build it" }))
+  assert_true(type(edit_callback) == "function")
+  edit_callback()
+  assert_equal(calls[1], "close_window:147")
+  assert_equal(calls[2], "close_window:148")
+  assert_equal(calls[3], "delete_buffer:47")
+  assert_equal(calls[4], "delete_buffer:48")
+  assert_equal(calls[5], "edit:Alpha:Build it")
 
   vim.api.nvim_open_win = old_open_win
 end
@@ -2173,6 +2266,10 @@ if type(vim.api) == "table" then
   local output_config = controller:dashboard_output_config(2)
   assert_equal(objective_config.title, " Codux Mission Objective ")
   assert_equal(preview_config.title, " Codux Mission Control ")
+  assert_contains(preview_config.footer, "y yes")
+  assert_contains(preview_config.footer, "n no")
+  assert_contains(preview_config.footer, "e edit instruction")
+  assert_false(preview_config.focusable)
   assert_equal(dashboard_config.title, " Mission Control ")
   assert_contains(dashboard_config.footer, "Commands shown below")
   assert_equal(dashboard_config.footer:find("Enter open", 1, true), nil)

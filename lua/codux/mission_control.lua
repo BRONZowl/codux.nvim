@@ -78,6 +78,7 @@ local mission_control_filetypes = {
   ["codux-missions-actions"] = true,
   ["codux-missions-output"] = true,
   ["codux-mission-preview"] = true,
+  ["codux-mission-preview-sink"] = true,
   ["codux-mission-objective-preview"] = true,
   ["codux-mission-objective"] = true,
   ["codux-mission-workspace-prompt"] = true,
@@ -489,10 +490,13 @@ function M:preview_config(line_count)
     border = "rounded",
     title = " Codux Mission Control ",
     title_pos = "center",
+    footer = " y yes | n no | e edit instruction ",
+    footer_pos = "center",
     width = width,
     height = height,
     col = math.max(0, math.floor((total_width - width) / 2)),
     row = math.max(0, math.floor((total_height - height) / 2)),
+    focusable = false,
   }
 end
 
@@ -835,38 +839,67 @@ function M:open_preview(mission)
   self.ui.set_lines(bufnr, preview_lines)
   pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
 
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:preview_config(#preview_lines))
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, self:preview_config(#preview_lines))
   if not win_ok then
     self.ui.delete_buffer(bufnr)
     self.notify("Failed to open Codux mission preview", vim.log.levels.ERROR)
     return false
   end
+  if vim.api and type(vim.api.nvim_set_hl) == "function" then
+    pcall(vim.api.nvim_set_hl, 0, "CoduxMissionPreviewCursor", { fg = "NONE", bg = "NONE", blend = 100 })
+  end
   self.ui.set_window_options(win, {
     wrap = true,
     linebreak = true,
-    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
+    cursorline = false,
+    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey,Cursor:CoduxMissionPreviewCursor,CursorIM:CoduxMissionPreviewCursor",
   })
+  local sink_bufnr
+  local sink_win
 
   local function close_preview()
     self.ui.close_window(win)
+    self.ui.close_window(sink_win)
     self.ui.delete_buffer(bufnr)
+    self.ui.delete_buffer(sink_bufnr)
+    return true
   end
 
   local function launch_mission()
     close_preview()
     if self.create_mission(mission) then
-      self:refresh_or_open_dashboard()
+      return self:refresh_or_open_dashboard()
     end
+    return false
   end
 
   local function edit_mission()
     close_preview()
-    self:open_objective_editor(mission.name, mission.objective)
+    return self:open_objective_editor(mission.name, mission.objective)
   end
 
-  self.set_buffer_keymap(bufnr, "n", "<CR>", launch_mission, "Launch Codux Mission")
-  self.set_buffer_keymap(bufnr, "n", "e", edit_mission, "Edit Codux Mission")
-  self.bind_close_keys(bufnr, close_preview, "Cancel Codux Mission", "n", { escape = true, q = true })
+  local sink_error
+  sink_bufnr, sink_win, sink_error = ui.open_hidden_command_sink({
+    ui = self.ui,
+    filetype = "codux-mission-preview-sink",
+    enter = true,
+    focusable = true,
+    bind = function(target_bufnr)
+      self.set_buffer_keymap(target_bufnr, "n", "y", launch_mission, "Launch Codux Mission", { nowait = true })
+      self.set_buffer_keymap(target_bufnr, "n", "n", close_preview, "Cancel Codux Mission", { nowait = true })
+      self.set_buffer_keymap(target_bufnr, "n", "e", edit_mission, "Edit Codux Mission Instruction", { nowait = true })
+      self.bind_close_keys(target_bufnr, close_preview, "Cancel Codux Mission", "n", { escape = true, q = true })
+    end,
+  })
+  if not sink_bufnr then
+    self.ui.close_window(win)
+    self.ui.delete_buffer(bufnr)
+    self.notify(
+      sink_error == "open" and "Failed to open Codux mission preview" or "Failed to create Codux mission preview",
+      vim.log.levels.ERROR
+    )
+    return false
+  end
   return true
 end
 
