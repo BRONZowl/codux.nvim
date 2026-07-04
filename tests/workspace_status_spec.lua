@@ -3274,6 +3274,7 @@ if type(vim.api) == "table" then
       return 77
     end,
   })
+  controller:attach_output_buffer_autocmd(old_buf)
 
   assert_true(controller:render_output_panel({
     safe_name = "alpha-reviewer",
@@ -3285,7 +3286,9 @@ if type(vim.api) == "table" then
   assert_equal(visible_buf_at_termopen, controller.state.mission_dashboard_output_buf)
   assert_true(winfixbuf_at_termopen)
   assert_true(vim.api.nvim_get_option_value("winfixbuf", { win = win }))
+  assert_true(vim.api.nvim_win_is_valid(controller.state.mission_dashboard_output_win))
   assert_false(vim.api.nvim_buf_is_valid(old_buf))
+  assert_nil(controller.state.mission_dashboard_output_replacing_buf)
   local output_buf = controller.state.mission_dashboard_output_buf
   vim.api.nvim_win_close(win, true)
   if vim.api.nvim_buf_is_valid(output_buf) then
@@ -3335,6 +3338,7 @@ if type(vim.api) == "table" then
   assert_false(controller:replace_output_buffer("terminal"))
   assert_equal(controller.state.mission_dashboard_output_buf, old_buf)
   assert_equal(controller.state.mission_dashboard_output_buf_kind, "status")
+  assert_nil(controller.state.mission_dashboard_output_replacing_buf)
   assert_equal(#deleted, 1)
   assert_true(deleted[1] ~= old_buf)
   assert_true(vim.api.nvim_buf_is_valid(old_buf))

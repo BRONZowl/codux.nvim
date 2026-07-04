@@ -1527,6 +1527,10 @@ function M:attach_output_buffer_autocmd(bufnr)
     group = group,
     buffer = bufnr,
     callback = function()
+      if self.state.mission_dashboard_output_replacing_buf == bufnr then
+        pcall(vim.api.nvim_del_augroup_by_id, group)
+        return
+      end
       if self.state.mission_dashboard_output_buf == bufnr then
         self:close_output_preview()
         self.state.mission_dashboard_output_buf = nil
@@ -1622,7 +1626,11 @@ function M:replace_output_buffer(kind, lines)
     return true
   end
 
+  self.state.mission_dashboard_output_replacing_buf = old_buf
   if not self:set_output_window_buffer(bufnr) then
+    if self.state.mission_dashboard_output_replacing_buf == old_buf then
+      self.state.mission_dashboard_output_replacing_buf = nil
+    end
     self.ui.delete_buffer(bufnr)
     return false
   end
@@ -1631,6 +1639,9 @@ function M:replace_output_buffer(kind, lines)
   self.state.mission_dashboard_output_buf_kind = kind
   if old_buf ~= bufnr then
     self.ui.delete_buffer(old_buf)
+  end
+  if self.state.mission_dashboard_output_replacing_buf == old_buf then
+    self.state.mission_dashboard_output_replacing_buf = nil
   end
   return true
 end
