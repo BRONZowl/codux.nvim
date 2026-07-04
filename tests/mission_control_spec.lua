@@ -743,10 +743,19 @@ end
 
 do
   local closed = false
-  local opened = false
+  local context
   local controller = mission_control_mod.new({
-    create_workspace_prompt = function()
-      opened = true
+    state = {
+      mission_dashboard_action_workspace = {
+        name = "alpha-builder",
+        safe_name = "alpha-builder",
+        mission_id = "mission:alpha",
+        mission_name = "Alpha",
+        mission_objective = "Build it",
+      },
+    },
+    create_workspace_prompt = function(opts)
+      context = opts
       return true
     end,
   })
@@ -756,7 +765,38 @@ do
 
   assert_true(controller:create_new_workspace())
   assert_true(closed)
-  assert_true(opened)
+  assert_equal(context.mission_id, "mission:alpha")
+  assert_equal(context.mission_name, "Alpha")
+  assert_equal(context.mission_objective, "Build it")
+end
+
+do
+  local notifications = {}
+  local closed = false
+  local prompted = false
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_action_workspace = {
+        name = "plain",
+        safe_name = "plain",
+      },
+    },
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    create_workspace_prompt = function()
+      prompted = true
+      return true
+    end,
+  })
+  function controller:close_dashboard()
+    closed = true
+  end
+
+  assert_false(controller:create_new_workspace())
+  assert_false(closed)
+  assert_false(prompted)
+  assert_equal(notifications[#notifications], "No Codux mission selected")
 end
 
 do

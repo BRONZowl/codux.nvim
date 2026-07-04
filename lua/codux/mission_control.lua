@@ -1989,7 +1989,7 @@ function M:run_action(action, target)
   end
   if action == "create_workspace" then
     self:close_action_palette()
-    return self:create_new_workspace()
+    return self:create_new_workspace(workspace)
   end
 
   if action == "create_mission" then
@@ -2156,6 +2156,24 @@ function M:selected_role_workspace_or_notify()
     return nil
   end
   return item.entry
+end
+
+function M:mission_context_for_workspace(entry)
+  entry = type(entry) == "table" and entry or nil
+  if not entry then
+    return nil
+  end
+
+  local mission_id = entry.mission_id
+  if type(mission_id) ~= "string" or mission_id == "" then
+    return nil
+  end
+
+  return {
+    mission_id = mission_id,
+    mission_name = entry.mission_name,
+    mission_objective = entry.mission_objective,
+  }
 end
 
 function M:open_role_workspace(entry)
@@ -2335,9 +2353,16 @@ function M:create_new_mission()
   return self:open_prompt()
 end
 
-function M:create_new_workspace()
+function M:create_new_workspace(workspace)
+  workspace = workspace or self.state.mission_dashboard_action_workspace or self:selected_role_workspace_or_notify()
+  local mission_context = self:mission_context_for_workspace(workspace)
+  if not mission_context then
+    self.notify("No Codux mission selected", vim.log.levels.WARN)
+    return false
+  end
+
   self:close_dashboard()
-  return self.create_workspace_prompt()
+  return self.create_workspace_prompt(mission_context)
 end
 
 function M:bind_dashboard_commands(bufnr)

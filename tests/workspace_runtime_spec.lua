@@ -3047,6 +3047,53 @@ do
 end
 
 do
+  local state_data = {
+    projects = {
+      ["/codux-worktrees/alpha-research"] = {
+        workspaces = {
+          ["alpha-research"] = review_workspace_record({
+            name = "alpha-research",
+            safe_name = "alpha-research",
+            project_root = "/codux-worktrees/alpha-research",
+            workspace_kind = "worktree",
+            git_common_dir = "/repo/.git",
+            worktree_branch = "dev/alpha-research",
+            mission_id = "mission:alpha",
+            mission_name = "Alpha",
+            mission_role = "Research",
+            mission_objective = "Build it",
+          }),
+        },
+      },
+    },
+  }
+  local runtime = runtime_mod.new({
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      instruction_file_records = function()
+        return {}
+      end,
+    },
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
+        return "/repo/.git\n", 0
+      end
+      return "", 1
+    end,
+  })
+
+  local entries = runtime:entries_for_project("/repo")
+  local missions = mission_mod.group_entries(entries)
+  local mission = assert(mission_mod.find_mission(missions, "Alpha"))
+  assert_equal(#mission.roles, 1)
+  assert_equal(mission.roles[1].safe_name, "alpha-research")
+  assert_equal(mission.roles[1].mission_role, "Research")
+end
+
+do
   with_filereadable(1, function()
     local delete_calls = 0
     local store = workspace_store({

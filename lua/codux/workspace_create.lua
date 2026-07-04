@@ -1,11 +1,26 @@
 local M = {}
 M.__index = M
 
+local mission_mod = require("codux.mission")
+
 local function default_trim(value)
   return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
 local function noop() end
+
+local function mission_context(opts)
+  opts = type(opts) == "table" and opts or {}
+  local context = type(opts.mission_context) == "table" and opts.mission_context or opts
+  if type(context.mission_id) ~= "string" or context.mission_id == "" then
+    return nil
+  end
+  return {
+    mission_id = context.mission_id,
+    mission_name = context.mission_name or context.mission_id,
+    mission_objective = context.mission_objective,
+  }
+end
 
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
@@ -41,9 +56,12 @@ function M:preview_lines(request)
     "Create Codux workspace?",
     "",
     "Name: " .. tostring(request.name or ""),
-    "",
-    "Instruction:",
   }
+  if type(request.mission_id) == "string" and request.mission_id ~= "" then
+    table.insert(lines, "Mission: " .. tostring(request.mission_name or request.mission_id))
+  end
+  table.insert(lines, "")
+  table.insert(lines, "Instruction:")
   local instruction = type(request.resolved_instruction) == "string" and self.trim(request.resolved_instruction) or ""
   if instruction == "" then
     table.insert(lines, "(none)")
@@ -386,9 +404,28 @@ function M:open_create_preview(request)
 
   local function create_workspace_from_preview()
     close_preview()
+    local custom_instruction = request.custom_instruction
+    local resolved_instruction = request.resolved_instruction
+    local mission_role = nil
+    if type(request.mission_id) == "string" and request.mission_id ~= "" then
+      mission_role = request.name
+      local role = mission_mod.role_from_entry({
+        name = request.name,
+        mission_role = request.name,
+        resolved_instruction = resolved_instruction,
+        custom_instruction = custom_instruction,
+      })
+      role.focus = self.trim(custom_instruction or resolved_instruction or role.focus)
+      resolved_instruction = mission_mod.role_instruction(request.mission_name, request.mission_objective, role)
+      custom_instruction = resolved_instruction
+    end
     self.create_workspace(request.name, {
-      custom_instruction = request.custom_instruction,
-      resolved_instruction = request.resolved_instruction,
+      custom_instruction = custom_instruction,
+      resolved_instruction = resolved_instruction,
+      mission_id = request.mission_id,
+      mission_name = request.mission_name,
+      mission_role = mission_role,
+      mission_objective = request.mission_objective,
     })
   end
 
@@ -410,34 +447,43 @@ function M:open_create_preview(request)
   return true
 end
 
-function M:open_custom_instruction_prompt(name)
+function M:open_custom_instruction_prompt(name, opts)
   if not self.has_tmux_session() then
     self.notify("no tmux session running", vim.log.levels.ERROR)
     return false
   end
 
-  return self:open_instruction_editor({
+  local context = mission_context(opts)
+  local request = {
     name = name,
-  }, {
+  }
+  if context then
+    request.mission_id = context.mission_id
+    request.mission_name = context.mission_name
+    request.mission_objective = context.mission_objective
+  end
+
+  return self:open_instruction_editor(request, {
     on_save = function(request)
       self:open_create_preview(request)
     end,
   })
 end
 
-function M:open_prompt()
+function M:open_prompt(opts)
   if not self.has_tmux_session() then
     self.notify("no tmux session running", vim.log.levels.ERROR)
     return false
   end
 
+  local context = mission_context(opts)
   self.single_line_prompt({ prompt = "Codux workspace: " }, function(input)
     local name = self.trim(input)
     if name == "" then
       return
     end
 
-    self:open_custom_instruction_prompt(name)
+    self:open_custom_instruction_prompt(name, context)
   end)
   return true
 end

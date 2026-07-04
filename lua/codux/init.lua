@@ -1164,8 +1164,8 @@ function M._v5.open_custom_workspace_instruction_prompt(name)
   return workspace_create_controller:open_custom_instruction_prompt(name)
 end
 
-function M.open_workspace_prompt()
-  return workspace_create_controller:open_prompt()
+function M.open_workspace_prompt(opts)
+  return workspace_create_controller:open_prompt(opts)
 end
 
 function M.open_workspaces()
@@ -1185,8 +1185,8 @@ mission_controller = mission_control_mod.new({
   create_mission = function(mission)
     return M.create_mission(mission)
   end,
-  create_workspace_prompt = function()
-    return M.open_workspace_prompt()
+  create_workspace_prompt = function(opts)
+    return M.open_workspace_prompt(opts)
   end,
   update_mission_objective = function(name, objective, root)
     return M.update_mission_objective(name, objective, { project_root = root })
