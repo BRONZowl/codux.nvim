@@ -31,6 +31,10 @@ local dashboard_command_items = {
   { key = "s", label = "mode" },
 }
 
+local MISSION_ROLE_TABLE_MAX_WIDTH = 112
+local MISSION_ROLE_TABLE_GAP = "  "
+local MISSION_ROW_LEFT_OF_TABLE = 2
+
 local function entry_key(entry)
   entry = type(entry) == "table" and entry or {}
   return tostring(entry.safe_name or entry.name or entry.mission_role or "")
@@ -884,45 +888,93 @@ end
 
 function M:mission_dashboard_line(mission, counts, status, dashboard_width)
   local right = self.workspace_ui.pad_display_right(status, 8) .. "  " .. pluralize(counts.total, "role", "roles")
-  local name_width = math.min(34, math.max(16, dashboard_width - self.workspace_ui.display_width(right) - 1))
+  local row_width = self:mission_role_table_width(dashboard_width)
+  local name_width = math.min(34, math.max(16, row_width - self.workspace_ui.display_width(right) - 1))
   local mission_name = self.workspace_ui.pad_display_right(tostring(mission.name or mission.mission_id), name_width)
-  return mission_name .. " " .. right
+  local table_indent = math.max(0, math.floor(((tonumber(dashboard_width) or 0) - row_width) / 2))
+  local padding = math.max(0, table_indent - MISSION_ROW_LEFT_OF_TABLE)
+  return string.rep(" ", padding) .. mission_name .. " " .. right
 end
 
 function M:mission_role_header_line(dashboard_width)
-  local branch_width, target_width = self:mission_role_flexible_widths(dashboard_width)
-  return "  "
-    .. self.workspace_ui.pad_display_right("role", 14)
-    .. "  "
-    .. self.workspace_ui.pad_display_right("status", 8)
-    .. "  "
-    .. self.workspace_ui.pad_display_right("mode", 7)
-    .. "  "
-    .. self.workspace_ui.pad_display_right("permission profile", 18)
-    .. "  "
-    .. self.workspace_ui.pad_display_right("last activity", 13)
-    .. "  "
-    .. self.workspace_ui.pad_display_right("needs review", 12)
-    .. "  "
-    .. self.workspace_ui.pad_display_right("worktree status", 15)
-    .. "  "
-    .. self.workspace_ui.pad_display_right("window status", 13)
-    .. "  "
-    .. self.workspace_ui.pad_display_right("worktree", 8)
-    .. "  "
-    .. self.workspace_ui.pad_display_right("branch", branch_width)
-    .. "  "
-    .. self.workspace_ui.pad_display_right("cleanup status", 14)
-    .. "  "
-    .. self.workspace_ui.pad_display_right("target", target_width)
+  local columns = self:mission_role_column_widths(dashboard_width)
+  return center_display_line(
+    self.workspace_ui,
+    self:mission_role_table_line(columns, {
+      role = "role",
+      status = "status",
+      mode = "mode",
+      profile = "profile",
+      age = "age",
+      review = "review",
+      branch = "branch",
+      cleanup = "cleanup",
+      target = "target",
+    }),
+    dashboard_width
+  )
 end
 
-function M:mission_role_flexible_widths(dashboard_width)
-  local fixed_width = 14 + 8 + 7 + 18 + 13 + 12 + 15 + 13 + 8 + 14 + 2 + (11 * 2)
-  local available = math.max(20, dashboard_width - fixed_width)
-  local branch_width = math.max(18, math.min(32, math.floor(available * 0.65)))
-  local target_width = math.max(10, available - branch_width)
-  return branch_width, target_width
+function M:mission_role_table_width(dashboard_width)
+  dashboard_width = math.max(1, tonumber(dashboard_width) or 80)
+  return math.min(dashboard_width, MISSION_ROLE_TABLE_MAX_WIDTH)
+end
+
+function M:mission_role_column_widths(dashboard_width)
+  local table_width = self:mission_role_table_width(dashboard_width)
+  local columns = {
+    role = 9,
+    status = 8,
+    mode = 7,
+    profile = 9,
+    age = 4,
+    review = 6,
+    cleanup = 9,
+  }
+  local fixed_width = columns.role
+    + columns.status
+    + columns.mode
+    + columns.profile
+    + columns.age
+    + columns.review
+    + columns.cleanup
+    + (#MISSION_ROLE_TABLE_GAP * 8)
+  local flexible_width = math.max(0, table_width - fixed_width)
+  columns.branch = math.floor(flexible_width * 0.58)
+  columns.target = flexible_width - columns.branch
+  if flexible_width >= 12 then
+    columns.branch = math.max(6, columns.branch)
+    columns.target = flexible_width - columns.branch
+    if columns.target < 6 then
+      columns.target = 6
+      columns.branch = flexible_width - columns.target
+    end
+  end
+  return columns
+end
+
+function M:mission_role_table_line(columns, values)
+  columns = type(columns) == "table" and columns or self:mission_role_column_widths(80)
+  values = type(values) == "table" and values or {}
+  return table.concat({
+    self.workspace_ui.pad_display_right(values.role, columns.role),
+    MISSION_ROLE_TABLE_GAP,
+    self.workspace_ui.pad_display_right(values.status, columns.status),
+    MISSION_ROLE_TABLE_GAP,
+    self.workspace_ui.pad_display_right(values.mode, columns.mode),
+    MISSION_ROLE_TABLE_GAP,
+    self.workspace_ui.pad_display_right(values.profile, columns.profile),
+    MISSION_ROLE_TABLE_GAP,
+    self.workspace_ui.pad_display_right(values.age, columns.age),
+    MISSION_ROLE_TABLE_GAP,
+    self.workspace_ui.pad_display_right(values.review, columns.review),
+    MISSION_ROLE_TABLE_GAP,
+    self.workspace_ui.pad_display_right(values.branch, columns.branch),
+    MISSION_ROLE_TABLE_GAP,
+    self.workspace_ui.pad_display_right(values.cleanup, columns.cleanup),
+    MISSION_ROLE_TABLE_GAP,
+    self.workspace_ui.pad_display_right(values.target, columns.target),
+  })
 end
 
 function M:mission_role_line(entry, dashboard_width, now, dirty_by_role)
@@ -931,34 +983,25 @@ function M:mission_role_line(entry, dashboard_width, now, dirty_by_role)
   local mode = self:mission_mode_label(entry)
   local profile = self:permission_profile_label(entry)
   local details = self:mission_workspace_details(entry, dirty_by_role, now)
-  local branch_width, target_width = self:mission_role_flexible_widths(dashboard_width)
+  local columns = self:mission_role_column_widths(dashboard_width)
   local target = type(entry.target_path) == "string" and entry.target_path ~= ""
       and vim.fn.fnamemodify(entry.target_path, ":t")
     or "none"
-  return "  "
-    .. self.workspace_ui.pad_display_right(role, 14)
-    .. "  "
-    .. self.workspace_ui.pad_display_right(status, 8)
-    .. "  "
-    .. self.workspace_ui.pad_display_right(mode, 7)
-    .. "  "
-    .. self.workspace_ui.pad_display_right(profile, 18)
-    .. "  "
-    .. self.workspace_ui.pad_display_right(details.last_activity, 13)
-    .. "  "
-    .. self.workspace_ui.pad_display_right(details.needs_review, 12)
-    .. "  "
-    .. self.workspace_ui.pad_display_right(details.worktree_status, 15)
-    .. "  "
-    .. self.workspace_ui.pad_display_right(details.window_status, 13)
-    .. "  "
-    .. self.workspace_ui.pad_display_right(details.worktree, 8)
-    .. "  "
-    .. self.workspace_ui.pad_display_right(details.branch, branch_width)
-    .. "  "
-    .. self.workspace_ui.pad_display_right(details.cleanup_status, 14)
-    .. "  "
-    .. self.workspace_ui.truncate_display_tail(target, target_width)
+  return center_display_line(
+    self.workspace_ui,
+    self:mission_role_table_line(columns, {
+      role = role,
+      status = status,
+      mode = mode,
+      profile = profile,
+      age = details.last_activity,
+      review = details.needs_review,
+      branch = details.branch,
+      cleanup = details.cleanup_status,
+      target = target,
+    }),
+    dashboard_width
+  )
 end
 
 function M:dashboard_command_lines(dashboard_width)
@@ -1265,7 +1308,7 @@ function M:highlight_dashboard(bufnr, lines, items)
       pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKey", index - 1, 0, -1)
     elseif item and item.kind == "mission" then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
-    elseif line:find("^%s+role%s+", 1, false) then
+    elseif line:find("^%s*role%s+", 1, false) then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Identifier", index - 1, 0, -1)
     elseif item and item.kind == "role" then
       local status = item.entry and item.entry.status or "inactive"
