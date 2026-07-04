@@ -6,6 +6,7 @@ NVIM_BIN ?= nvim
 NVIM_HEADLESS ?= $(NVIM_BIN) --headless -u NONE -i NONE --cmd 'set shadafile=NONE'
 TEST_SPECS := \
 	tests/action_palette_spec.lua \
+	tests/dashboard_search_spec.lua \
 	tests/mission_spec.lua \
 	tests/mission_control_spec.lua \
 	tests/mission_output_panel_spec.lua \

@@ -2,6 +2,7 @@ local M = {}
 M.__index = M
 
 local action_palette_mod = require("codux.action_palette")
+local dashboard_search_mod = require("codux.dashboard_search")
 local ui = require("codux.ui")
 local workspace_ui = require("codux.workspace_ui")
 
@@ -146,6 +147,65 @@ function M:action_palette_controller()
     run_action = function(action, item)
       return self:run_action(action, item)
     end,
+  })
+end
+
+function M:dashboard_search_controller()
+  return dashboard_search_mod.new({
+    state = self.state,
+    ui = self.ui,
+    is_valid_win = self.is_valid_win,
+    is_loaded_buf = self.is_loaded_buf,
+    set_current_win = self.set_current_win,
+    get_current_win = self.get_current_win,
+    set_window_cursor = self.set_window_cursor,
+    set_window_config = self.set_window_config,
+    set_buffer_keymap = self.set_buffer_keymap,
+    bind_close_keys = self.bind_close_keys,
+    notify = self.notify,
+    main_win = function()
+      return self.state.workspace_manager_win
+    end,
+    cursor_width = function()
+      return self:window_width()
+    end,
+    window_config = function()
+      return self:workspace_search_config()
+    end,
+    render_owner = function()
+      return self:render()
+    end,
+    focus_list = function()
+      return self:focus_workspace_list()
+    end,
+    close_owner = function()
+      return self:close()
+    end,
+    create_buffer_options = {
+      bufhidden = "wipe",
+      filetype = "codux-workspaces-search",
+      buftype = "nofile",
+      swapfile = false,
+      modifiable = false,
+    },
+    win_key = "workspace_manager_search_win",
+    buf_key = "workspace_manager_search_buf",
+    query_key = "workspace_manager_query",
+    selected_key = "workspace_manager_selected_index",
+    best_match_key = "workspace_manager_best_match_index",
+    focus_match_key = "workspace_manager_focus_match",
+    confirmed_key = "workspace_manager_search_confirmed",
+    create_error = "Failed to create Codux workspace search",
+    open_error = "Failed to open Codux workspace search",
+    close_desc = "Close Codux Workspaces",
+    focus_list_desc = "Focus Codux Workspace List",
+    select_desc = "Select Codux Workspace",
+    select_error = "No Codux workspace selected",
+    delete_desc = "Delete Codux Workspace Search Character",
+    clear_desc = "Clear Codux Workspace Search",
+    search_desc = "Search Codux Workspaces",
+    augroup_prefix = "codux-workspace-search-",
+    update_existing_config = false,
   })
 end
 
@@ -509,51 +569,23 @@ function M:selected_item()
 end
 
 function M:render_search()
-  if not self.is_loaded_buf(self.state.workspace_manager_search_buf) then
-    return false
-  end
-
-  local query = tostring(self.state.workspace_manager_query or "")
-  self.ui.set_lines(self.state.workspace_manager_search_buf, { query .. " " }, { modifiable = true })
-
-  if self.is_valid_win(self.state.workspace_manager_search_win) then
-    local width = self:window_width() or 1
-    pcall(vim.api.nvim_win_set_cursor, self.state.workspace_manager_search_win, { 1, math.min(#query, math.max(0, width - 1)) })
-  end
-
-  return true
+  return self:dashboard_search_controller():render()
 end
 
 function M:update_query(query)
-  self.state.workspace_manager_query = tostring(query or "")
-  self.state.workspace_manager_selected_index = nil
-  self.state.workspace_manager_focus_match = true
-  self.state.workspace_manager_search_confirmed = false
-  self:render()
-  self:render_search()
-  return true
+  return self:dashboard_search_controller():update_query(query)
 end
 
 function M:append_query(input)
-  return self:update_query(tostring(self.state.workspace_manager_query or "") .. tostring(input or ""))
+  return self:dashboard_search_controller():append_query(input)
 end
 
 function M:delete_query_char()
-  local query = tostring(self.state.workspace_manager_query or "")
-  if query == "" then
-    return true
-  end
-
-  local length = vim.fn.strchars(query)
-  return self:update_query(vim.fn.strcharpart(query, 0, math.max(0, length - 1)))
+  return self:dashboard_search_controller():delete_query_char()
 end
 
 function M:clear_query()
-  if self.state.workspace_manager_query == "" then
-    return true
-  end
-
-  return self:update_query("")
+  return self:dashboard_search_controller():clear_query()
 end
 
 function M:workspace_list_focus_row()
@@ -599,52 +631,21 @@ function M:move_workspace_selection(delta)
 end
 
 function M:focus_search_input()
-  if self.is_valid_win(self.state.workspace_manager_search_win) then
-    return self.set_current_win(self.state.workspace_manager_search_win)
-  end
-
-  return self:open_search_input()
+  return self:dashboard_search_controller():focus()
 end
 
 function M:toggle_search_list_focus()
-  if
-    self.is_valid_win(self.state.workspace_manager_search_win)
-    and self.get_current_win() == self.state.workspace_manager_search_win
-  then
-    return self:focus_workspace_list()
-  end
-
-  return self:focus_search_input()
+  return self:dashboard_search_controller():toggle_list_focus()
 end
 
-function M:open_search_input()
-  if not self.is_valid_win(self.state.workspace_manager_win) then
-    return false
-  end
-
-  if self.is_valid_win(self.state.workspace_manager_search_win) then
-    return self.set_current_win(self.state.workspace_manager_search_win)
-  end
-
-  local bufnr = self.ui.create_scratch_buffer({
-    bufhidden = "wipe",
-    filetype = "codux-workspaces-search",
-    buftype = "nofile",
-    swapfile = false,
-    modifiable = false,
-  })
-  if not bufnr then
-    self.notify("Failed to create Codux workspace search", vim.log.levels.ERROR)
-    return false
-  end
-
+function M:workspace_search_config()
   local dashboard_config = vim.api.nvim_win_get_config(self.state.workspace_manager_win)
   local dashboard_width = self:window_width() or 58
   local width = math.max(20, dashboard_width)
   local col = type(dashboard_config.col) == "number" and dashboard_config.col or 0
   local row = math.max(0, (type(dashboard_config.row) == "number" and dashboard_config.row or 0) - 3)
 
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, {
+  return {
     relative = "editor",
     style = "minimal",
     border = "rounded",
@@ -655,87 +656,11 @@ function M:open_search_input()
     col = col,
     row = row,
     zindex = 60,
-  })
-  if not win_ok then
-    self.ui.delete_buffer(bufnr)
-    self.notify("Failed to open Codux workspace search", vim.log.levels.ERROR)
-    return false
-  end
+  }
+end
 
-  self.state.workspace_manager_search_buf = bufnr
-  self.state.workspace_manager_search_win = win
-  self.ui.set_window_options(win, {
-    number = false,
-    relativenumber = false,
-    signcolumn = "no",
-    winfixbuf = true,
-    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
-  })
-  self:render_search()
-
-  local group = vim.api.nvim_create_augroup("codux-workspace-search-" .. tostring(bufnr), { clear = true })
-  vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
-    group = group,
-    buffer = bufnr,
-    callback = function()
-      if self.state.workspace_manager_search_buf == bufnr then
-        self.state.workspace_manager_search_buf = nil
-        self.state.workspace_manager_search_win = nil
-      end
-      pcall(vim.api.nvim_del_augroup_by_id, group)
-    end,
-  })
-
-  self.bind_close_keys(bufnr, function()
-    return self:close()
-  end, "Close Codux Workspaces", "n", { escape = true })
-  self.set_buffer_keymap(bufnr, "n", "<Tab>", function()
-    return self:focus_workspace_list()
-  end, "Focus Codux Workspace List", {
-    nowait = true,
-  })
-  self.set_buffer_keymap(bufnr, "n", "<CR>", function()
-    if not self.state.workspace_manager_best_match_index then
-      self.notify("No Codux workspace selected", vim.log.levels.WARN)
-      return false
-    end
-
-    self.state.workspace_manager_search_confirmed = true
-    self.state.workspace_manager_selected_index = self.state.workspace_manager_best_match_index
-    self.state.workspace_manager_focus_match = false
-    self:render()
-    if self.is_valid_win(self.state.workspace_manager_win) then
-      self.set_current_win(self.state.workspace_manager_win)
-    end
-    return true
-  end, "Select Codux Workspace")
-  self.set_buffer_keymap(bufnr, "n", "<BS>", function()
-    return self:delete_query_char()
-  end, "Delete Codux Workspace Search Character", {
-    nowait = true,
-  })
-  self.set_buffer_keymap(bufnr, "n", "<C-h>", function()
-    return self:delete_query_char()
-  end, "Delete Codux Workspace Search Character", {
-    nowait = true,
-  })
-  self.set_buffer_keymap(bufnr, "n", "<C-u>", function()
-    return self:clear_query()
-  end, "Clear Codux Workspace Search", {
-    nowait = true,
-  })
-  for _, key in ipairs(self.ui.printable_prompt_keys()) do
-    local lhs = key[1]
-    local input = key[2]
-    self.set_buffer_keymap(bufnr, "n", lhs, function()
-      return self:append_query(input)
-    end, "Search Codux Workspaces", {
-      nowait = true,
-    })
-  end
-
-  self:render_search()
-  return true
+function M:open_search_input(opts)
+  return self:dashboard_search_controller():open(opts)
 end
 
 function M:selected_or_notify()

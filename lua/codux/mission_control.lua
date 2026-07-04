@@ -2,6 +2,7 @@ local M = {}
 M.__index = M
 
 local action_palette_mod = require("codux.action_palette")
+local dashboard_search_mod = require("codux.dashboard_search")
 local mission_mod = require("codux.mission")
 local ui = require("codux.ui")
 local output_panel = require("codux.mission_output_panel")
@@ -286,6 +287,67 @@ function M:action_palette_controller()
     run_action = function(action, target)
       return self:run_action(action, target)
     end,
+  })
+end
+
+function M:dashboard_search_controller()
+  return dashboard_search_mod.new({
+    state = self.state,
+    ui = self.ui,
+    is_valid_win = self.is_valid_win,
+    is_loaded_buf = self.is_loaded_buf,
+    set_current_win = self.set_current_win,
+    get_current_win = self.get_current_win,
+    set_window_cursor = self.set_window_cursor,
+    set_window_config = self.set_window_config,
+    set_buffer_keymap = self.set_buffer_keymap,
+    bind_close_keys = self.bind_close_keys,
+    notify = self.notify,
+    main_win = function()
+      return self.state.mission_dashboard_win
+    end,
+    cursor_width = function()
+      return self:window_width()
+    end,
+    window_config = function()
+      return self:dashboard_search_config()
+    end,
+    render_owner = function()
+      return self:render_dashboard()
+    end,
+    focus_list = function()
+      return self:focus_mission_list()
+    end,
+    close_owner = function()
+      return self:close_dashboard()
+    end,
+    after_create_buffer = function(bufnr)
+      ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
+    end,
+    create_buffer_options = {
+      bufhidden = "wipe",
+      filetype = "codux-missions-search",
+      buftype = "nofile",
+      swapfile = false,
+      modifiable = false,
+    },
+    win_key = "mission_dashboard_search_win",
+    buf_key = "mission_dashboard_search_buf",
+    query_key = "mission_dashboard_query",
+    selected_key = "mission_dashboard_selected_row",
+    best_match_key = "mission_dashboard_best_match_row",
+    focus_match_key = "mission_dashboard_focus_match",
+    confirmed_key = "mission_dashboard_search_confirmed",
+    create_error = "Failed to create Codux mission search",
+    open_error = "Failed to open Codux mission search",
+    close_desc = "Close Codux Missions",
+    focus_list_desc = "Focus Codux Mission List",
+    select_desc = "Select Codux Mission",
+    select_error = "No Codux mission selected",
+    delete_desc = "Delete Codux Mission Search Character",
+    clear_desc = "Clear Codux Mission Search",
+    search_desc = "Search Codux Missions",
+    augroup_prefix = "codux-mission-search-",
   })
 end
 
@@ -1564,51 +1626,23 @@ function M:render_dashboard()
 end
 
 function M:render_search()
-  if not self.is_loaded_buf(self.state.mission_dashboard_search_buf) then
-    return false
-  end
-
-  local query = tostring(self.state.mission_dashboard_query or "")
-  self.ui.set_lines(self.state.mission_dashboard_search_buf, { query .. " " }, { modifiable = true })
-
-  if self.is_valid_win(self.state.mission_dashboard_search_win) then
-    local width = self:window_width() or 1
-    pcall(vim.api.nvim_win_set_cursor, self.state.mission_dashboard_search_win, { 1, math.min(#query, math.max(0, width - 1)) })
-  end
-
-  return true
+  return self:dashboard_search_controller():render()
 end
 
 function M:update_query(query)
-  self.state.mission_dashboard_query = tostring(query or "")
-  self.state.mission_dashboard_selected_row = nil
-  self.state.mission_dashboard_focus_match = true
-  self.state.mission_dashboard_search_confirmed = false
-  self:render_dashboard()
-  self:render_search()
-  return true
+  return self:dashboard_search_controller():update_query(query)
 end
 
 function M:append_query(input)
-  return self:update_query(tostring(self.state.mission_dashboard_query or "") .. tostring(input or ""))
+  return self:dashboard_search_controller():append_query(input)
 end
 
 function M:delete_query_char()
-  local query = tostring(self.state.mission_dashboard_query or "")
-  if query == "" then
-    return true
-  end
-
-  local length = vim.fn.strchars(query)
-  return self:update_query(vim.fn.strcharpart(query, 0, math.max(0, length - 1)))
+  return self:dashboard_search_controller():delete_query_char()
 end
 
 function M:clear_query()
-  if self.state.mission_dashboard_query == "" then
-    return true
-  end
-
-  return self:update_query("")
+  return self:dashboard_search_controller():clear_query()
 end
 
 function M:selected_row()
@@ -1685,22 +1719,11 @@ function M:focus_mission_list()
 end
 
 function M:focus_search_input()
-  if self.is_valid_win(self.state.mission_dashboard_search_win) then
-    return self.set_current_win(self.state.mission_dashboard_search_win)
-  end
-
-  return self:open_search_input()
+  return self:dashboard_search_controller():focus()
 end
 
 function M:toggle_search_list_focus()
-  if
-    self.is_valid_win(self.state.mission_dashboard_search_win)
-    and self.get_current_win() == self.state.mission_dashboard_search_win
-  then
-    return self:focus_mission_list()
-  end
-
-  return self:focus_search_input()
+  return self:dashboard_search_controller():toggle_list_focus()
 end
 
 function M:move_mission_selection(delta)
@@ -1735,114 +1758,7 @@ function M:move_mission_selection(delta)
 end
 
 function M:open_search_input(opts)
-  opts = type(opts) == "table" and opts or {}
-  local focus = opts.focus ~= false
-  if not self.is_valid_win(self.state.mission_dashboard_win) then
-    return false
-  end
-
-  if self.is_valid_win(self.state.mission_dashboard_search_win) then
-    pcall(self.set_window_config, self.state.mission_dashboard_search_win, self:dashboard_search_config())
-    if focus then
-      return self.set_current_win(self.state.mission_dashboard_search_win)
-    end
-    return true
-  end
-
-  local bufnr = self.ui.create_scratch_buffer({
-    bufhidden = "wipe",
-    filetype = "codux-missions-search",
-    buftype = "nofile",
-    swapfile = false,
-    modifiable = false,
-  })
-  if not bufnr then
-    self.notify("Failed to create Codux mission search", vim.log.levels.ERROR)
-    return false
-  end
-  ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
-
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, focus, self:dashboard_search_config())
-  if not win_ok then
-    self.ui.delete_buffer(bufnr)
-    self.notify("Failed to open Codux mission search", vim.log.levels.ERROR)
-    return false
-  end
-
-  self.state.mission_dashboard_search_buf = bufnr
-  self.state.mission_dashboard_search_win = win
-  self.ui.set_window_options(win, {
-    number = false,
-    relativenumber = false,
-    signcolumn = "no",
-    winfixbuf = true,
-    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
-  })
-  self:render_search()
-
-  local group = vim.api.nvim_create_augroup("codux-mission-search-" .. tostring(bufnr), { clear = true })
-  vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
-    group = group,
-    buffer = bufnr,
-    callback = function()
-      if self.state.mission_dashboard_search_buf == bufnr then
-        self.state.mission_dashboard_search_buf = nil
-        self.state.mission_dashboard_search_win = nil
-      end
-      pcall(vim.api.nvim_del_augroup_by_id, group)
-    end,
-  })
-
-  self.bind_close_keys(bufnr, function()
-    return self:close_dashboard()
-  end, "Close Codux Missions", "n", { escape = true })
-  self.set_buffer_keymap(bufnr, "n", "<Tab>", function()
-    return self:focus_mission_list()
-  end, "Focus Codux Mission List", {
-    nowait = true,
-  })
-  self.set_buffer_keymap(bufnr, "n", "<CR>", function()
-    if not self.state.mission_dashboard_best_match_row then
-      self.notify("No Codux mission selected", vim.log.levels.WARN)
-      return false
-    end
-
-    self.state.mission_dashboard_search_confirmed = true
-    self.state.mission_dashboard_selected_row = self.state.mission_dashboard_best_match_row
-    self.state.mission_dashboard_focus_match = false
-    self:render_dashboard()
-    if self.is_valid_win(self.state.mission_dashboard_win) then
-      self.set_current_win(self.state.mission_dashboard_win)
-    end
-    return true
-  end, "Select Codux Mission")
-  self.set_buffer_keymap(bufnr, "n", "<BS>", function()
-    return self:delete_query_char()
-  end, "Delete Codux Mission Search Character", {
-    nowait = true,
-  })
-  self.set_buffer_keymap(bufnr, "n", "<C-h>", function()
-    return self:delete_query_char()
-  end, "Delete Codux Mission Search Character", {
-    nowait = true,
-  })
-  self.set_buffer_keymap(bufnr, "n", "<C-u>", function()
-    return self:clear_query()
-  end, "Clear Codux Mission Search", {
-    nowait = true,
-  })
-  for _, key in ipairs(self.ui.printable_prompt_keys()) do
-    local lhs = key[1]
-    local input = key[2]
-    self.set_buffer_keymap(bufnr, "n", lhs, function()
-      return self:append_query(input)
-    end, "Search Codux Missions", {
-      nowait = true,
-    })
-  end
-
-  self:render_search()
-  return true
+  return self:dashboard_search_controller():open(opts)
 end
 
 function M:lock_dashboard_mouse()
