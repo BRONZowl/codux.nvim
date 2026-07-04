@@ -850,7 +850,9 @@ function M:open_preview(mission)
 
   local function launch_mission()
     close_preview()
-    self.create_mission(mission)
+    if self.create_mission(mission) then
+      self:open_dashboard()
+    end
   end
 
   local function edit_mission()

@@ -1026,6 +1026,106 @@ end
 
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
+  local launch_callback
+  local calls = {}
+  vim.api.nvim_open_win = function()
+    return 44
+  end
+
+  local controller = mission_control_mod.new({
+    mission = {
+      preview_lines = function()
+        return { "Mission preview" }
+      end,
+    },
+    ui = {
+      create_scratch_buffer = function()
+        return 43
+      end,
+      set_lines = function() end,
+      set_window_options = function() end,
+      close_window = function()
+        table.insert(calls, "close_window")
+      end,
+      delete_buffer = function()
+        table.insert(calls, "delete_buffer")
+      end,
+    },
+    set_buffer_keymap = function(_, _, lhs, rhs)
+      if lhs == "<CR>" then
+        launch_callback = rhs
+      end
+    end,
+    bind_close_keys = function() end,
+    create_mission = function()
+      table.insert(calls, "create_mission")
+      return true
+    end,
+  })
+  function controller:open_dashboard()
+    table.insert(calls, "open_dashboard")
+    return true
+  end
+
+  assert_true(controller:open_preview({ name = "Alpha" }))
+  assert_true(type(launch_callback) == "function")
+  launch_callback()
+  assert_equal(calls[1], "close_window")
+  assert_equal(calls[2], "delete_buffer")
+  assert_equal(calls[3], "create_mission")
+  assert_equal(calls[4], "open_dashboard")
+
+  vim.api.nvim_open_win = old_open_win
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
+  local launch_callback
+  local dashboard_opened = false
+  vim.api.nvim_open_win = function()
+    return 46
+  end
+
+  local controller = mission_control_mod.new({
+    mission = {
+      preview_lines = function()
+        return { "Mission preview" }
+      end,
+    },
+    ui = {
+      create_scratch_buffer = function()
+        return 45
+      end,
+      set_lines = function() end,
+      set_window_options = function() end,
+      close_window = function() end,
+      delete_buffer = function() end,
+    },
+    set_buffer_keymap = function(_, _, lhs, rhs)
+      if lhs == "<CR>" then
+        launch_callback = rhs
+      end
+    end,
+    bind_close_keys = function() end,
+    create_mission = function()
+      return false
+    end,
+  })
+  function controller:open_dashboard()
+    dashboard_opened = true
+    return true
+  end
+
+  assert_true(controller:open_preview({ name = "Alpha" }))
+  assert_true(type(launch_callback) == "function")
+  launch_callback()
+  assert_false(dashboard_opened)
+
+  vim.api.nvim_open_win = old_open_win
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
   local old_win_set_cursor = vim.api.nvim_win_set_cursor
   local window_options
   vim.api.nvim_open_win = function()
