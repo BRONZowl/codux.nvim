@@ -1070,7 +1070,9 @@ end
 
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
+  local old_schedule = vim.schedule
   local yes_callback
+  local scheduled = {}
   local calls = {}
   local opened = {}
   local window_options = {}
@@ -1078,6 +1080,9 @@ if type(vim.api) == "table" then
   vim.api.nvim_open_win = function(bufnr, enter, config)
     table.insert(opened, { bufnr = bufnr, enter = enter, config = config })
     return bufnr + 100
+  end
+  vim.schedule = function(callback)
+    table.insert(scheduled, callback)
   end
 
   local controller = mission_control_mod.new({
@@ -1131,24 +1136,36 @@ if type(vim.api) == "table" then
   assert_false(window_options[143].cursorline)
   assert_contains(window_options[143].winhighlight, "Cursor:CoduxMissionPreviewCursor")
   assert_true(type(yes_callback) == "function")
-  yes_callback()
+  assert_true(yes_callback())
+  assert_true(yes_callback())
+  assert_equal(#calls, 0)
+  assert_equal(#scheduled, 2)
+  scheduled[1]()
+  scheduled[2]()
   assert_equal(calls[1], "close_window:143")
   assert_equal(calls[2], "close_window:144")
   assert_equal(calls[3], "delete_buffer:43")
   assert_equal(calls[4], "delete_buffer:44")
   assert_equal(calls[5], "create_mission")
   assert_equal(calls[6], "refresh_dashboard")
+  assert_equal(calls[7], nil)
 
   vim.api.nvim_open_win = old_open_win
+  vim.schedule = old_schedule
 end
 
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
+  local old_schedule = vim.schedule
   local yes_callback
+  local scheduled
   local dashboard_refreshed = false
   local created = 0
   vim.api.nvim_open_win = function(bufnr)
     return bufnr + 100
+  end
+  vim.schedule = function(callback)
+    scheduled = callback
   end
 
   local controller = mission_control_mod.new({
@@ -1184,20 +1201,29 @@ if type(vim.api) == "table" then
 
   assert_true(controller:open_preview({ name = "Alpha" }))
   assert_true(type(yes_callback) == "function")
-  yes_callback()
+  assert_true(yes_callback())
+  assert_false(dashboard_refreshed)
+  assert_true(type(scheduled) == "function")
+  scheduled()
   assert_false(dashboard_refreshed)
 
   vim.api.nvim_open_win = old_open_win
+  vim.schedule = old_schedule
 end
 
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
+  local old_schedule = vim.schedule
   local no_callback
   local edit_callback
+  local scheduled
   local calls = {}
   local created = 0
   vim.api.nvim_open_win = function(bufnr)
     return bufnr + 100
+  end
+  vim.schedule = function(callback)
+    scheduled = callback
   end
 
   local controller = mission_control_mod.new({
@@ -1242,16 +1268,23 @@ if type(vim.api) == "table" then
   assert_true(controller:open_preview({ name = "Alpha", objective = "Build it" }))
   assert_true(type(no_callback) == "function")
   assert_true(no_callback())
+  assert_equal(#calls, 0)
+  assert_true(type(scheduled) == "function")
+  scheduled()
   assert_equal(calls[1], "close_window:147")
   assert_equal(calls[2], "close_window:148")
   assert_equal(calls[3], "delete_buffer:47")
   assert_equal(calls[4], "delete_buffer:48")
 
   calls = {}
+  scheduled = nil
   created = 0
   assert_true(controller:open_preview({ name = "Alpha", objective = "Build it" }))
   assert_true(type(edit_callback) == "function")
-  edit_callback()
+  assert_true(edit_callback())
+  assert_equal(#calls, 0)
+  assert_true(type(scheduled) == "function")
+  scheduled()
   assert_equal(calls[1], "close_window:147")
   assert_equal(calls[2], "close_window:148")
   assert_equal(calls[3], "delete_buffer:47")
@@ -1259,6 +1292,7 @@ if type(vim.api) == "table" then
   assert_equal(calls[5], "edit:Alpha:Build it")
 
   vim.api.nvim_open_win = old_open_win
+  vim.schedule = old_schedule
 end
 
 if type(vim.api) == "table" then

@@ -856,8 +856,13 @@ function M:open_preview(mission)
   })
   local sink_bufnr
   local sink_win
+  local closed = false
 
   local function close_preview()
+    if closed then
+      return false
+    end
+    closed = true
     self.ui.close_window(win)
     self.ui.close_window(sink_win)
     self.ui.delete_buffer(bufnr)
@@ -865,17 +870,38 @@ function M:open_preview(mission)
     return true
   end
 
-  local function launch_mission()
-    close_preview()
-    if self.create_mission(mission) then
-      return self:refresh_or_open_dashboard()
+  local function defer_preview_action(action)
+    local function run()
+      if not close_preview() then
+        return false
+      end
+      if type(action) == "function" then
+        return action()
+      end
+      return true
     end
-    return false
+
+    if type(vim.schedule) == "function" then
+      vim.schedule(run)
+      return true
+    end
+
+    return run()
+  end
+
+  local function launch_mission()
+    return defer_preview_action(function()
+      if self.create_mission(mission) then
+        return self:refresh_or_open_dashboard()
+      end
+      return false
+    end)
   end
 
   local function edit_mission()
-    close_preview()
-    return self:open_objective_editor(mission.name, mission.objective)
+    return defer_preview_action(function()
+      return self:open_objective_editor(mission.name, mission.objective)
+    end)
   end
 
   local sink_error
@@ -886,9 +912,9 @@ function M:open_preview(mission)
     focusable = true,
     bind = function(target_bufnr)
       self.set_buffer_keymap(target_bufnr, "n", "y", launch_mission, "Launch Codux Mission", { nowait = true })
-      self.set_buffer_keymap(target_bufnr, "n", "n", close_preview, "Cancel Codux Mission", { nowait = true })
+      self.set_buffer_keymap(target_bufnr, "n", "n", defer_preview_action, "Cancel Codux Mission", { nowait = true })
       self.set_buffer_keymap(target_bufnr, "n", "e", edit_mission, "Edit Codux Mission Instruction", { nowait = true })
-      self.bind_close_keys(target_bufnr, close_preview, "Cancel Codux Mission", "n", { escape = true, q = true })
+      self.bind_close_keys(target_bufnr, defer_preview_action, "Cancel Codux Mission", "n", { escape = true, q = true })
     end,
   })
   if not sink_bufnr then
