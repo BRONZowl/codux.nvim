@@ -5746,6 +5746,178 @@ do
     projects = {
       ["/repo"] = {
         workspaces = {
+          review = {
+            name = "review",
+            safe_name = "review",
+            project_root = "/repo",
+            tmux_window = "review",
+            status = "idle",
+            codex_status = "idle",
+          },
+        },
+      },
+    },
+  }
+  local commands = {}
+  local notification
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = function(message)
+      notification = message
+    end,
+    system = function(args)
+      local command = table.concat(args, " ")
+      table.insert(commands, command)
+      if command == "tmux rename-window -t @1 debug" then
+        return "", 0
+      end
+      if command == "tmux rename-window -t @1 review" then
+        return "", 0
+      end
+      if command == "tmux display-message -p #S" then
+        return "session\n", 0
+      end
+      if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+        return "nvim\n", 0
+      end
+      return "", 1
+    end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function()
+        return false, "write failed"
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+      project_state = function(_, next_state, root)
+        return next_state.projects[root]
+      end,
+      instruction_file_path = function()
+        return nil
+      end,
+    },
+  })
+
+  assert_false(runtime:rename_saved_workspace({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    window_id = "@1",
+    window_name = "review",
+  }, "debug"))
+  assert_equal(state_data.projects["/repo"].workspaces.review.name, "review")
+  assert_nil(state_data.projects["/repo"].workspaces.debug)
+  assert_contains(table.concat(commands, "\n"), "tmux rename-window -t @1 debug")
+  assert_contains(table.concat(commands, "\n"), "tmux rename-window -t @1 review")
+  assert_equal(notification, "write failed")
+end
+
+do
+  local state_data = {
+    projects = {
+      ["/codux-worktrees/review"] = {
+        workspaces = {
+          review = review_workspace_record({
+            name = "review",
+            safe_name = "review",
+            project_root = "/codux-worktrees/review",
+            tmux_window = "review",
+            status = "idle",
+            codex_status = "idle",
+            workspace_kind = "worktree",
+            git_common_dir = "/repo/.git",
+            worktree_path = "/codux-worktrees/review",
+            worktree_branch = "dev/review",
+            git_branch = "dev/review",
+          }),
+        },
+      },
+    },
+  }
+  local commands = {}
+  local notification
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = function(message)
+      notification = message
+    end,
+    system = function(args)
+      local command = table.concat(args, " ")
+      table.insert(commands, command)
+      if command == "git -C /codux-worktrees/review show-ref --verify --quiet refs/heads/dev/debug" then
+        return "", 1
+      end
+      if command == "git -C /codux-worktrees/review worktree move /codux-worktrees/review /codux-worktrees/debug" then
+        return "", 0
+      end
+      if command == "git -C /codux-worktrees/debug branch -m dev/review dev/debug" then
+        return "", 0
+      end
+      if command == "tmux rename-window -t @1 debug" then
+        return "", 0
+      end
+      if command == "tmux display-message -p #S" then
+        return "session\n", 0
+      end
+      if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+        return "nvim\n", 0
+      end
+      if command == "tmux rename-window -t @1 review" then
+        return "", 0
+      end
+      if command == "git -C /codux-worktrees/debug branch -m dev/debug dev/review" then
+        return "", 0
+      end
+      if command == "git -C /codux-worktrees/debug worktree move /codux-worktrees/debug /codux-worktrees/review" then
+        return "", 0
+      end
+      return "", 1
+    end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function()
+        return false, "write failed"
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+      project_state = project_state,
+      instruction_file_path = function(_, root, safe_name)
+        return root .. "/.agents/codux/" .. safe_name .. ".md"
+      end,
+    },
+  })
+
+  assert_false(runtime:rename_saved_workspace({
+    name = "review",
+    safe_name = "review",
+    project_root = "/codux-worktrees/review",
+    window_id = "@1",
+    window_name = "review",
+  }, "debug"))
+  assert_equal(state_data.projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev/review")
+  assert_nil(state_data.projects["/codux-worktrees/debug"])
+  local command_text = table.concat(commands, "\n")
+  assert_contains(command_text, "git -C /codux-worktrees/review worktree move /codux-worktrees/review /codux-worktrees/debug")
+  assert_contains(command_text, "git -C /codux-worktrees/debug branch -m dev/debug dev/review")
+  assert_contains(command_text, "git -C /codux-worktrees/debug worktree move /codux-worktrees/debug /codux-worktrees/review")
+  assert_equal(notification, "write failed")
+end
+
+do
+  local state_data = {
+    projects = {
+      ["/repo"] = {
+        workspaces = {
           old = {
             name = "old",
             safe_name = "old",
@@ -5959,6 +6131,62 @@ end
 
 do
   with_filereadable(1, function()
+    local deleted_instruction = false
+    local removed_worktree = false
+    local state_data = {
+      projects = {
+        ["/codux-worktrees/review"] = {
+          workspaces = {
+            review = review_workspace_record({
+              project_root = "/codux-worktrees/review",
+              workspace_kind = "worktree",
+              git_common_dir = "/repo/.git",
+              worktree_path = "/codux-worktrees/review",
+              worktree_branch = "dev/review",
+              worktree_base = "main",
+            }),
+          },
+        },
+      },
+    }
+    local store = workspace_store({
+      state_data = state_data,
+      write_state = function()
+        return false, "write failed"
+      end,
+      delete_instruction_file = function()
+        deleted_instruction = true
+        return true, nil
+      end,
+    })
+    local runtime = workspace_delete_runtime(store.store, {
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "git --git-dir=/repo/.git worktree remove --force /codux-worktrees/review" then
+          removed_worktree = true
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+
+    assert_false(runtime:delete_saved_workspace({
+      name = "review",
+      safe_name = "review",
+      project_root = "/codux-worktrees/review",
+      workspace_kind = "worktree",
+      git_common_dir = "/repo/.git",
+      worktree_path = "/codux-worktrees/review",
+      worktree_branch = "dev/review",
+    }))
+    assert_false(deleted_instruction)
+    assert_false(removed_worktree)
+    assert_equal(state_data.projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev/review")
+  end)
+end
+
+do
+  with_filereadable(1, function()
     local notification
     local rendered = false
     local closed = false
@@ -6099,7 +6327,7 @@ do
     assert_contains(notification, "fatal: branch delete failed")
     assert_true(rendered)
     assert_false(closed)
-    assert_equal(state_data.projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev/review")
+    assert_nil(state_data.projects["/codux-worktrees/review"].workspaces.review)
   end)
 end
 

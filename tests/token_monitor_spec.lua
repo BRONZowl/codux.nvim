@@ -4,6 +4,23 @@ package.path = table.concat({
   package.path,
 }, ";")
 
+if type(vim) ~= "table" then
+  vim = {
+    fn = {
+      shellescape = function(value)
+        return "'" .. tostring(value or ""):gsub("'", "'\\''") .. "'"
+      end,
+    },
+    list_extend = function(target, values)
+      target = type(target) == "table" and target or {}
+      for _, value in ipairs(type(values) == "table" and values or {}) do
+        table.insert(target, value)
+      end
+      return target
+    end,
+  }
+end
+
 local token_monitor_mod = require("codux.token_monitor")
 
 local function assert_equal(actual, expected, message)

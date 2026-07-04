@@ -2052,6 +2052,9 @@ function M:rename_saved_workspace(entry, new_name)
   end
 
   local new_window_name = M.workspace_window_name(safe_name_or_error)
+  local old_window_name = existing.tmux_window or existing.window_name or entry.window_name or entry.safe_name
+  local previous_project = vim.deepcopy(project)
+  local previous_next_project = nil
   local worktree_renamed = false
   local branch_renamed = false
   local old_worktree_path = existing.worktree_path or existing.project_root or root
@@ -2069,6 +2072,7 @@ function M:rename_saved_workspace(entry, new_name)
       self.notify("branch already exists: " .. new_branch, vim.log.levels.ERROR)
       return false
     end
+    previous_next_project = state_data.projects[new_worktree_path] and vim.deepcopy(state_data.projects[new_worktree_path]) or nil
     if not self:move_git_worktree(root, old_worktree_path, new_worktree_path) then
       self.notify("Failed to move Git worktree " .. tostring(old_worktree_path), vim.log.levels.ERROR)
       return false
@@ -2126,7 +2130,25 @@ function M:rename_saved_workspace(entry, new_name)
 
   local write_ok, write_error = self:write_state(state_data)
   if not write_ok then
-    self.notify(write_error, vim.log.levels.ERROR)
+    local rollback_errors = {}
+    if entry.window_id and old_window_name ~= new_window_name and not self:rename_tmux_window(entry.window_id, old_window_name) then
+      table.insert(rollback_errors, "failed to restore tmux window")
+    end
+    if branch_renamed and not self:rename_git_branch(new_worktree_path, new_branch, old_branch) then
+      table.insert(rollback_errors, "failed to restore Git branch")
+    end
+    if worktree_renamed and not self:move_git_worktree(new_worktree_path or root, new_worktree_path, old_worktree_path) then
+      table.insert(rollback_errors, "failed to restore Git worktree")
+    end
+    state_data.projects[root] = previous_project
+    if new_worktree_path then
+      state_data.projects[new_worktree_path] = previous_next_project
+    end
+    local message = write_error or "Failed to write Codux workspace state"
+    if #rollback_errors > 0 then
+      message = message .. "; " .. table.concat(rollback_errors, "; ")
+    end
+    self.notify(message, vim.log.levels.ERROR)
     return false
   end
 
@@ -2174,6 +2196,7 @@ function M:delete_saved_workspace(entry)
     local worktree_path = existing.worktree_path or existing.project_root or root
     local worktree_branch = existing.worktree_branch
     local git_common_dir = existing.git_common_dir
+    local previous_project = vim.deepcopy(project)
     if type(git_common_dir) ~= "string" or git_common_dir == "" then
       git_common_dir = self:git_common_dir(worktree_path)
     end
@@ -2182,33 +2205,6 @@ function M:delete_saved_workspace(entry)
       self.render_workspace_manager()
       return false
     end
-    if entry.window_id and not self:kill_tmux_window(entry.window_id) then
-      self.notify("Failed to close tmux window " .. tostring(entry.window_name), vim.log.levels.ERROR)
-      return false
-    end
-
-    local delete_instruction_ok, delete_instruction_error = self:delete_instruction_file(root, entry.safe_name)
-    if not delete_instruction_ok then
-      self.notify(delete_instruction_error, vim.log.levels.ERROR)
-      self.render_workspace_manager()
-      return false
-    end
-
-    local remove_ok, remove_error = self:remove_git_worktree_in_common_dir(git_common_dir, worktree_path)
-    if not remove_ok then
-      self.notify(remove_error or ("Failed to remove Git worktree " .. tostring(worktree_path)), vim.log.levels.ERROR)
-      self.render_workspace_manager()
-      return false
-    end
-    if type(worktree_branch) == "string" and worktree_branch ~= "" then
-      local branch_ok, branch_error = self:delete_git_branch_in_common_dir(git_common_dir, worktree_branch)
-      if not branch_ok then
-        self.notify(branch_error or ("Failed to delete Git branch " .. tostring(worktree_branch)), vim.log.levels.ERROR)
-        self.render_workspace_manager()
-        return false
-      end
-    end
-
     project.workspaces[entry.safe_name] = nil
     if next(project.workspaces) == nil and vim.empty_dict then
       project.workspaces = vim.empty_dict()
@@ -2216,8 +2212,48 @@ function M:delete_saved_workspace(entry)
     project.updated_at = self:timestamp()
     local write_ok, write_error = self:write_state(state_data)
     if not write_ok then
+      state_data.projects[root] = previous_project
       self.notify(write_error, vim.log.levels.ERROR)
       return false
+    end
+
+    local function restore_state_after_delete(message)
+      state_data.projects[root] = previous_project
+      local restore_ok, restore_error = self:write_state(state_data)
+      if not restore_ok then
+        message = tostring(message or "Failed to delete Codux workspace")
+          .. "; "
+          .. tostring(restore_error or "failed to restore workspace state")
+      end
+      self.notify(message, vim.log.levels.ERROR)
+      self.render_workspace_manager()
+      return false
+    end
+
+    if entry.window_id and not self:kill_tmux_window(entry.window_id) then
+      return restore_state_after_delete("Failed to close tmux window " .. tostring(entry.window_name))
+    end
+
+    local delete_instruction_ok, delete_instruction_error = self:delete_instruction_file(root, entry.safe_name)
+    if not delete_instruction_ok then
+      return restore_state_after_delete(delete_instruction_error)
+    end
+
+    local remove_ok, remove_error = self:remove_git_worktree_in_common_dir(git_common_dir, worktree_path)
+    if not remove_ok then
+      return restore_state_after_delete(remove_error or ("Failed to remove Git worktree " .. tostring(worktree_path)))
+    end
+    if type(worktree_branch) == "string" and worktree_branch ~= "" then
+      local branch_ok, branch_error = self:delete_git_branch_in_common_dir(git_common_dir, worktree_branch)
+      if not branch_ok then
+        self.notify(
+          (branch_error or ("Failed to delete Git branch " .. tostring(worktree_branch)))
+            .. "; workspace state was removed but branch cleanup is incomplete",
+          vim.log.levels.ERROR
+        )
+        self.render_workspace_manager()
+        return false
+      end
     end
 
     self.notify("Deleted Codux workspace " .. tostring(entry.name or entry.safe_name))

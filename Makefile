@@ -7,6 +7,7 @@ NVIM_HEADLESS ?= $(NVIM_BIN) --headless -u NONE -i NONE --cmd 'set shadafile=NON
 
 test:
 	$(LUA) tests/workspace_status_spec.lua
+	$(LUA) tests/token_monitor_spec.lua
 	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua dofile("tests/workspace_status_spec.lua")' -c 'qa!'
 	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua dofile("tests/token_monitor_spec.lua")' -c 'qa!'
 	for f in lua/codux/*.lua tests/*.lua; do $(LUAJIT) -e "assert(loadfile('$$f'))" || exit 1; done
