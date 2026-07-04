@@ -50,10 +50,8 @@ end
 function Output:highlight_output_panel(bufnr, lines)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, self.namespace, 0, -1)
   for index, line in ipairs(lines or {}) do
-    local prefix_end = line:find("^Output:%s", 1, false)
-    if prefix_end then
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKeyDesc", index - 1, 0, prefix_end)
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, prefix_end, -1)
+    if line:find("^Output:%s", 1, false) then
+      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
     elseif line:find("^%s+", 1, false) then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
     end

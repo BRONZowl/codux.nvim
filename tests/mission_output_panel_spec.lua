@@ -869,4 +869,46 @@ do
   assert_nil(controller.state.mission_dashboard_output_preview)
 end
 
+do
+  local old_api = vim.api
+  local highlights = {}
+  vim.api = {
+    nvim_buf_clear_namespace = function() end,
+    nvim_buf_add_highlight = function(bufnr, namespace, group, row, start_col, end_col)
+      table.insert(highlights, {
+        bufnr = bufnr,
+        namespace = namespace,
+        group = group,
+        row = row,
+        start_col = start_col,
+        end_col = end_col,
+      })
+    end,
+  }
+
+  local controller = mission_control_mod.new({ namespace = 99 })
+  controller:highlight_output_panel(12, { "Output: Reviewer", "  opening workspace session preview..." })
+
+  local output_line_comment = false
+  local output_line_accent = false
+  local indented_line_comment = false
+  for _, highlight in ipairs(highlights) do
+    if highlight.row == 0 and highlight.group == "Comment" and highlight.start_col == 0 and highlight.end_col == -1 then
+      output_line_comment = true
+    end
+    if highlight.row == 0 and highlight.group == "WhichKeyDesc" then
+      output_line_accent = true
+    end
+    if highlight.row == 1 and highlight.group == "Comment" and highlight.start_col == 0 and highlight.end_col == -1 then
+      indented_line_comment = true
+    end
+  end
+
+  assert_true(output_line_comment)
+  assert_false(output_line_accent)
+  assert_true(indented_line_comment)
+
+  vim.api = old_api
+end
+
 print("mission_output_panel_spec.lua: ok")
