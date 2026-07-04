@@ -108,6 +108,54 @@ function M.create_scratch_buffer(options)
   return bufnr
 end
 
+function M.open_hidden_command_sink(opts)
+  opts = type(opts) == "table" and opts or {}
+  local ui_impl = type(opts.ui) == "table" and opts.ui or M
+  local bufnr = ui_impl.create_scratch_buffer({
+    bufhidden = "wipe",
+    filetype = opts.filetype,
+    buftype = "nofile",
+    swapfile = false,
+    modifiable = false,
+  })
+  if not bufnr then
+    return nil, nil
+  end
+
+  if type(opts.on_create_buffer) == "function" then
+    opts.on_create_buffer(bufnr)
+  end
+
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, {
+    relative = "editor",
+    style = "minimal",
+    border = "none",
+    width = 1,
+    height = 1,
+    col = vim.o.columns + 1,
+    row = vim.o.lines + 1,
+    focusable = false,
+    zindex = 1,
+  })
+  if not win_ok then
+    ui_impl.delete_buffer(bufnr)
+    return nil, nil
+  end
+
+  ui_impl.set_window_options(win, {
+    number = false,
+    relativenumber = false,
+    signcolumn = "no",
+    winfixbuf = true,
+  })
+
+  if type(opts.bind) == "function" then
+    opts.bind(bufnr)
+  end
+
+  return bufnr, win
+end
+
 function M.set_lines(bufnr, lines, opts)
   if not M.is_loaded_buf(bufnr) then
     return false

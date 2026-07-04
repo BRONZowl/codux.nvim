@@ -1,43 +1,8 @@
-package.path = table.concat({
-  "./lua/?.lua",
-  "./lua/?/init.lua",
-  package.path,
-}, ";")
-
-if type(vim) ~= "table" then
-  vim = {
-    fn = {
-      shellescape = function(value)
-        return "'" .. tostring(value or ""):gsub("'", "'\\''") .. "'"
-      end,
-    },
-    list_extend = function(target, values)
-      target = type(target) == "table" and target or {}
-      for _, value in ipairs(type(values) == "table" and values or {}) do
-        table.insert(target, value)
-      end
-      return target
-    end,
-  }
-end
+local h = require("tests.helpers")
+local assert_equal = h.assert_equal
+local assert_table_equal = h.assert_table_equal
 
 local token_monitor_mod = require("codux.token_monitor")
-
-local function assert_equal(actual, expected, message)
-  if actual ~= expected then
-    error((message or "assertion failed") .. ": expected " .. tostring(expected) .. ", got " .. tostring(actual), 2)
-  end
-end
-
-local function assert_table_equal(actual, expected, message)
-  if type(actual) ~= "table" then
-    error((message or "assertion failed") .. ": expected table, got " .. type(actual), 2)
-  end
-  assert_equal(#actual, #expected, message)
-  for index, expected_value in ipairs(expected) do
-    assert_equal(actual[index], expected_value, message .. " at index " .. tostring(index))
-  end
-end
 
 local function monitor_with_config(config, opts)
   opts = opts or {}

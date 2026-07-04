@@ -1120,17 +1120,6 @@ function M:remote_luaeval(server, lua_expression, opts)
   return nil, last_output ~= "" and last_output or "workspace is not reachable"
 end
 
-function M:workspace_terminal_snapshot(entry, opts)
-  opts = type(opts) == "table" and opts or {}
-  entry = type(entry) == "table" and entry or {}
-  local server = entry.nvim_server
-  if type(server) ~= "string" or server == "" then
-    server = self:workspace_server_path(entry.project_root, entry.safe_name or entry.name)
-  end
-  local max_lines = math.max(1, tonumber(opts.max_lines) or 14)
-  return self:remote_luaeval(server, "require('codux')._v5.remote_terminal_snapshot(" .. tostring(max_lines) .. ")", opts)
-end
-
 function M:workspace_preview_session_name(entry)
   entry = type(entry) == "table" and entry or {}
   return "codux-preview-"

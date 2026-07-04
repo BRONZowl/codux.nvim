@@ -2255,59 +2255,23 @@ function M:start_monitor_timer()
 end
 
 function M:open_command_sink()
-  local bufnr = self.ui.create_scratch_buffer({
-    bufhidden = "wipe",
+  local bufnr, win = ui.open_hidden_command_sink({
+    ui = self.ui,
     filetype = "codux-missions-command",
-    buftype = "nofile",
-    swapfile = false,
-    modifiable = false,
+    on_create_buffer = function(target_bufnr)
+      mark_internal_buffer(self.is_loaded_buf, target_bufnr)
+    end,
+    bind = function(target_bufnr)
+      self:bind_dashboard_commands(target_bufnr)
+    end,
   })
   if not bufnr then
-    return false
-  end
-  mark_internal_buffer(self.is_loaded_buf, bufnr)
-
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, {
-    relative = "editor",
-    style = "minimal",
-    border = "none",
-    width = 1,
-    height = 1,
-    col = vim.o.columns + 1,
-    row = vim.o.lines + 1,
-    focusable = false,
-    zindex = 1,
-  })
-  if not win_ok then
-    self.ui.delete_buffer(bufnr)
     return false
   end
 
   self.state.mission_dashboard_command_buf = bufnr
   self.state.mission_dashboard_command_win = win
-  self.ui.set_window_options(win, {
-    number = false,
-    relativenumber = false,
-    signcolumn = "no",
-    winfixbuf = true,
-  })
-  self:bind_dashboard_commands(bufnr)
   return true
-end
-
-function M:open_selected()
-  local item = self:selected_item()
-  if not item then
-    return false
-  end
-  local entry = item.kind == "role" and item.entry
-    or item.kind == "mission" and item.mission and item.mission.roles and item.mission.roles[1]
-    or nil
-  if not entry then
-    return false
-  end
-  self:close_dashboard()
-  return self.open_saved_workspace(entry.name or entry.safe_name, entry.project_root)
 end
 
 function M:selected_mission()

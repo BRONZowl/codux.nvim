@@ -4,12 +4,20 @@ LUA ?= lua
 LUAJIT ?= luajit
 NVIM_BIN ?= nvim
 NVIM_HEADLESS ?= $(NVIM_BIN) --headless -u NONE -i NONE --cmd 'set shadafile=NONE'
+TEST_SPECS := \
+	tests/mission_spec.lua \
+	tests/mission_control_spec.lua \
+	tests/prompt_actions_spec.lua \
+	tests/workspace_runtime_spec.lua \
+	tests/workspace_store_spec.lua \
+	tests/workspace_manager_spec.lua \
+	tests/workspace_ui_spec.lua \
+	tests/terminal_spec.lua \
+	tests/token_monitor_spec.lua
 
 test:
-	$(LUA) tests/workspace_status_spec.lua
-	$(LUA) tests/token_monitor_spec.lua
-	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua dofile("tests/workspace_status_spec.lua")' -c 'qa!'
-	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua dofile("tests/token_monitor_spec.lua")' -c 'qa!'
+	for f in $(TEST_SPECS); do $(LUA) $$f || exit 1; done
+	for f in $(TEST_SPECS); do $(NVIM_HEADLESS) -c 'set rtp+=.' -c "lua dofile('$$f')" -c 'qa!' || exit 1; done
 	for f in lua/codux/*.lua tests/*.lua; do $(LUAJIT) -e "assert(loadfile('$$f'))" || exit 1; done
 	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua require("codux").setup({ token_monitor = false })' -c 'qa!'
 	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua require("codux").setup({ token_monitor = false })' -c 'checkhealth codux' -c 'qa!'

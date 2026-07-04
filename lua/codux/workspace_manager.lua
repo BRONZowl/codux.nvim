@@ -1027,42 +1027,19 @@ function M:bind_commands(target_bufnr)
 end
 
 function M:open_command_sink()
-  local sink_bufnr = self.ui.create_scratch_buffer({
-    bufhidden = "wipe",
+  local sink_bufnr, sink_win = ui.open_hidden_command_sink({
+    ui = self.ui,
     filetype = "codux-workspaces-command",
-    buftype = "nofile",
-    swapfile = false,
-    modifiable = false,
+    bind = function(target_bufnr)
+      self:bind_commands(target_bufnr)
+    end,
   })
   if not sink_bufnr then
     return false
   end
 
-  local sink_win_ok, sink_win = pcall(vim.api.nvim_open_win, sink_bufnr, false, {
-    relative = "editor",
-    style = "minimal",
-    border = "none",
-    width = 1,
-    height = 1,
-    col = vim.o.columns + 1,
-    row = vim.o.lines + 1,
-    focusable = false,
-    zindex = 1,
-  })
-  if not sink_win_ok then
-    self.ui.delete_buffer(sink_bufnr)
-    return false
-  end
-
   self.state.workspace_manager_command_buf = sink_bufnr
   self.state.workspace_manager_command_win = sink_win
-  self.ui.set_window_options(sink_win, {
-    number = false,
-    relativenumber = false,
-    signcolumn = "no",
-    winfixbuf = true,
-  })
-  self:bind_commands(sink_bufnr)
   return true
 end
 
