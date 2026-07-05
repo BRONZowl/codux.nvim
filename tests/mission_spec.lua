@@ -6,6 +6,7 @@ local assert_false = h.assert_false
 local assert_contains = h.assert_contains
 
 local mission_mod = require("codux.mission")
+local text_util = require("codux.text")
 
 do
   local mission, error_message = mission_mod.plan("Blow Socks Off", "Build a standout agentic engineering feature.")
@@ -96,6 +97,26 @@ do
   })
   local updated = mission_mod.update_instruction_objective(instruction, "New objective")
   assert_contains(updated, "Objective:\nNew objective\n\nRole focus:")
+end
+
+do
+  local preview = mission_mod.preview_lines({
+    name = "Alpha",
+    objective = string.rep("long objective ", 8) .. "\nsecond line\nthird line",
+    roles = {
+      { workspace_name = "alpha-builder", name = "Builder" },
+      { workspace_name = "alpha-reviewer", name = "Reviewer" },
+      { workspace_name = "alpha-debugger", name = "Debugger" },
+    },
+  }, {
+    max_width = 24,
+    max_lines = 8,
+  })
+  assert_equal(#preview, 8)
+  for _, line in ipairs(preview) do
+    assert_true(text_util.display_width(line) <= 24)
+  end
+  assert_contains(preview[#preview], "truncated")
 end
 
 print("mission_spec.lua: ok")

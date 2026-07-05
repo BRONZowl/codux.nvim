@@ -15,6 +15,40 @@ local function lines(value)
   return result
 end
 
+local function truncate_line(line, max_width)
+  max_width = tonumber(max_width)
+  if not max_width then
+    return line
+  end
+  return text_util.truncate_display_tail(line, max_width)
+end
+
+local function truncate_preview_lines(preview_lines, opts)
+  opts = type(opts) == "table" and opts or {}
+  local max_width = tonumber(opts.max_width)
+  local max_lines = tonumber(opts.max_lines)
+  if not max_width and not max_lines then
+    return preview_lines
+  end
+
+  local result = {}
+  for _, line in ipairs(preview_lines) do
+    table.insert(result, truncate_line(line, max_width))
+  end
+
+  if max_lines and max_lines > 0 and #result > max_lines then
+    local marker = truncate_line("... preview truncated", max_width)
+    local truncated = {}
+    for index = 1, math.max(0, max_lines - 1) do
+      table.insert(truncated, result[index])
+    end
+    table.insert(truncated, marker)
+    result = truncated
+  end
+
+  return result
+end
+
 function M.objective_preview(objective, max_width)
   local first_line = tostring(objective or ""):gsub("\r", ""):match("([^\n]*)") or ""
   first_line = trim(first_line)
@@ -280,7 +314,7 @@ function M.find_mission(missions, name)
   return nil, "mission not found"
 end
 
-function M.preview_lines(mission)
+function M.preview_lines(mission, opts)
   mission = type(mission) == "table" and mission or {}
   local result = {
     "Launch Codux mission?",
@@ -299,7 +333,7 @@ function M.preview_lines(mission)
   end
   table.insert(result, "")
   table.insert(result, "Each role will launch in a Git worktree with workspace-auto permissions.")
-  return result
+  return truncate_preview_lines(result, opts)
 end
 
 function M.group_entries(entries)

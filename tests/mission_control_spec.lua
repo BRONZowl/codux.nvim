@@ -1131,9 +1131,12 @@ if type(vim.api) == "table" then
   assert_contains(opened[1].config.footer, "y yes")
   assert_contains(opened[1].config.footer, "n no")
   assert_contains(opened[1].config.footer, "e edit instruction")
+  assert_equal(opened[1].config.zindex, 80)
   assert_equal(opened[2].bufnr, 44)
   assert_true(opened[2].enter)
   assert_true(opened[2].config.focusable)
+  assert_false(window_options[143].wrap)
+  assert_false(window_options[143].linebreak)
   assert_false(window_options[143].cursorline)
   assert_contains(window_options[143].winhighlight, "Cursor:CoduxMissionPreviewCursor")
   assert_true(type(yes_callback) == "function")
@@ -1153,6 +1156,74 @@ if type(vim.api) == "table" then
 
   vim.api.nvim_open_win = old_open_win
   vim.schedule = old_schedule
+end
+
+if type(vim.api) == "table" then
+  local old_open_win = vim.api.nvim_open_win
+  local old_columns = vim.o.columns
+  local old_lines = vim.o.lines
+  local old_cmdheight = vim.o.cmdheight
+  local opened = {}
+  local buffer_lines = {}
+  local window_options = {}
+  local created = 0
+
+  vim.o.columns = 42
+  vim.o.lines = 12
+  vim.o.cmdheight = 1
+  vim.api.nvim_open_win = function(bufnr, enter, config)
+    table.insert(opened, { bufnr = bufnr, enter = enter, config = config })
+    return bufnr + 100
+  end
+
+  local controller = mission_control_mod.new({
+    ui = {
+      create_scratch_buffer = function()
+        created = created + 1
+        return created == 1 and 55 or 56
+      end,
+      set_lines = function(bufnr, lines)
+        buffer_lines[bufnr] = lines
+      end,
+      set_window_options = function(win, opts)
+        window_options[win] = opts
+      end,
+      close_window = function() end,
+      delete_buffer = function() end,
+    },
+    set_buffer_keymap = function() end,
+    bind_close_keys = function() end,
+  })
+
+  assert_true(controller:open_preview({
+    name = "Alpha",
+    objective = string.rep("very long objective ", 12) .. "\nsecond line\nthird line\nfourth line",
+    roles = {
+      { workspace_name = "alpha-builder", name = "Builder" },
+      { workspace_name = "alpha-reviewer", name = "Reviewer" },
+      { workspace_name = "alpha-debugger", name = "Debugger" },
+      { workspace_name = "alpha-architect", name = "Architect" },
+    },
+  }))
+  assert_equal(opened[1].bufnr, 55)
+  assert_false(opened[1].enter)
+  assert_false(opened[1].config.focusable)
+  assert_equal(opened[1].config.zindex, 80)
+  assert_true(#buffer_lines[55] <= opened[1].config.height)
+  for _, line in ipairs(buffer_lines[55]) do
+    assert_true(workspace_ui.display_width(line) <= opened[1].config.width)
+  end
+  assert_contains(buffer_lines[55][#buffer_lines[55]], "truncated")
+  assert_false(window_options[155].wrap)
+  assert_false(window_options[155].linebreak)
+  assert_equal(opened[2].bufnr, 56)
+  assert_true(opened[2].enter)
+  assert_true(opened[2].config.focusable)
+
+  vim.api.nvim_open_win = old_open_win
+  vim.o.columns = old_columns
+  vim.o.lines = old_lines
+  vim.o.cmdheight = old_cmdheight
 end
 
 if type(vim.api) == "table" then
@@ -1432,6 +1503,29 @@ do
   assert_true(controller:create_new_mission())
   assert_true(prompted)
   assert_false(closed)
+end
+
+do
+  local old_single_line_prompt = ui_mod.single_line_prompt
+  local prompt_opts
+  local opened_name
+  ui_mod.single_line_prompt = function(opts, callback)
+    prompt_opts = opts
+    callback("Alpha")
+    return true
+  end
+
+  local controller = mission_control_mod.new({})
+  function controller:open_objective_editor(name)
+    opened_name = name
+    return true
+  end
+
+  assert_true(controller:open_prompt())
+  assert_equal(prompt_opts.prompt, "Codux mission: ")
+  assert_equal(prompt_opts.zindex, 80)
+  assert_equal(opened_name, "Alpha")
+  ui_mod.single_line_prompt = old_single_line_prompt
 end
 
 do
@@ -2552,6 +2646,8 @@ if type(vim.api) == "table" then
   assert_contains(preview_config.footer, "n no")
   assert_contains(preview_config.footer, "e edit instruction")
   assert_false(preview_config.focusable)
+  assert_equal(objective_config.zindex, 80)
+  assert_equal(preview_config.zindex, 80)
   assert_equal(dashboard_config.title, " Mission Control ")
   assert_contains(dashboard_config.footer, "Commands shown below")
   assert_equal(dashboard_config.footer:find("Enter open", 1, true), nil)
@@ -2578,6 +2674,11 @@ if type(vim.api) == "table" then
   assert_equal(output_config.title, " Output ")
   assert_equal(output_config.focusable, false)
   assert_nil(output_config.footer)
+  assert_true(preview_config.zindex > command_config.zindex)
+  assert_true(preview_config.zindex > output_config.zindex)
+
+  local search_config = controller:dashboard_search_config()
+  assert_true(preview_config.zindex > search_config.zindex)
 
   local old_is_valid_win = controller.is_valid_win
   local old_get_window_config = controller.get_window_config

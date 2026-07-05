@@ -1,5 +1,7 @@
 local M = {}
 
+local MISSION_CREATION_ZINDEX = 80
+
 local function available_dimension(total, margin)
   return math.max(1, total - margin)
 end
@@ -59,6 +61,7 @@ function M.objective_editor_config(_, line_count, opts)
     height = height,
     col = math.max(0, math.floor((total_width - width) / 2)),
     row = math.max(0, math.floor((total_height - height) / 2)),
+    zindex = MISSION_CREATION_ZINDEX,
   }
 end
 
@@ -83,6 +86,7 @@ function M.preview_config(_, line_count)
     col = math.max(0, math.floor((total_width - width) / 2)),
     row = math.max(0, math.floor((total_height - height) / 2)),
     focusable = false,
+    zindex = MISSION_CREATION_ZINDEX,
   }
 end
 

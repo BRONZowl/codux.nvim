@@ -470,7 +470,13 @@ function M:open_objective_editor(name, default_objective, opts)
 end
 
 function M:open_preview(mission)
-  local preview_lines = self.mission.preview_lines(mission)
+  local initial_preview_lines = self.mission.preview_lines(mission)
+  local initial_config = self:preview_config(#initial_preview_lines)
+  local preview_lines = self.mission.preview_lines(mission, {
+    max_width = initial_config.width,
+    max_lines = initial_config.height,
+  })
+  local preview_config = self:preview_config(#preview_lines)
   local bufnr = self.ui.create_scratch_buffer({
     bufhidden = "wipe",
     filetype = "codux-mission-preview",
@@ -484,7 +490,7 @@ function M:open_preview(mission)
   self.ui.set_lines(bufnr, preview_lines)
   pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
 
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, self:preview_config(#preview_lines))
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, preview_config)
   if not win_ok then
     self.ui.delete_buffer(bufnr)
     self.notify("Failed to open Codux mission preview", vim.log.levels.ERROR)
@@ -494,8 +500,8 @@ function M:open_preview(mission)
     pcall(vim.api.nvim_set_hl, 0, "CoduxMissionPreviewCursor", { fg = "NONE", bg = "NONE", blend = 100 })
   end
   self.ui.set_window_options(win, {
-    wrap = true,
-    linebreak = true,
+    wrap = false,
+    linebreak = false,
     cursorline = false,
     winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey,Cursor:CoduxMissionPreviewCursor,CursorIM:CoduxMissionPreviewCursor",
   })
@@ -576,7 +582,7 @@ end
 
 function M:open_prompt()
   local prompt = require("codux.ui").single_line_prompt
-  return prompt({ prompt = "Codux mission: " }, function(input)
+  return prompt({ prompt = "Codux mission: ", zindex = 80 }, function(input)
     local name = trim(input)
     if name == "" then
       return
