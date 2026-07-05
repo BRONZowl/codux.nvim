@@ -183,7 +183,7 @@ function M.dashboard_search_config(controller)
     relative = "editor",
     style = "minimal",
     border = "rounded",
-    title = " Codux mission: ",
+    title = " Search Codux missions: ",
     title_pos = "center",
     width = math.max(20, dashboard_width),
     height = height,

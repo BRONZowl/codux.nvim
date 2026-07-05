@@ -167,10 +167,16 @@ end
 function M.open_dashboard(controller, root)
   controller:close_dashboard()
   root = root or controller.project_root()
-  local lines, items, selectable_rows, best_match_row, mission_count = controller:dashboard_lines(root)
-  if mission_count == 0 then
+  local existing_count, count_error = controller:mission_count(root)
+  if count_error then
+    controller.notify(count_error, vim.log.levels.ERROR)
+    return false
+  end
+  if existing_count == 0 then
     return controller:open_prompt()
   end
+
+  local lines, items, selectable_rows, best_match_row = controller:dashboard_lines(root)
   local initial_selected_item = items[selectable_rows[1]]
   local bufnr = controller.ui.create_scratch_buffer({
     bufhidden = "wipe",

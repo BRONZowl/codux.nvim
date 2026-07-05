@@ -212,7 +212,7 @@ target, plus a live `Output:` panel near the top for the highlighted role.
 
 Dashboard controls:
 
-- Type in `Codux mission:` to fuzzy-filter mission, role, or workspace names.
+- Type in `Search Codux missions:` to fuzzy-filter mission, role, or workspace names.
 - `<Tab>` switches between search and the dashboard list.
 - `<CR>` focuses the highlighted mission or role from search.
 - `j`/`k` moves through selectable mission and role rows.

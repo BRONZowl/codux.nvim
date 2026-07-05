@@ -732,7 +732,7 @@ if type(vim.api) == "table" then
   })
 
   assert_true(controller:open_search_input())
-  assert_equal(search_config.title, " Codux mission: ")
+  assert_equal(search_config.title, " Search Codux missions: ")
   assert_equal(search_config.width, 88)
   assert_equal(search_config.height, 1)
   assert_equal(search_config.col, 5)
@@ -911,6 +911,9 @@ if type(vim.api) == "table" then
       return true
     end,
   })
+  function controller:mission_count()
+    return 1
+  end
   function controller:dashboard_lines()
     return {
       "1 mission | 1 role | active 1 | question 0 | idle 0",
@@ -994,8 +997,11 @@ do
     table.insert(calls, "close_dashboard")
     return true
   end
+  function controller:mission_count()
+    return 0
+  end
   function controller:dashboard_lines()
-    return { "No Codux missions" }, {}, {}, nil, 0
+    error("dashboard lines should not be rendered without missions")
   end
   function controller:open_prompt()
     table.insert(calls, "open_prompt")
@@ -1005,6 +1011,63 @@ do
   assert_equal(controller:open_dashboard("/repo"), "prompt")
   assert_equal(calls[1], "close_dashboard")
   assert_equal(calls[2], "open_prompt")
+end
+
+do
+  local dashboard_created = false
+  local controller = mission_control_mod.new({
+    notify = function() end,
+    ui = {
+      create_scratch_buffer = function()
+        dashboard_created = true
+        return nil
+      end,
+    },
+  })
+  function controller:close_dashboard()
+    return true
+  end
+  function controller:mission_count()
+    return 1
+  end
+  function controller:dashboard_lines()
+    return { "No Codux missions" }, {}, {}, nil, 0
+  end
+  function controller:open_prompt()
+    error("mission prompt should not open when missions exist")
+  end
+
+  assert_false(controller:open_dashboard("/repo"))
+  assert_true(dashboard_created)
+end
+
+do
+  local notifications = {}
+  local controller = mission_control_mod.new({
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    ui = {
+      create_scratch_buffer = function()
+        error("dashboard buffer should not be created when missions cannot be read")
+      end,
+    },
+  })
+  function controller:close_dashboard()
+    return true
+  end
+  function controller:mission_count()
+    return nil, "state failed"
+  end
+  function controller:dashboard_lines()
+    error("dashboard lines should not be rendered when missions cannot be read")
+  end
+  function controller:open_prompt()
+    error("mission prompt should not open when mission lookup fails")
+  end
+
+  assert_false(controller:open_dashboard("/repo"))
+  assert_equal(notifications[#notifications], "state failed")
 end
 
 do
@@ -2549,6 +2612,9 @@ if type(vim.api) == "table" then
       end,
     },
   })
+  function controller:mission_count()
+    return 1
+  end
   function controller:dashboard_lines()
     return { "Mission" }, {}, {}, nil
   end
