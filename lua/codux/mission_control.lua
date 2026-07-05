@@ -69,6 +69,27 @@ function M.new(opts)
     set_window_cursor = type(opts.set_window_cursor) == "function" and opts.set_window_cursor or function(win, cursor)
       return pcall(vim.api.nvim_win_set_cursor, win, cursor)
     end,
+    reveal_window_row = type(opts.reveal_window_row) == "function" and opts.reveal_window_row or function(win, row)
+      row = tonumber(row)
+      if type(win) ~= "number" or type(row) ~= "number" or row < 1 then
+        return false
+      end
+
+      local info = vim.fn.getwininfo(win)[1]
+      if type(info) ~= "table" then
+        return false
+      end
+      local top = tonumber(info.topline) or 1
+      local bottom = tonumber(info.botline) or top
+      if row >= top and row <= bottom then
+        return true
+      end
+
+      local height = tonumber(info.height) or math.max(1, bottom - top + 1)
+      local next_top = row < top and row or math.max(1, row - height + 1)
+      local ok = pcall(vim.fn.win_execute, win, "call winrestview({'topline': " .. tostring(next_top) .. "})")
+      return ok
+    end,
     notify = type(opts.notify) == "function" and opts.notify or noop,
     token_usage_label = type(opts.token_usage_label) == "function" and opts.token_usage_label or function()
       return ""
@@ -651,6 +672,7 @@ function M:render_dashboard()
   self:highlight_dashboard(self.state.mission_dashboard_buf, lines, items)
   self:render_command_bar()
   self:render_output_panel(self:dashboard_output_entry(selected_item))
+  self:reveal_output_preview_row()
   self.state.mission_dashboard_focus_match = false
 
   return true
@@ -706,6 +728,10 @@ end
 
 function M:move_mission_selection(delta)
   return dashboard_selection.move_mission_selection(self, delta)
+end
+
+function M:reveal_output_preview_row()
+  return dashboard_selection.reveal_output_preview_row(self)
 end
 
 function M:open_search_input(opts)
