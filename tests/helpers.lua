@@ -152,4 +152,42 @@ function M.assert_table_equal(actual, expected, message)
   end
 end
 
+function M.with_stubs(stubs, callback)
+  stubs = type(stubs) == "table" and stubs or {}
+  callback = type(callback) == "function" and callback or function() end
+  local originals = {}
+  for index, stub in ipairs(stubs) do
+    originals[index] = stub.target[stub.key]
+    stub.target[stub.key] = stub.value
+  end
+
+  local ok, result = pcall(callback)
+  for index = #stubs, 1, -1 do
+    local stub = stubs[index]
+    stub.target[stub.key] = originals[index]
+  end
+  if not ok then
+    error(result, 0)
+  end
+  return result
+end
+
+function M.with_vim_api(stubs, callback)
+  local old_api = vim.api
+  vim.api = vim.api or {}
+  local normalized = {}
+  for key, value in pairs(type(stubs) == "table" and stubs or {}) do
+    table.insert(normalized, { target = vim.api, key = key, value = value })
+  end
+
+  local ok, result = pcall(function()
+    return M.with_stubs(normalized, callback)
+  end)
+  vim.api = old_api
+  if not ok then
+    error(result, 0)
+  end
+  return result
+end
+
 return M

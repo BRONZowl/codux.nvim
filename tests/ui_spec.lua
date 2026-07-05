@@ -465,4 +465,70 @@ do
   ui.delete_buffer = old_delete_buffer
 end
 
+do
+  local created_options
+  local opened
+  local window_options
+  local lines
+  local keymaps = {}
+  local closed_win
+  local deleted_buf
+  local handle = ui.open_scratch_float({
+    ui = {
+      create_scratch_buffer = function(options)
+        created_options = options
+        return 77
+      end,
+      set_lines = function(bufnr, value, opts)
+        lines = { bufnr = bufnr, value = value, opts = opts }
+        return true
+      end,
+      set_window_options = function(win, options)
+        window_options = { win = win, options = options }
+      end,
+      bind_close_keys = function(bufnr, close_fn, desc, modes, opts)
+        keymaps.close = { bufnr = bufnr, close_fn = close_fn, desc = desc, modes = modes, opts = opts }
+      end,
+      close_window = function(win)
+        closed_win = win
+      end,
+      delete_buffer = function(bufnr)
+        deleted_buf = bufnr
+      end,
+    },
+    lines = { "hello" },
+    modifiable = true,
+    config = { relative = "editor", width = 12, height = 1 },
+    window_options = { wrap = false },
+    close = function()
+      return "closed"
+    end,
+    close_desc = "Close Test Float",
+    close_opts = { q = true },
+    open_win = function(bufnr, enter, config)
+      opened = { bufnr = bufnr, enter = enter, config = config }
+      return 88
+    end,
+  })
+
+  assert_equal(handle.bufnr, 77)
+  assert_equal(handle.win, 88)
+  assert_equal(created_options.bufhidden, "wipe")
+  assert_equal(lines.bufnr, 77)
+  assert_equal(lines.value[1], "hello")
+  assert_true(lines.opts.modifiable)
+  assert_equal(opened.bufnr, 77)
+  assert_false(opened.enter)
+  assert_equal(opened.config.width, 12)
+  assert_equal(window_options.win, 88)
+  assert_false(window_options.options.wrap)
+  assert_equal(keymaps.close.bufnr, 77)
+  assert_equal(keymaps.close.desc, "Close Test Float")
+  assert_true(keymaps.close.opts.q)
+  assert_true(handle.close())
+  assert_false(handle.close())
+  assert_equal(closed_win, 88)
+  assert_equal(deleted_buf, 77)
+end
+
 print("ui_spec.lua: ok")

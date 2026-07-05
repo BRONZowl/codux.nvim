@@ -1,10 +1,14 @@
 local M = {}
 local command_util = require("codux.command")
+local commands_mod = require("codux.commands")
+local compat_mod = require("codux.compat")
 local context_mod = require("codux.context")
 local health_mod = require("codux.health")
 local mission_control_mod = require("codux.mission_control")
 local mission_mod = require("codux.mission")
 local prompt_actions_mod = require("codux.prompt_actions")
+local state_mod = require("codux.state")
+local text_util = require("codux.text")
 local terminal_mod = require("codux.terminal")
 local token_monitor_mod = require("codux.token_monitor")
 local ui = require("codux.ui")
@@ -74,112 +78,8 @@ local defaults = {
   target_providers = {},
 }
 
-local permission_profiles = {
-  {
-    profile = "default",
-    selector_label = "Default",
-    keyed_label = "default",
-    key = "d",
-    desc = "Open Codex Default",
-  },
-  {
-    profile = "auto",
-    selector_label = "Autopilot",
-    keyed_label = "auto",
-    key = "a",
-    desc = "Open Codex Auto",
-  },
-  {
-    profile = "danger",
-    selector_label = "Full Access",
-    keyed_label = "full",
-    key = "f",
-    desc = "Open Codex Full Access",
-  },
-}
-
 local config = vim.deepcopy(defaults)
-local state = {
-  buf = nil,
-  win = nil,
-  job_id = nil,
-  mode = "not running",
-  working_buf = nil,
-  working_win = nil,
-  working_timer = nil,
-  working_idle_timer = nil,
-  working_frame = 1,
-  codex_working = false,
-  last_working_activity = 0,
-  last_prompt_line = nil,
-  token_usage = {
-    five_hour_percent = nil,
-    weekly_percent = nil,
-    last_error = nil,
-    in_flight = false,
-    job_id = nil,
-    stdout = "",
-    initialized = false,
-    timeout_timer = nil,
-  },
-  terminal_attached_buf = nil,
-  terminal_prompt_input = "",
-  terminal_prompt_tracking_valid = true,
-  terminal_mode_sync_pending = false,
-  permission_profile = "default",
-  last_permission_profile = "default",
-  workspace = nil,
-  workspace_manager_buf = nil,
-  workspace_manager_win = nil,
-  workspace_manager_footer_buf = nil,
-  workspace_manager_footer_win = nil,
-  workspace_manager_search_buf = nil,
-  workspace_manager_search_win = nil,
-  workspace_manager_command_buf = nil,
-  workspace_manager_command_win = nil,
-  workspace_manager_action_buf = nil,
-  workspace_manager_action_win = nil,
-  workspace_manager_action_items = {},
-  workspace_manager_action_workspace = nil,
-  workspace_manager_items = {},
-  workspace_manager_query = "",
-  workspace_manager_best_match_index = nil,
-  workspace_manager_selected_index = nil,
-  workspace_manager_focus_match = false,
-  workspace_manager_search_confirmed = false,
-  workspace_manager_project_root = nil,
-  workspace_manager_refresh_timer = nil,
-  workspace_manager_ns = vim.api.nvim_create_namespace("codux.workspace_manager"),
-  mission_dashboard_buf = nil,
-  mission_dashboard_win = nil,
-  mission_dashboard_search_buf = nil,
-  mission_dashboard_search_win = nil,
-  mission_dashboard_command_buf = nil,
-  mission_dashboard_command_win = nil,
-  mission_dashboard_action_buf = nil,
-  mission_dashboard_action_win = nil,
-  mission_dashboard_action_items = {},
-  mission_dashboard_action_mission = nil,
-  mission_dashboard_action_workspace = nil,
-  mission_dashboard_action_kind = nil,
-  mission_dashboard_items = {},
-  mission_dashboard_selectable_rows = {},
-  mission_dashboard_query = "",
-  mission_dashboard_best_match_row = nil,
-  mission_dashboard_selected_row = nil,
-  mission_dashboard_focus_match = false,
-  mission_dashboard_search_confirmed = false,
-  mission_dashboard_project_root = nil,
-  workspace_instruction_ignore_warnings = {},
-  workspace_target_signature = nil,
-  workspace_target_update_pending = false,
-  closing_popup = false,
-  focus_lock_pending = false,
-  focus_lock_autocmd = nil,
-  exiting_jobs = {},
-  pending_delete_buffers = {},
-  installed_mappings = {},
-}
+local state = state_mod.initial()
 
 local augroup = vim.api.nvim_create_augroup("codux.nvim", { clear = true })
 local refresh_which_key
@@ -210,109 +110,20 @@ local function notify(message, level)
 end
 
 local function trim(value)
-  return (value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  return text_util.trim(value)
 end
 
-function M._v5.mode_display_label(mode)
-  return terminal_mod.mode_display_label(mode)
-end
-
-function M._v5.strip_terminal_control_sequences(value)
-  return terminal_mod.strip_terminal_control_sequences(value)
-end
-
-function M._v5.detect_terminal_mode_from_lines(lines, first_index)
-  return terminal_mod.detect_terminal_mode_from_lines(lines, first_index)
-end
-
-function M._v5.output_looks_like_question(lines, first_index)
-  return terminal_mod.output_looks_like_question(lines, first_index)
-end
-
-function M._v5.permission_profile_choices()
-  local choices = {}
-  for _, spec in ipairs(permission_profiles) do
-    table.insert(choices, { label = spec.selector_label, profile = spec.profile })
-  end
-  return choices
-end
-
-function M._v5.keyed_permission_profile_choices()
-  local choices = {}
-  for _, spec in ipairs(permission_profiles) do
-    table.insert(choices, {
-      key = spec.key,
-      label = spec.keyed_label,
-      profile = spec.profile,
-      desc = spec.desc,
-    })
-  end
-  return choices
-end
-
-function M._v5.should_select_permission_profile(job_id)
-  return job_id == nil
-end
-
-function M._v5.open_permission_profile_choice(choice, opts)
-  opts = type(opts) == "table" and opts or {}
-  if type(choice) ~= "table" then
-    return false
-  end
-
-  local openers = {
-    default = opts.open_default,
-    auto = opts.open_auto,
-    danger = opts.open_danger,
-  }
-  local opener = openers[choice.profile]
-  if type(opener) == "function" then
-    return opener(opts.initial_prompt, opts.open_opts)
-  end
-  return false
-end
-
-function M._v5.select_permission_profile_open(opts)
-  opts = type(opts) == "table" and opts or {}
-  local selector = opts.selector or (vim.ui and vim.ui.select)
-  if type(selector) ~= "function" then
-    if type(opts.open_default) == "function" then
-      return opts.open_default(opts.initial_prompt, opts.open_opts)
-    end
-    return false
-  end
-
-  return selector(M._v5.permission_profile_choices(), {
-    prompt = "Codex permission profile:",
-    format_item = function(item)
-      return item.label
-    end,
-  }, function(choice)
-    return M._v5.open_permission_profile_choice(choice, opts)
-  end)
-end
-
-function M._v5.select_keyed_permission_profile_open(opts)
-  opts = type(opts) == "table" and opts or {}
-  local menu = opts.menu or ui.key_choice_menu
-  if type(menu) ~= "function" then
-    if type(opts.open_default) == "function" then
-      return opts.open_default(opts.initial_prompt, opts.open_opts)
-    end
-    return false
-  end
-
-  return menu({
-    title = " Codex permission profile ",
-    choices = M._v5.keyed_permission_profile_choices(),
-    filetype = "codux-open-profile",
-    cancel_desc = "Cancel Codux Open",
-    create_error = "Failed to create Codux open menu",
-    open_error = "Failed to open Codux open menu",
-  }, function(choice)
-    return M._v5.open_permission_profile_choice(choice, opts)
-  end)
-end
+compat_mod.install(M._v5, {
+  project_root = function()
+    return workspace_manager_project_root()
+  end,
+  names_for_project = function(root)
+    return workspace_runtime:names_for_project(root)
+  end,
+  mission_names_for_project = function(root)
+    return workspace_runtime:mission_names_for_project(root)
+  end,
+})
 
 local function system(args, input)
   local output = vim.fn.system(args, input)
@@ -1546,177 +1357,12 @@ function M.health_info()
   }
 end
 
-function M._v5.filter_completion(values, arglead)
-  local matches = {}
-  arglead = arglead or ""
-  for _, value in ipairs(values) do
-    if arglead == "" or tostring(value):find(arglead, 1, true) == 1 then
-      table.insert(matches, value)
-    end
-  end
-  return matches
-end
-
-function M._v5.complete_workspace_names(arglead)
-  return M._v5.filter_completion(M._v5.names_for_project(workspace_manager_project_root()), arglead)
-end
-
-function M._v5.complete_mission_names(arglead)
-  return M._v5.filter_completion(M._v5.mission_names_for_project(workspace_manager_project_root()), arglead)
-end
-
-function M._v5.complete_create(arglead, _cmdline, _cursorpos)
-  return M._v5.filter_completion({ "--custom" }, arglead)
-end
-
 local function create_commands()
-  local function open_workspace_instruction_from_args(opts)
-    if #opts.fargs == 0 then
-      M.open_workspace_prompt()
-      return
-    end
-
-    local name, _custom_requested, error_message = M._v5.parse_create_args(opts.fargs)
-    if error_message then
-      notify(error_message, vim.log.levels.ERROR)
-      return
-    end
-    M._v5.open_custom_workspace_instruction_prompt(name)
-  end
-
-  vim.api.nvim_create_user_command("Codux", function()
-    M.open()
-  end, { force = true, desc = "Open or focus the Codex popup" })
-
-  vim.api.nvim_create_user_command("CoduxOpen", function()
-    M.open()
-  end, { force = true, desc = "Open or focus the Codex popup" })
-
-  vim.api.nvim_create_user_command("CoduxOpenAuto", function()
-    M.open_workspace_auto()
-  end, { force = true, desc = "Open Codex autopilot with approve-for-me permissions" })
-
-  vim.api.nvim_create_user_command("CoduxOpenDanger", function()
-    M.open_danger_full_access()
-  end, { force = true, desc = "Open Codex danger zone with no sandbox" })
-
-  vim.api.nvim_create_user_command(
-    "CoduxWorkspace",
-    open_workspace_instruction_from_args,
-    { force = true, nargs = "*", complete = M._v5.complete_create, desc = "Create a named Codux tmux workspace" }
-  )
-
-  vim.api.nvim_create_user_command(
-    "CoduxWorkspaceCreate",
-    open_workspace_instruction_from_args,
-    { force = true, nargs = "*", complete = M._v5.complete_create, desc = "Create a named Codux tmux workspace" }
-  )
-
-  vim.api.nvim_create_user_command("CoduxWorkspaceOpen", function(opts)
-    M.open_saved_workspace(opts.args, workspace_manager_project_root())
-  end, { force = true, nargs = 1, complete = M._v5.complete_workspace_names, desc = "Open a saved Codux workspace" })
-
-  vim.api.nvim_create_user_command("CoduxWorkspaceSelect", function(opts)
-    M.select_workspace(opts.args)
-  end, { force = true, nargs = 1, complete = M._v5.complete_workspace_names, desc = "Select a saved Codux workspace" })
-
-  vim.api.nvim_create_user_command("CoduxWorkspaceDelete", function(opts)
-    M.delete_workspace(opts.args)
-  end, { force = true, nargs = 1, complete = M._v5.complete_workspace_names, desc = "Delete a saved Codux workspace" })
-
-  vim.api.nvim_create_user_command("CoduxWorkspaceRename", function(opts)
-    local old_name = opts.fargs[1]
-    local new_name = opts.fargs[2]
-    if type(old_name) ~= "string" or old_name == "" or type(new_name) ~= "string" or new_name == "" then
-      notify("Usage: CoduxWorkspaceRename <old> <new>", vim.log.levels.ERROR)
-      return
-    end
-    M.rename_workspace(old_name, new_name)
-  end, { force = true, nargs = "+", complete = M._v5.complete_workspace_names, desc = "Rename a saved Codux workspace" })
-
-  vim.api.nvim_create_user_command("CoduxWorkspaceRestore", function()
-    M.restore_workspaces()
-  end, { force = true, desc = "Restore Codux workspace status from tmux" })
-
-  vim.api.nvim_create_user_command("CoduxWorkspaceCloseAll", function()
-    M.close_all_workspace_windows()
-  end, { force = true, desc = "Close all current-project Codux workspaces" })
-
-  vim.api.nvim_create_user_command("CoduxWorkspaceIgnore", function()
-    M.ignore_workspace_files()
-  end, { force = true, desc = "Add Codux workspace files to the current project's .gitignore" })
-
-  vim.api.nvim_create_user_command("CoduxWorkspaces", function()
-    M.open_workspaces()
-  end, { force = true, desc = "Show current Codux workspaces" })
-
-  vim.api.nvim_create_user_command("CoduxMissionCreate", function(opts)
-    if type(opts.args) == "string" and opts.args ~= "" then
-      mission_controller:open_objective_editor(opts.args)
-      return
-    end
-    M.open_mission_prompt()
-  end, { force = true, nargs = "?", desc = "Create a Codux Mission Control crew" })
-
-  vim.api.nvim_create_user_command("CoduxMissions", function()
-    M.open_missions()
-  end, { force = true, desc = "Show Codux missions" })
-
-  vim.api.nvim_create_user_command("CoduxMissionDashboard", function()
-    M.open_mission_dashboard()
-  end, { force = true, desc = "Show the Codux mission dashboard" })
-
-  vim.api.nvim_create_user_command("CoduxMissionEdit", function(opts)
-    M.edit_mission_objective(opts.args)
-  end, { force = true, nargs = 1, complete = M._v5.complete_mission_names, desc = "Edit a Codux mission objective" })
-
-  vim.api.nvim_create_user_command("CoduxMissionDelete", function(opts)
-    M.delete_saved_mission(opts.args)
-  end, { force = true, nargs = 1, complete = M._v5.complete_mission_names, desc = "Delete a Codux mission" })
-
-  vim.api.nvim_create_user_command("CoduxMissionClose", function(opts)
-    M.close_saved_mission(opts.args)
-  end, { force = true, nargs = 1, complete = M._v5.complete_mission_names, desc = "Close a Codux mission" })
-
-  vim.api.nvim_create_user_command("CoduxToggle", function()
-    M.toggle()
-  end, { force = true, desc = "Toggle the Codex popup" })
-
-  vim.api.nvim_create_user_command("CoduxClose", function()
-    M.close()
-  end, { force = true, desc = "Hide the Codex popup without stopping Codex" })
-
-  vim.api.nvim_create_user_command("CoduxExit", function()
-    M.exit()
-  end, { force = true, desc = "Stop Codex and close the popup" })
-
-  vim.api.nvim_create_user_command("CoduxReview", function()
-    M.send_file_review()
-  end, { force = true, desc = "Send current file or explorer node to Codex for review" })
-
-  vim.api.nvim_create_user_command("CoduxReviewSelection", function(opts)
-    M.send_selection(opts)
-  end, { force = true, range = true, desc = "Send selected code to Codex for review" })
-
-  vim.api.nvim_create_user_command("CoduxDiagnostics", function()
-    M.send_diagnostics()
-  end, { force = true, desc = "Send diagnostics, lists, and headless health output to Codex" })
-
-  vim.api.nvim_create_user_command("CoduxDiff", function()
-    M.send_git_diff()
-  end, { force = true, desc = "Send Git changes to Codex for review" })
-
-  vim.api.nvim_create_user_command("CoduxTogglePlan", function()
-    M.toggle_plan_mode()
-  end, { force = true, desc = "Toggle Codex plan mode" })
-
-  vim.api.nvim_create_user_command("CoduxHealth", function()
-    M.health()
-  end, { force = true, desc = "Run codux.nvim health checks" })
-
-  vim.api.nvim_create_user_command("CoduxDoctor", function()
-    M.doctor()
-  end, { force = true, desc = "Run codux.nvim troubleshooting checks" })
+  return commands_mod.create(M, {
+    notify = notify,
+    workspace_manager_project_root = workspace_manager_project_root,
+    mission_controller = mission_controller,
+  })
 end
 
 local function mapping_id(mode, lhs)

@@ -1,5 +1,7 @@
 local M = {}
 
+local text_util = require("codux.text")
+
 local severity_names = {
   [vim.diagnostic.severity.ERROR] = "ERROR",
   [vim.diagnostic.severity.WARN] = "WARN",
@@ -8,7 +10,7 @@ local severity_names = {
 }
 
 local function trim(value)
-  return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  return text_util.trim(value)
 end
 
 local function call(dep, fallback, ...)

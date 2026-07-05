@@ -2,12 +2,15 @@ local M = {}
 M.__index = M
 
 local command_util = require("codux.command")
+local terminal_mode = require("codux.terminal_mode")
+local text_util = require("codux.text")
 local ui = require("codux.ui")
+local working_indicator = require("codux.working_indicator")
 
 local function noop() end
 
 local function trim(value)
-  return (value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  return text_util.trim(value)
 end
 
 local is_valid_buf = ui.is_valid_buf
@@ -44,107 +47,13 @@ local function normalize_initial_mode(mode)
   return nil
 end
 
-function M.mode_display_label(mode)
-  if mode == "execute" then
-    return "exec"
-  end
-
-  return mode or "not running"
-end
-
-function M.strip_terminal_control_sequences(value)
-  return tostring(value or "")
-    :gsub("\27%][^\7]*\7", "")
-    :gsub("\27%][^\27]*\27\\", "")
-    :gsub("\27%[[0-?]*[ -/]*[@-~]", "")
-    :gsub("\27[@-_]", "")
-    :gsub("\r", "")
-    :gsub("[%z\1-\8\11-\12\14-\31\127]", "")
-end
-
-function M.detect_terminal_mode_from_line(line)
-  line = trim(M.strip_terminal_control_sequences(line):lower():gsub("%s+", " "))
-  if line == "" then
-    return nil
-  end
-
-  local mode = line:match("^mode:%s*(plan)$") or line:match("^codex mode:%s*(plan)$")
-  if not mode and line == "plan mode" then
-    mode = "plan"
-  end
-  if not mode and line:find("plan mode (shift+tab to cycle)", 1, true) then
-    mode = "plan"
-  end
-  if not mode and line:match("plan mode$") then
-    mode = "plan"
-  end
-  if mode then
-    return mode
-  end
-
-  mode = line:match("^mode:%s*(execute)$") or line:match("^codex mode:%s*(execute)$")
-  if not mode and line == "execute mode" then
-    mode = "execute"
-  end
-  if not mode and line:find("execute mode (shift+tab to cycle)", 1, true) then
-    mode = "execute"
-  end
-  if not mode and line:match("execute mode$") then
-    mode = "execute"
-  end
-  if mode then
-    return mode
-  end
-
-  return nil
-end
-
-function M.detect_terminal_mode_from_lines(lines, first_index)
-  if type(lines) ~= "table" then
-    return nil
-  end
-
-  first_index = math.max(1, tonumber(first_index) or 1)
-  local start_index = math.max(first_index, #lines - 39)
-
-  for index = #lines, start_index, -1 do
-    local mode = M.detect_terminal_mode_from_line(lines[index])
-    if mode ~= nil then
-      return mode
-    end
-  end
-
-  return nil
-end
-
-function M.output_looks_like_question(lines, first_index)
-  if type(lines) ~= "table" then
-    return false
-  end
-
-  first_index = math.max(1, tonumber(first_index) or 1)
-  local start_index = math.max(first_index, #lines - 79)
-  for index = #lines, start_index, -1 do
-    local line = trim(M.strip_terminal_control_sequences(lines[index]))
-    if line ~= "" and line:match("%?[%]%)}\"'`%s]*$") then
-      return true
-    end
-  end
-
-  return false
-end
-
-function M.terminal_prompt_is_plan_toggle(input, tracking_valid)
-  if tracking_valid == nil then
-    tracking_valid = true
-  end
-  return tracking_valid == true and trim(input) == "/plan"
-end
-
-function M.terminal_line_is_plan_toggle(line)
-  line = trim(M.strip_terminal_control_sequences(line):gsub("%s+", " "))
-  return line == "/plan" or line == "> /plan"
-end
+M.mode_display_label = terminal_mode.mode_display_label
+M.strip_terminal_control_sequences = terminal_mode.strip_terminal_control_sequences
+M.detect_terminal_mode_from_line = terminal_mode.detect_terminal_mode_from_line
+M.detect_terminal_mode_from_lines = terminal_mode.detect_terminal_mode_from_lines
+M.output_looks_like_question = terminal_mode.output_looks_like_question
+M.terminal_prompt_is_plan_toggle = terminal_mode.terminal_prompt_is_plan_toggle
+M.terminal_line_is_plan_toggle = terminal_mode.terminal_line_is_plan_toggle
 
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
@@ -479,13 +388,6 @@ function M:schedule_popup_focus_lock()
   end)
 end
 
-local working_frames = {
-  " codex is working    ",
-  " codex is working.   ",
-  " codex is working..  ",
-  " codex is working... ",
-}
-
 function M:stop_working_timer()
   local timer = self.state.working_timer
   self.state.working_timer = nil
@@ -505,14 +407,7 @@ function M:stop_working_idle_timer()
 end
 
 function M:close_working_indicator()
-  self:stop_working_timer()
-
-  self.ui.close_window(self.state.working_win)
-  self.state.working_win = nil
-
-  self.ui.delete_buffer(self.state.working_buf)
-  self.state.working_buf = nil
-  self.state.working_frame = 1
+  return working_indicator.close(self)
 end
 
 function M:working_idle_ms()
@@ -930,88 +825,19 @@ function M:attach_terminal_activity(bufnr)
 end
 
 function M:working_indicator_config()
-  local width = 21
-  local height = 1
-  local total_width = math.max(1, vim.o.columns)
-  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
-
-  return {
-    relative = "editor",
-    style = "minimal",
-    focusable = false,
-    width = width,
-    height = height,
-    col = math.max(0, total_width - width - 2),
-    row = math.max(0, total_height - height - 1),
-    border = "rounded",
-    zindex = 40,
-  }
+  return working_indicator.config(self)
 end
 
 function M:render_working_indicator()
-  if not is_loaded_buf(self.state.working_buf) then
-    return
-  end
-
-  local frame = working_frames[self.state.working_frame] or working_frames[1]
-  self.ui.set_lines(self.state.working_buf, { frame })
+  return working_indicator.render(self)
 end
 
 function M:ensure_working_indicator()
-  if is_valid_win(self.state.working_win) then
-    pcall(vim.api.nvim_win_set_config, self.state.working_win, self:working_indicator_config())
-    return true
-  end
-
-  if not is_loaded_buf(self.state.working_buf) then
-    local bufnr = self.ui.create_scratch_buffer({
-      bufhidden = "wipe",
-      modifiable = true,
-    })
-    if not bufnr then
-      self.state.working_buf = nil
-      return false
-    end
-
-    self.state.working_buf = bufnr
-  end
-
-  self:render_working_indicator()
-  local win_ok, win = pcall(vim.api.nvim_open_win, self.state.working_buf, false, self:working_indicator_config())
-  if not win_ok then
-    self.state.working_win = nil
-    return false
-  end
-
-  self.state.working_win = win
-  self.ui.set_window_options(win, {
-    winblend = 10,
-    wrap = false,
-  })
-  return true
+  return working_indicator.ensure(self)
 end
 
 function M:start_working_timer()
-  if self.state.working_timer then
-    return
-  end
-
-  local loop = vim.uv or vim.loop
-  local timer = loop and loop.new_timer()
-  if not timer then
-    return
-  end
-
-  self.state.working_timer = timer
-  timer:start(0, 450, vim.schedule_wrap(function()
-    if not is_valid_win(self.state.working_win) then
-      self:stop_working_timer()
-      return
-    end
-
-    self.state.working_frame = (self.state.working_frame % #working_frames) + 1
-    self:render_working_indicator()
-  end))
+  return working_indicator.start_timer(self)
 end
 
 function M:working_activity_is_stale()
@@ -1019,19 +845,7 @@ function M:working_activity_is_stale()
 end
 
 function M:update_working_indicator()
-  if self.state.codex_working and self:working_activity_is_stale() then
-    self:set_codex_working(false)
-    return
-  end
-
-  if self.state.codex_working and self:terminal_running() and not self:valid_win() then
-    if self:ensure_working_indicator() then
-      self:start_working_timer()
-    end
-    return
-  end
-
-  self:close_working_indicator()
+  return working_indicator.update(self)
 end
 
 function M:submit_terminal_prompt()

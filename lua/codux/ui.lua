@@ -1,3 +1,5 @@
+local text_util = require("codux.text")
+
 local M = {}
 
 function M.is_valid_buf(bufnr)
@@ -187,6 +189,83 @@ function M.open_hidden_command_sink(opts)
   return bufnr, win
 end
 
+function M.open_scratch_float(opts)
+  opts = type(opts) == "table" and opts or {}
+  local ui_impl = type(opts.ui) == "table" and opts.ui or M
+  local create_scratch_buffer = type(ui_impl.create_scratch_buffer) == "function" and ui_impl.create_scratch_buffer
+    or M.create_scratch_buffer
+  local set_lines = type(ui_impl.set_lines) == "function" and ui_impl.set_lines or M.set_lines
+  local set_window_options = type(ui_impl.set_window_options) == "function" and ui_impl.set_window_options
+    or M.set_window_options
+  local delete_buffer = type(ui_impl.delete_buffer) == "function" and ui_impl.delete_buffer or M.delete_buffer
+  local close_window = type(ui_impl.close_window) == "function" and ui_impl.close_window or M.close_window
+  local bind_close_keys = type(ui_impl.bind_close_keys) == "function" and ui_impl.bind_close_keys or M.bind_close_keys
+  local open_win = type(opts.open_win) == "function" and opts.open_win or vim.api.nvim_open_win
+
+  local bufnr = create_scratch_buffer(opts.buffer_options or {
+    bufhidden = "wipe",
+    buftype = "nofile",
+    swapfile = false,
+  })
+  if not bufnr then
+    return nil, "create"
+  end
+
+  if type(opts.on_create_buffer) == "function" then
+    opts.on_create_buffer(bufnr)
+  end
+  if type(opts.lines) == "table" then
+    set_lines(bufnr, opts.lines, { modifiable = opts.modifiable == true })
+  end
+
+  local config = opts.config
+  if type(config) == "function" then
+    config = config()
+  end
+  if type(config) ~= "table" then
+    config = {
+      relative = "editor",
+      style = "minimal",
+      border = "rounded",
+      width = math.min(60, math.max(1, vim.o.columns - 4)),
+      height = 1,
+      col = 2,
+      row = 2,
+    }
+  end
+
+  local win_ok, win = pcall(open_win, bufnr, opts.enter == true, config)
+  if not win_ok then
+    delete_buffer(bufnr)
+    return nil, "open"
+  end
+
+  if type(opts.window_options) == "table" then
+    set_window_options(win, opts.window_options)
+  end
+
+  local closed = false
+  local handle = {
+    bufnr = bufnr,
+    win = win,
+  }
+  function handle.close()
+    if closed then
+      return false
+    end
+    closed = true
+    close_window(win)
+    delete_buffer(bufnr)
+    return true
+  end
+
+  if type(opts.close) == "function" then
+    bind_close_keys(bufnr, opts.close, opts.close_desc or "Close Codux Window", opts.close_modes or "n", opts.close_opts)
+  end
+
+  return handle, nil
+end
+
 function M.set_lines(bufnr, lines, opts)
   if not M.is_loaded_buf(bufnr) then
     return false
@@ -225,15 +304,7 @@ function M.bind_close_keys(bufnr, close_fn, desc, modes, opts)
 end
 
 local function display_width(value)
-  value = tostring(value or "")
-  if vim.fn and type(vim.fn.strdisplaywidth) == "function" then
-    local ok, width = pcall(vim.fn.strdisplaywidth, value)
-    if ok and type(width) == "number" then
-      return width
-    end
-  end
-
-  return #value
+  return text_util.display_width(value)
 end
 
 function M.key_choice_lines(choices)

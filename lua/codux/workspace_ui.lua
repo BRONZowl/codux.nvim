@@ -1,3 +1,5 @@
+local text_util = require("codux.text")
+
 local M = {}
 
 M.MANAGER_NAME_WIDTH = 28
@@ -15,47 +17,15 @@ M.STATUS_ORDER = {
 }
 
 function M.display_width(text)
-  local ok, width = pcall(vim.fn.strdisplaywidth, text or "")
-  if ok and type(width) == "number" then
-    return width
-  end
-
-  return #(text or "")
+  return text_util.display_width(text)
 end
 
 function M.truncate_display_tail(text, max_width)
-  text = tostring(text or "")
-
-  if max_width <= 0 then
-    return ""
-  end
-
-  if M.display_width(text) <= max_width then
-    return text
-  end
-
-  if max_width <= 3 then
-    return string.rep(".", max_width)
-  end
-
-  local suffix_width = max_width - 3
-  local char_count = vim.fn.strchars(text)
-  local suffix = ""
-
-  for start = char_count - 1, 0, -1 do
-    local candidate = vim.fn.strcharpart(text, start)
-    if M.display_width(candidate) > suffix_width then
-      break
-    end
-    suffix = candidate
-  end
-
-  return "..." .. suffix
+  return text_util.truncate_display_tail(text, max_width)
 end
 
 function M.pad_display_right(text, width)
-  text = M.truncate_display_tail(text, width)
-  return text .. string.rep(" ", math.max(0, width - M.display_width(text)))
+  return text_util.pad_display_right(text, width)
 end
 
 function M.manager_column_widths(width)

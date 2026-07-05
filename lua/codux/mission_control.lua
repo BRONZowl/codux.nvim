@@ -3,14 +3,17 @@ M.__index = M
 
 local action_palette_mod = require("codux.action_palette")
 local dashboard_search_mod = require("codux.dashboard_search")
+local filetypes = require("codux.filetypes")
+local mission_dashboard = require("codux.mission_dashboard")
 local mission_mod = require("codux.mission")
+local text_util = require("codux.text")
 local ui = require("codux.ui")
 local output_panel = require("codux.mission_output_panel")
 
 local function noop() end
 
 local function trim(value)
-  return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  return text_util.trim(value)
 end
 
 local function available_dimension(total, margin)
@@ -25,34 +28,11 @@ local function next_bordered_float_row(row, content_height)
   return math.max(0, tonumber(row) or 0) + bordered_float_outer_height(content_height)
 end
 
-local dashboard_command_items = {
-  { key = "Tab", label = "search" },
-  { key = "m", label = "menu" },
-  { key = "a", label = "answer" },
-  { key = "p", label = "prompt" },
-  { key = "i", label = "interrupt" },
-  { key = "s", label = "mode" },
-}
-
-local MISSION_ROLE_TABLE_MAX_WIDTH = 112
-local MISSION_ROLE_TABLE_GAP = "  "
-local MISSION_ROW_LEFT_OF_TABLE = 2
+local dashboard_command_items = mission_dashboard.command_items()
 
 local function entry_key(entry)
   entry = type(entry) == "table" and entry or {}
   return tostring(entry.safe_name or entry.name or entry.mission_role or "")
-end
-
-local function pluralize(count, singular, plural)
-  return tostring(count) .. " " .. (count == 1 and singular or plural)
-end
-
-local function center_display_line(display, text, width)
-  text = tostring(text or "")
-  width = tonumber(width) or 0
-  local text_width = display.display_width(text)
-  local padding = math.max(0, math.floor((width - text_width) / 2))
-  return string.rep(" ", padding) .. text
 end
 
 local function mission_cache_key(root, mission)
@@ -71,23 +51,7 @@ local function role_cache_key(entry)
   }, "\0")
 end
 
-local mission_control_filetypes = {
-  ["codux-missions"] = true,
-  ["codux-missions-search"] = true,
-  ["codux-missions-command"] = true,
-  ["codux-missions-commands"] = true,
-  ["codux-missions-actions"] = true,
-  ["codux-missions-output"] = true,
-  ["codux-mission-preview"] = true,
-  ["codux-mission-preview-sink"] = true,
-  ["codux-mission-question-answer"] = true,
-  ["codux-mission-question-answer-sink"] = true,
-  ["codux-mission-question-note"] = true,
-  ["codux-mission-question-option"] = true,
-  ["codux-mission-objective-preview"] = true,
-  ["codux-mission-objective"] = true,
-  ["codux-mission-workspace-prompt"] = true,
-}
+local mission_control_filetypes = filetypes.mission_control
 
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
@@ -1108,157 +1072,43 @@ function M:mission_mode_label(entry)
 end
 
 function M:mission_dashboard_line(mission, counts, status, dashboard_width)
-  local right = self.workspace_ui.pad_display_right(status, 8) .. "  " .. pluralize(counts.total, "role", "roles")
-  local row_width = self:mission_role_table_width(dashboard_width)
-  local name_width = math.min(34, math.max(16, row_width - self.workspace_ui.display_width(right) - 1))
-  local mission_name = self.workspace_ui.pad_display_right(tostring(mission.name or mission.mission_id), name_width)
-  local table_indent = math.max(0, math.floor(((tonumber(dashboard_width) or 0) - row_width) / 2))
-  local padding = math.max(0, table_indent - MISSION_ROW_LEFT_OF_TABLE)
-  return string.rep(" ", padding) .. mission_name .. " " .. right
+  return mission_dashboard.mission_line(self, mission, counts, status, dashboard_width)
 end
 
 function M:mission_role_header_line(dashboard_width)
-  local columns = self:mission_role_column_widths(dashboard_width)
-  return center_display_line(
-    self.workspace_ui,
-    self:mission_role_table_line(columns, {
-      role = "role",
-      status = "status",
-      mode = "mode",
-      profile = "profile",
-      age = "age",
-      review = "review",
-      branch = "branch",
-      cleanup = "cleanup",
-      target = "target",
-    }),
-    dashboard_width
-  )
+  return mission_dashboard.role_header_line(self, dashboard_width)
 end
 
 function M:mission_role_table_width(dashboard_width)
-  dashboard_width = math.max(1, tonumber(dashboard_width) or 80)
-  return math.min(dashboard_width, MISSION_ROLE_TABLE_MAX_WIDTH)
+  return mission_dashboard.role_table_width(dashboard_width)
 end
 
 function M:mission_role_column_widths(dashboard_width)
-  local table_width = self:mission_role_table_width(dashboard_width)
-  local columns = {
-    role = 9,
-    status = 8,
-    mode = 7,
-    profile = 9,
-    age = 4,
-    review = 6,
-    cleanup = 9,
-  }
-  local fixed_width = columns.role
-    + columns.status
-    + columns.mode
-    + columns.profile
-    + columns.age
-    + columns.review
-    + columns.cleanup
-    + (#MISSION_ROLE_TABLE_GAP * 8)
-  local flexible_width = math.max(0, table_width - fixed_width)
-  columns.branch = math.floor(flexible_width * 0.58)
-  columns.target = flexible_width - columns.branch
-  if flexible_width >= 12 then
-    columns.branch = math.max(6, columns.branch)
-    columns.target = flexible_width - columns.branch
-    if columns.target < 6 then
-      columns.target = 6
-      columns.branch = flexible_width - columns.target
-    end
-  end
-  return columns
+  return mission_dashboard.role_column_widths(dashboard_width)
 end
 
 function M:mission_role_table_line(columns, values)
-  columns = type(columns) == "table" and columns or self:mission_role_column_widths(80)
-  values = type(values) == "table" and values or {}
-  return table.concat({
-    self.workspace_ui.pad_display_right(values.role, columns.role),
-    MISSION_ROLE_TABLE_GAP,
-    self.workspace_ui.pad_display_right(values.status, columns.status),
-    MISSION_ROLE_TABLE_GAP,
-    self.workspace_ui.pad_display_right(values.mode, columns.mode),
-    MISSION_ROLE_TABLE_GAP,
-    self.workspace_ui.pad_display_right(values.profile, columns.profile),
-    MISSION_ROLE_TABLE_GAP,
-    self.workspace_ui.pad_display_right(values.age, columns.age),
-    MISSION_ROLE_TABLE_GAP,
-    self.workspace_ui.pad_display_right(values.review, columns.review),
-    MISSION_ROLE_TABLE_GAP,
-    self.workspace_ui.pad_display_right(values.branch, columns.branch),
-    MISSION_ROLE_TABLE_GAP,
-    self.workspace_ui.pad_display_right(values.cleanup, columns.cleanup),
-    MISSION_ROLE_TABLE_GAP,
-    self.workspace_ui.pad_display_right(values.target, columns.target),
-  })
+  return mission_dashboard.role_table_line(self.workspace_ui, columns, values)
 end
 
 function M:mission_role_line(entry, dashboard_width, now, dirty_by_role)
-  local role = entry.mission_role or entry.name or entry.safe_name
-  local status = entry.status or "inactive"
-  local mode = self:mission_mode_label(entry)
-  local profile = self:permission_profile_label(entry)
-  local details = self:mission_workspace_details(entry, dirty_by_role, now)
-  local columns = self:mission_role_column_widths(dashboard_width)
-  local target = type(entry.target_path) == "string" and entry.target_path ~= ""
-      and vim.fn.fnamemodify(entry.target_path, ":t")
-    or "none"
-  return center_display_line(
-    self.workspace_ui,
-    self:mission_role_table_line(columns, {
-      role = role,
-      status = status,
-      mode = mode,
-      profile = profile,
-      age = details.last_activity,
-      review = details.needs_review,
-      branch = details.branch,
-      cleanup = details.cleanup_status,
-      target = target,
-    }),
-    dashboard_width
-  )
+  return mission_dashboard.role_line(self, entry, dashboard_width, now, dirty_by_role)
 end
 
 function M:dashboard_row_highlight_range(line)
-  line = tostring(line or "")
-  local start_col = line:find("%S")
-  if not start_col then
-    return 0, 0
-  end
-  return start_col - 1, #line
+  return mission_dashboard.row_highlight_range(line)
 end
 
 function M:dashboard_command_lines(dashboard_width)
-  local width = math.max(40, tonumber(dashboard_width) or 80)
-  local parts = {}
-  for _, item in ipairs(dashboard_command_items) do
-    table.insert(parts, item.key .. " " .. item.label)
-  end
-  local line = self.workspace_ui.truncate_display_tail(table.concat(parts, " "), width)
-  return { center_display_line(self.workspace_ui, line, width) }
+  return mission_dashboard.command_lines(self, dashboard_width)
 end
 
 function M:dashboard_token_usage_line(dashboard_width)
-  local usage = tostring(self.token_usage_label() or "")
-  if usage == "" then
-    return nil
-  end
-  return center_display_line(self.workspace_ui, usage, dashboard_width)
+  return mission_dashboard.token_usage_line(self, dashboard_width)
 end
 
 function M:dashboard_min_height_for_lines(lines)
-  for _, line in ipairs(lines or {}) do
-    if tostring(line):find("usage | ", 1, true) then
-      return 2
-    end
-  end
-  return 1
+  return mission_dashboard.min_height_for_lines(lines)
 end
 
 function M:refresh_dashboard_token_usage(force)
@@ -1283,95 +1133,7 @@ function M:missions_for_root(root)
 end
 
 function M:dashboard_lines(root, opts)
-  opts = type(opts) == "table" and opts or {}
-  local all_missions, error_message = self:missions_for_root(root)
-  if error_message then
-    return { error_message }, {}, {}
-  end
-  local query = tostring(opts.query or "")
-  local missions = self:filter_missions(all_missions, query)
-  local dashboard_width = tonumber(opts.dashboard_width) or self:window_width() or self:dashboard_config(1).width
-  local now = self:dashboard_now(opts)
-  local lines = {}
-  local items = {}
-  local selectable_rows = {}
-  local best_match_row = nil
-  if #all_missions == 0 then
-    return { center_display_line(self.workspace_ui, "No Codux missions", dashboard_width) }, items, selectable_rows, nil, 0
-  end
-  if query ~= "" and #missions == 0 then
-    return { center_display_line(self.workspace_ui, "No matching Codux missions", dashboard_width) },
-      items,
-      selectable_rows,
-      nil,
-      #all_missions
-  end
-
-  local total_roles = 0
-  local total_active = 0
-  local total_question = 0
-  local total_idle = 0
-  for _, mission in ipairs(missions) do
-    local counts = self.mission.status_counts(mission)
-    total_roles = total_roles + counts.total
-    total_active = total_active + counts.active
-    total_question = total_question + counts.question
-    total_idle = total_idle + counts.idle
-  end
-
-  table.insert(
-    lines,
-    center_display_line(
-      self.workspace_ui,
-      string.format(
-        "%s | %s | active %d | question %d | idle %d",
-        pluralize(#missions, "mission", "missions"),
-        pluralize(total_roles, "role", "roles"),
-        total_active,
-        total_question,
-        total_idle
-      ),
-      dashboard_width
-    )
-  )
-  local token_usage_line = self:dashboard_token_usage_line(dashboard_width)
-  if token_usage_line then
-    table.insert(lines, token_usage_line)
-  end
-
-  for mission_index, mission in ipairs(missions) do
-    table.insert(lines, "")
-    local counts = self.mission.status_counts(mission)
-    local status = self.mission.status_label(mission)
-    table.insert(lines, self:mission_dashboard_line(mission, counts, status, dashboard_width))
-    items[#lines] = { kind = "mission", mission = mission }
-    table.insert(selectable_rows, #lines)
-    if query ~= "" and not best_match_row and mission._codux_match_kind == "mission" then
-      best_match_row = #lines
-    end
-    table.insert(lines, self:mission_role_header_line(dashboard_width))
-    local dirty_by_role = self:mission_dirty_status_by_role(root, mission, now)
-    for _, entry in ipairs(mission.roles) do
-      local line = self:mission_role_line(entry, dashboard_width, now, dirty_by_role)
-      table.insert(lines, line)
-      items[#lines] = { kind = "role", mission = mission, entry = entry }
-      table.insert(selectable_rows, #lines)
-      if
-        query ~= ""
-        and not best_match_row
-        and mission._codux_match_kind == "role"
-        and mission._codux_match_entry_key == entry_key(entry)
-      then
-        best_match_row = #lines
-      end
-    end
-  end
-
-  if query ~= "" and not best_match_row and #selectable_rows > 0 then
-    best_match_row = selectable_rows[1]
-  end
-
-  return lines, items, selectable_rows, best_match_row, #all_missions
+  return mission_dashboard.lines(self, root, opts)
 end
 
 function M:mission_for_name(root, name)
@@ -1531,65 +1293,7 @@ function M:confirm_delete_mission(mission, root)
 end
 
 function M:highlight_dashboard(bufnr, lines, items)
-  if vim.api and type(vim.api.nvim_set_hl) == "function" then
-    pcall(vim.api.nvim_set_hl, 0, "CoduxWhichKeyUsage", { fg = "#8b949e" })
-  end
-  pcall(vim.api.nvim_buf_clear_namespace, bufnr, self.namespace, 0, -1)
-  pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", 0, 0, -1)
-
-  for index, line in ipairs(lines) do
-    local item = items[index]
-    if line == "Commands" then
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKeyDesc", index - 1, 0, -1)
-    elseif line:find("usage | ", 1, true) then
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "CoduxWhichKeyUsage", index - 1, 0, -1)
-    elseif line:find("^%s+Tab%s", 1, false) or line:find("^%s+O%s", 1, false) or line:find("^%s+n%s", 1, false) then
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
-    elseif line:find("^Output%s%s", 1, false) then
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKeyDesc", index - 1, 0, 6)
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 6, -1)
-    elseif item and item.kind == "mission" and not line:find("^%s+objective", 1, false) then
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKey", index - 1, 0, -1)
-    elseif item and item.kind == "mission" then
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
-    elseif line:find("^%s*role%s+", 1, false) then
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Identifier", index - 1, 0, -1)
-    elseif item and item.kind == "role" then
-      local status = item.entry and item.entry.status or "inactive"
-      local group = status == "question" and "WarningMsg"
-        or status == "active" and "MoreMsg"
-        or status == "idle" and "Identifier"
-        or "Comment"
-      local status_start = line:find(status, 1, true)
-      if status_start then
-        pcall(
-          vim.api.nvim_buf_add_highlight,
-          bufnr,
-          self.namespace,
-          group,
-          index - 1,
-          status_start - 1,
-          status_start - 1 + #status
-        )
-      end
-    end
-  end
-
-  local has_selected_row = self.state.mission_dashboard_selected_row ~= nil
-  local selected_row = self.state.mission_dashboard_selected_row or self.state.mission_dashboard_best_match_row
-  if selected_row then
-    local group = has_selected_row and "IncSearch" or "Visual"
-    local start_col, end_col = self:dashboard_row_highlight_range(lines[selected_row])
-    local ok = type(vim.api.nvim_buf_set_extmark) == "function"
-      and pcall(vim.api.nvim_buf_set_extmark, bufnr, self.namespace, selected_row - 1, start_col, {
-        end_col = end_col,
-        hl_group = group,
-        hl_eol = false,
-      })
-    if not ok then
-      pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, group, selected_row - 1, start_col, end_col)
-    end
-  end
+  return mission_dashboard.highlight(self, bufnr, lines, items)
 end
 
 function M:highlight_command_bar(bufnr, lines)

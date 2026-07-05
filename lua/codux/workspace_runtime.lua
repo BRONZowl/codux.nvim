@@ -2,152 +2,27 @@ local M = {}
 M.__index = M
 
 local command_util = require("codux.command")
+local filetypes = require("codux.filetypes")
 local mission_mod = require("codux.mission")
+local text_util = require("codux.text")
+local workspace_git = require("codux.workspace_git")
+local workspace_lifecycle = require("codux.workspace_lifecycle")
+local workspace_remote = require("codux.workspace_remote")
 
 local function noop() end
 
 local function trim(value)
-  local trimmed = (value or ""):gsub("^%s+", ""):gsub("%s+$", "")
-  return trimmed
+  return text_util.trim(value)
 end
 
-local function strip_trailing_slashes(value)
-  value = tostring(value or "")
-  while #value > 1 and value:sub(-1) == "/" do
-    value = value:sub(1, -2)
-  end
-  return value
-end
-
-local function path_join(...)
-  local parts = {}
-  for _, value in ipairs({ ... }) do
-    value = tostring(value or "")
-    if value ~= "" then
-      table.insert(parts, value)
-    end
-  end
-  return table.concat(parts, "/"):gsub("/+", "/")
-end
-
-local function normalize_absolute_path(base, path)
-  path = tostring(path or "")
-  if path == "" then
-    return nil
-  end
-  if path:sub(1, 1) ~= "/" then
-    path = path_join(base, path)
-  end
-
-  local stack = {}
-  for part in path:gmatch("[^/]+") do
-    if part == ".." then
-      if #stack > 0 then
-        table.remove(stack)
-      end
-    elseif part ~= "." and part ~= "" then
-      table.insert(stack, part)
-    end
-  end
-
-  return "/" .. table.concat(stack, "/")
-end
-
-local function normalize_relative_directory(value)
-  value = trim(value)
-  value = value:gsub("^%./+", "")
-  value = value:gsub("/+$", "")
-  return value
-end
-
-local function starts_with_path(path, root)
-  path = strip_trailing_slashes(path)
-  root = strip_trailing_slashes(root)
-  return path == root or path:sub(1, #root + 1) == root .. "/"
-end
-
-local function relative_path_escapes_root(value)
-  value = normalize_relative_directory(value)
-  return value == ".." or value:sub(1, 3) == "../" or value:find("/%.%./") ~= nil or value:sub(-3) == "/.."
-end
-
-local function normalize_codex_mode(mode)
-  if mode == "execute" or mode == "plan" then
-    return mode
-  end
-
-  return nil
-end
-
-local function inactive_like_status(status)
-  return status == "inactive"
-end
-
-local mission_control_filetypes = {
-  ["codux-missions"] = true,
-  ["codux-missions-search"] = true,
-  ["codux-missions-command"] = true,
-  ["codux-missions-commands"] = true,
-  ["codux-missions-actions"] = true,
-  ["codux-missions-output"] = true,
-  ["codux-mission-preview"] = true,
-  ["codux-mission-question-answer"] = true,
-  ["codux-mission-question-answer-sink"] = true,
-  ["codux-mission-question-note"] = true,
-  ["codux-mission-question-option"] = true,
-  ["codux-mission-objective-preview"] = true,
-  ["codux-mission-objective"] = true,
-  ["codux-mission-workspace-prompt"] = true,
-}
-
-local function prepend_command(command, args)
-  local result = { command }
-  for _, arg in ipairs(args or {}) do
-    table.insert(result, arg)
-  end
-  return result
-end
-
-local function path_token(value)
-  value = tostring(value or ""):gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
-  if value == "" then
-    return "workspace"
-  end
-  return value:sub(1, 96)
-end
-
-local launch_socket_counter = 0
-
-local function short_path_token(value, max_length)
-  max_length = math.max(1, tonumber(max_length) or 32)
-  return path_token(value):sub(1, max_length)
-end
-
-local function launch_socket_token()
-  launch_socket_counter = (launch_socket_counter + 1) % 65536
-  local stamp = os.time() % 1048576
-  local uv = vim.uv or vim.loop
-  if type(uv) == "table" and type(uv.hrtime) == "function" then
-    local ok, value = pcall(uv.hrtime)
-    if ok and type(value) == "number" then
-      stamp = value % 1048576
-    end
-  end
-  return string.format("%05x%04x", stamp, launch_socket_counter)
-end
-
-local function vimscript_string(value)
-  value = tostring(value or "")
-  value = value:gsub("\\", "\\\\")
-  value = value:gsub('"', '\\"')
-  value = value:gsub("\n", "\\n")
-  value = value:gsub("\r", "\\r")
-  return '"' .. value .. '"'
-end
-
-local function luaeval_expr(lua_expression)
-  return "luaeval(" .. vimscript_string(lua_expression) .. ")"
-end
+local strip_trailing_slashes = workspace_git.strip_trailing_slashes
+local normalize_absolute_path = workspace_git.normalize_absolute_path
+local normalize_relative_directory = workspace_git.normalize_relative_directory
+local starts_with_path = workspace_git.starts_with_path
+local relative_path_escapes_root = workspace_git.relative_path_escapes_root
+local normalize_codex_mode = workspace_git.normalize_codex_mode
+local inactive_like_status = workspace_git.inactive_like_status
+local prepend_command = workspace_git.prepend_command
 
 local function default_current_buffer()
   return vim.api.nvim_get_current_buf()
@@ -1066,70 +941,25 @@ function M:dashboard_workspace_status(record, window_id)
 end
 
 function M:workspace_server_dir()
-  local base = nil
-  if type(vim.fn.stdpath) == "function" then
-    local ok, value = pcall(vim.fn.stdpath, "run")
-    if ok and type(value) == "string" and value ~= "" then
-      base = value
-    end
-  end
-  if not base and type(vim.fn.tempname) == "function" then
-    local ok, value = pcall(vim.fn.tempname)
-    if ok and type(value) == "string" and value ~= "" then
-      base = vim.fn.fnamemodify(value, ":h")
-    end
-  end
-  base = base or "/tmp"
-  local directory = base .. "/codux"
-  pcall(vim.fn.mkdir, directory, "p")
-  return directory
+  return workspace_remote.server_dir()
 end
 
 function M:workspace_server_path(root, safe_name)
-  return self:workspace_server_dir() .. "/" .. path_token(root) .. "-" .. path_token(safe_name) .. ".sock"
+  return workspace_remote.server_path(root, safe_name, self:workspace_server_dir())
 end
 
 function M:workspace_launch_server_path(root, safe_name)
-  local root_token = path_token(root)
-  root_token = root_token:sub(math.max(1, #root_token - 11))
-  return self:workspace_server_dir()
-    .. "/ws-"
-    .. short_path_token(safe_name, 36)
-    .. "-"
-    .. root_token
-    .. "-"
-    .. launch_socket_token()
-    .. ".sock"
+  return workspace_remote.launch_server_path(root, safe_name, self:workspace_server_dir())
 end
 
 function M:remote_luaeval(server, lua_expression, opts)
-  opts = type(opts) == "table" and opts or {}
-  if type(server) ~= "string" or server == "" then
-    return nil, "workspace server is unavailable"
-  end
-
-  local attempts = math.max(1, tonumber(opts.attempts) or 1)
-  local last_output = nil
-  for attempt = 1, attempts do
-    local output, code = self:nvim_system({ "--server", server, "--remote-expr", luaeval_expr(lua_expression) })
-    if code == 0 then
-      return trim(output), nil
-    end
-    last_output = trim(output)
-    if attempt < attempts then
-      pcall(vim.fn.sleep, tostring(tonumber(opts.sleep_ms) or 100) .. "m")
-    end
-  end
-
-  return nil, last_output ~= "" and last_output or "workspace is not reachable"
+  return workspace_remote.remote_luaeval(function(args)
+    return self:nvim_system(args)
+  end, server, lua_expression, opts)
 end
 
 function M:workspace_preview_session_name(entry)
-  entry = type(entry) == "table" and entry or {}
-  return "codux-preview-"
-    .. path_token(entry.project_root or "")
-    .. "-"
-    .. path_token(entry.safe_name or entry.name or entry.window_name or "")
+  return workspace_remote.preview_session_name(entry)
 end
 
 function M:workspace_interactive_preview(entry, opts)
@@ -1230,6 +1060,32 @@ function M:ensure_workspace_remote(entry, opts)
   return nil, last_error
 end
 
+function M:remote_workspace_call(entry, lua_expression, opts)
+  opts = type(opts) == "table" and opts or {}
+  local workspace = type(opts.workspace) == "table" and opts.workspace or nil
+  local ensure_error = nil
+  if not workspace then
+    workspace, ensure_error = self:ensure_workspace_remote(entry, {
+      attempts = opts.remote_attempts,
+      sleep_ms = opts.remote_sleep_ms,
+    })
+  end
+  if not workspace then
+    return false, ensure_error or opts.missing_error or "workspace not found"
+  end
+
+  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
+  local output, remote_error = self:remote_luaeval(server, lua_expression, {
+    attempts = opts.attempts or 15,
+    sleep_ms = opts.sleep_ms or 120,
+  })
+  if output == "ok" then
+    return true, nil, workspace
+  end
+
+  return false, remote_error or output or opts.error_message or "workspace command failed", workspace
+end
+
 function M:send_prompt_to_workspace(entry, prompt, opts)
   opts = type(opts) == "table" and opts or {}
   prompt = tostring(prompt or "")
@@ -1237,12 +1093,7 @@ function M:send_prompt_to_workspace(entry, prompt, opts)
     return false, "Prompt is required"
   end
 
-  local workspace, ensure_error = self:ensure_workspace_remote(entry)
-  if not workspace then
-    return false, ensure_error or "workspace not found"
-  end
-
-  local plan_ok, plan_error = self:ensure_workspace_plan_mode(workspace, {
+  local plan_ok, plan_error, workspace = self:ensure_workspace_plan_mode(entry, {
     attempts = opts.plan_attempts or opts.attempts,
     sleep_ms = opts.plan_sleep_ms or opts.sleep_ms,
     remote_attempts = opts.remote_attempts,
@@ -1252,17 +1103,14 @@ function M:send_prompt_to_workspace(entry, prompt, opts)
     return false, plan_error or "Failed to switch workspace to plan mode"
   end
 
-  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
-  local output, remote_error = self:remote_luaeval(
-    server,
-    "require('codux')._v5.remote_send_to_codex(" .. self:lua_string(prompt) .. ")",
-    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
-  )
-  if output == "ok" then
-    return true, nil
-  end
-
-  return false, remote_error or output or "Failed to send prompt"
+  return self:remote_workspace_call(entry, "require('codux')._v5.remote_send_to_codex(" .. self:lua_string(prompt) .. ")", {
+    attempts = opts.attempts,
+    sleep_ms = opts.sleep_ms,
+    remote_attempts = opts.remote_attempts,
+    remote_sleep_ms = opts.remote_sleep_ms,
+    workspace = workspace,
+    error_message = "Failed to send prompt",
+  })
 end
 
 function M:select_workspace_question_option(entry, option, opts)
@@ -1275,26 +1123,21 @@ function M:select_workspace_question_option(entry, option, opts)
     return false, "Option number must be 1, 2, 3, or 4"
   end
 
-  local workspace, ensure_error = self:ensure_workspace_remote(entry)
-  if not workspace then
-    return false, ensure_error or "workspace not found"
-  end
-
-  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
-  local output, remote_error = self:remote_luaeval(
-    server,
+  return self:remote_workspace_call(
+    entry,
     "require('codux')._v5.remote_select_codex_question_option("
       .. self:lua_string(option)
       .. ", "
       .. tostring(opts.with_note == true)
       .. ")",
-    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
+    {
+      attempts = opts.attempts,
+      sleep_ms = opts.sleep_ms,
+      remote_attempts = opts.remote_attempts,
+      remote_sleep_ms = opts.remote_sleep_ms,
+      error_message = "Failed to answer question",
+    }
   )
-  if output == "ok" then
-    return true, nil
-  end
-
-  return false, remote_error or output or "Failed to answer question"
 end
 
 function M:submit_workspace_question_note(entry, note, opts)
@@ -1304,83 +1147,50 @@ function M:submit_workspace_question_note(entry, note, opts)
     return false, "Note is required"
   end
 
-  local workspace, ensure_error = self:ensure_workspace_remote(entry)
-  if not workspace then
-    return false, ensure_error or "workspace not found"
-  end
-
-  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
-  local output, remote_error = self:remote_luaeval(
-    server,
+  return self:remote_workspace_call(
+    entry,
     "require('codux')._v5.remote_submit_codex_question_note(" .. self:lua_string(note) .. ")",
-    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
+    {
+      attempts = opts.attempts,
+      sleep_ms = opts.sleep_ms,
+      remote_attempts = opts.remote_attempts,
+      remote_sleep_ms = opts.remote_sleep_ms,
+      error_message = "Failed to send question note",
+    }
   )
-  if output == "ok" then
-    return true, nil
-  end
-
-  return false, remote_error or output or "Failed to send question note"
 end
 
 function M:interrupt_workspace(entry, opts)
   opts = type(opts) == "table" and opts or {}
-  local workspace, ensure_error = self:ensure_workspace_remote(entry)
-  if not workspace then
-    return false, ensure_error or "workspace not found"
-  end
-
-  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
-  local output, remote_error = self:remote_luaeval(
-    server,
-    "require('codux')._v5.remote_interrupt_codex_session()",
-    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
-  )
-  if output == "ok" then
-    return true, nil
-  end
-
-  return false, remote_error or output or "Failed to interrupt workspace"
+  return self:remote_workspace_call(entry, "require('codux')._v5.remote_interrupt_codex_session()", {
+    attempts = opts.attempts,
+    sleep_ms = opts.sleep_ms,
+    remote_attempts = opts.remote_attempts,
+    remote_sleep_ms = opts.remote_sleep_ms,
+    error_message = "Failed to interrupt workspace",
+  })
 end
 
 function M:switch_workspace_mode(entry, opts)
   opts = type(opts) == "table" and opts or {}
-  local workspace, ensure_error = self:ensure_workspace_remote(entry)
-  if not workspace then
-    return false, ensure_error or "workspace not found"
-  end
-
-  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
-  local output, remote_error = self:remote_luaeval(
-    server,
-    "require('codux')._v5.remote_switch_codex_mode()",
-    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
-  )
-  if output == "ok" then
-    return true, nil
-  end
-
-  return false, remote_error or output or "Failed to switch workspace mode"
+  return self:remote_workspace_call(entry, "require('codux')._v5.remote_switch_codex_mode()", {
+    attempts = opts.attempts,
+    sleep_ms = opts.sleep_ms,
+    remote_attempts = opts.remote_attempts,
+    remote_sleep_ms = opts.remote_sleep_ms,
+    error_message = "Failed to switch workspace mode",
+  })
 end
 
 function M:ensure_workspace_plan_mode(entry, opts)
   opts = type(opts) == "table" and opts or {}
-  local workspace, ensure_error =
-    self:ensure_workspace_remote(entry, { attempts = opts.remote_attempts or 60, sleep_ms = opts.remote_sleep_ms or 250 })
-  if not workspace then
-    return false, ensure_error or "workspace not found"
-  end
-
-  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
-  local output, remote_error = self:remote_luaeval(
-    server,
-    "require('codux')._v5.remote_ensure_plan_mode()",
-    { attempts = opts.attempts or 60, sleep_ms = opts.sleep_ms or 250 }
-  )
-  if output == "ok" then
-    return true, nil
-  end
-
-  return false, remote_error or output or "Failed to switch workspace to plan mode"
+  return self:remote_workspace_call(entry, "require('codux')._v5.remote_ensure_plan_mode()", {
+    attempts = opts.attempts or 60,
+    sleep_ms = opts.sleep_ms or 250,
+    remote_attempts = opts.remote_attempts or 60,
+    remote_sleep_ms = opts.remote_sleep_ms or 250,
+    error_message = "Failed to switch workspace to plan mode",
+  })
 end
 
 function M:verify_workspace_launch(workspace, opts)
@@ -2246,7 +2056,7 @@ function M:rename_saved_workspace(entry, new_name)
   local old_branch = existing.worktree_branch
   local new_branch = nil
   if existing.workspace_kind == "worktree" then
-    new_worktree_path = normalize_absolute_path(normalize_absolute_path(old_worktree_path, ".."), safe_name_or_error)
+    new_worktree_path = workspace_lifecycle.renamed_worktree_path(old_worktree_path, safe_name_or_error)
     new_branch = self:renamed_worktree_branch(existing, safe_name_or_error)
     if M.target_path_exists(new_worktree_path) then
       self.notify("worktree path already exists", vim.log.levels.ERROR)
@@ -2292,9 +2102,8 @@ function M:rename_saved_workspace(entry, new_name)
     existing.worktree_path = new_worktree_path
     existing.worktree_branch = new_branch
     existing.git_branch = new_branch
-    if type(existing.target_path) == "string" and starts_with_path(existing.target_path, old_worktree_path) then
-      existing.target_path = normalize_absolute_path(new_worktree_path, existing.target_path:sub(#strip_trailing_slashes(old_worktree_path) + 2))
-    end
+    existing.target_path =
+      workspace_lifecycle.retarget_path_after_worktree_move(existing.target_path, old_worktree_path, new_worktree_path)
   end
   existing.tmux_window = new_window_name
   existing.tmux_target = entry.window_id and M.tmux_target(self:current_tmux_session(), new_window_name) or nil
@@ -3470,15 +3279,7 @@ function M:target_sync_allowed(event, current_filetype)
   end
 
   local filetype = current_filetype()
-  if
-    filetype == "codux"
-    or filetype == "codux-workspaces"
-    or filetype == "codux-workspaces-footer"
-    or filetype == "codux-workspace-create"
-    or filetype == "codux-workspace-create-footer"
-    or filetype == "codux-workspace-instruction"
-    or mission_control_filetypes[filetype]
-  then
+  if filetypes.is_internal(filetype) then
     return false
   end
 

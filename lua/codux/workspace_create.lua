@@ -2,9 +2,10 @@ local M = {}
 M.__index = M
 
 local mission_mod = require("codux.mission")
+local text_util = require("codux.text")
 
 local function default_trim(value)
-  return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  return text_util.trim(value)
 end
 
 local function noop() end

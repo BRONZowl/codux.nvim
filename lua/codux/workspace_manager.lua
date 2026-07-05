@@ -3,6 +3,7 @@ M.__index = M
 
 local action_palette_mod = require("codux.action_palette")
 local dashboard_search_mod = require("codux.dashboard_search")
+local text_util = require("codux.text")
 local ui = require("codux.ui")
 local workspace_ui = require("codux.workspace_ui")
 
@@ -21,9 +22,7 @@ function M.new(opts)
   local controller = {
     state = type(opts.state) == "table" and opts.state or {},
     notify = type(opts.notify) == "function" and opts.notify or noop,
-    trim = type(opts.trim) == "function" and opts.trim or function(value)
-      return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
-    end,
+    trim = type(opts.trim) == "function" and opts.trim or text_util.trim,
     ui = type(opts.ui) == "table" and opts.ui or ui,
     workspace_ui = type(opts.workspace_ui) == "table" and opts.workspace_ui or workspace_ui,
     is_valid_win = type(opts.is_valid_win) == "function" and opts.is_valid_win or ui.is_valid_win,
