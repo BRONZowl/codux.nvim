@@ -27,10 +27,12 @@ function M.entries_for_project(runtime, root)
       if type(workspaces) == "table" then
         for safe_name, record in pairs(workspaces) do
           if type(record) == "table" then
-            local record_root = record.project_root or project_root
+            local explicit_record_root = type(record.project_root) == "string" and record.project_root ~= ""
+            local record_root = explicit_record_root and record.project_root or project_root
             local include = record_root == root
               or (
-                current_common_dir ~= nil
+                not explicit_record_root
+                and current_common_dir ~= nil
                 and record.workspace_kind == "worktree"
                 and record.git_common_dir == current_common_dir
               )

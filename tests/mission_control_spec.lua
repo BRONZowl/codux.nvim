@@ -4,25 +4,13 @@ local assert_nil = h.assert_nil
 local assert_true = h.assert_true
 local assert_false = h.assert_false
 local assert_contains = h.assert_contains
+local fixtures = require("tests.mission_control_fixtures")
 
 local mission_control_mod = require("codux.mission_control")
 local ui_mod = require("codux.ui")
 local workspace_ui = require("codux.workspace_ui")
 
-local function mission_role_entry(mission_name, role)
-  mission_name = mission_name or "Alpha"
-  role = role or "Builder"
-  local mission_key = mission_name:lower()
-  local role_key = role:lower()
-  local name = mission_key .. "-" .. role_key
-  return {
-    name = name,
-    safe_name = name,
-    mission_id = "mission:" .. mission_key,
-    mission_name = mission_name,
-    mission_role = role,
-  }
-end
+local mission_role_entry = fixtures.mission_role_entry
 
 do
   local controller = mission_control_mod.new({

@@ -3,11 +3,13 @@ M.__index = M
 
 local action_palette_mod = require("codux.action_palette")
 local dashboard_actions = require("codux.mission_dashboard_actions")
+local dashboard_command_bar = require("codux.mission_dashboard_command_bar")
 local dashboard_layout = require("codux.mission_dashboard_layout")
 local dashboard_render = require("codux.mission_dashboard_render")
 local dashboard_search_mod = require("codux.dashboard_search")
-local filetypes = require("codux.filetypes")
 local mission_dashboard = require("codux.mission_dashboard")
+local dashboard_selection = require("codux.mission_dashboard_selection")
+local dashboard_windows = require("codux.mission_dashboard_windows")
 local mission_mod = require("codux.mission")
 local text_util = require("codux.text")
 local ui = require("codux.ui")
@@ -20,8 +22,6 @@ local function trim(value)
 end
 
 local dashboard_command_items = mission_dashboard.command_items()
-
-local mission_control_filetypes = filetypes.mission_control
 
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
@@ -820,101 +820,19 @@ function M:highlight_dashboard(bufnr, lines, items)
 end
 
 function M:highlight_command_bar(bufnr, lines)
-  pcall(vim.api.nvim_buf_clear_namespace, bufnr, self.namespace, 0, -1)
-  for index, line in ipairs(lines or {}) do
-    pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, 0, -1)
-    local search_start = 1
-    for _, item in ipairs(dashboard_command_items) do
-      local key = tostring(item.key or "")
-      local label = tostring(item.label or "")
-      local pair = key .. " " .. label
-      local pair_start = line:find(pair, search_start, true)
-      if pair_start then
-        local key_start = pair_start - 1
-        local label_start = pair_start + #key
-        pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKey", index - 1, key_start, key_start + #key)
-        pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "Comment", index - 1, label_start, label_start + #label)
-        search_start = pair_start + #pair
-      end
-    end
-  end
+  return dashboard_command_bar.highlight(self, bufnr, lines, dashboard_command_items)
 end
 
 function M:render_command_bar()
-  if not self.is_loaded_buf(self.state.mission_dashboard_command_bar_buf) then
-    return false
-  end
-  local width = self:window_width() or self:dashboard_config(1).width
-  local lines = self:dashboard_command_lines(width)
-  self.ui.set_lines(self.state.mission_dashboard_command_bar_buf, lines, { modifiable = true })
-  self:highlight_command_bar(self.state.mission_dashboard_command_bar_buf, lines)
-  return true
+  return dashboard_command_bar.render(self)
 end
 
 function M:open_command_bar()
-  if not self.is_valid_win(self.state.mission_dashboard_win) then
-    return false
-  end
-  if self.is_valid_win(self.state.mission_dashboard_command_bar_win) and self.is_loaded_buf(self.state.mission_dashboard_command_bar_buf) then
-    return self:render_command_bar()
-  end
-
-  local lines = self:dashboard_command_lines(self:window_width() or self:dashboard_config(1).width)
-  local bufnr = self.ui.create_scratch_buffer({
-    bufhidden = "wipe",
-    filetype = "codux-missions-commands",
-    buftype = "nofile",
-    swapfile = false,
-    modifiable = false,
-  })
-  if not bufnr then
-    self.notify("Failed to create Codux mission commands", vim.log.levels.ERROR)
-    return false
-  end
-  ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
-  self.ui.set_lines(bufnr, lines, { modifiable = true })
-
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, self:dashboard_command_config(#lines))
-  if not win_ok then
-    self.ui.delete_buffer(bufnr)
-    self.notify("Failed to open Codux mission commands", vim.log.levels.ERROR)
-    return false
-  end
-
-  self.state.mission_dashboard_command_bar_buf = bufnr
-  self.state.mission_dashboard_command_bar_win = win
-  self.ui.set_window_options(win, {
-    wrap = false,
-    number = false,
-    relativenumber = false,
-    signcolumn = "no",
-    winfixbuf = true,
-    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
-  })
-  self:highlight_command_bar(bufnr, lines)
-
-  local group = vim.api.nvim_create_augroup("codux-mission-commands-" .. tostring(bufnr), { clear = true })
-  vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
-    group = group,
-    buffer = bufnr,
-    callback = function()
-      if self.state.mission_dashboard_command_bar_buf == bufnr then
-        self.state.mission_dashboard_command_bar_buf = nil
-        self.state.mission_dashboard_command_bar_win = nil
-      end
-      pcall(vim.api.nvim_del_augroup_by_id, group)
-    end,
-  })
-
-  return true
+  return dashboard_command_bar.open(self)
 end
 
 function M:close_command_bar()
-  self.ui.close_window(self.state.mission_dashboard_command_bar_win)
-  self.ui.delete_buffer(self.state.mission_dashboard_command_bar_buf)
-  self.state.mission_dashboard_command_bar_win = nil
-  self.state.mission_dashboard_command_bar_buf = nil
-  return true
+  return dashboard_command_bar.close(self)
 end
 
 function M:render_dashboard()
@@ -967,76 +885,23 @@ function M:clear_query()
 end
 
 function M:selected_row()
-  if self.state.mission_dashboard_selected_row then
-    return self.state.mission_dashboard_selected_row
-  end
-
-  if self.state.mission_dashboard_best_match_row then
-    return self.state.mission_dashboard_best_match_row
-  end
-
-  if not self.is_valid_win(self.state.mission_dashboard_win) then
-    return nil
-  end
-
-  local ok, cursor = pcall(vim.api.nvim_win_get_cursor, self.state.mission_dashboard_win)
-  return ok and cursor[1] or nil
+  return dashboard_selection.selected_row(self)
 end
 
 function M:selected_item()
-  local row = self:selected_row()
-  if not row then
-    return nil
-  end
-  return self.state.mission_dashboard_items and self.state.mission_dashboard_items[row] or nil
+  return dashboard_selection.selected_item(self)
 end
 
 function M:selected_selectable_item()
-  local row = self:selected_row()
-  if not row then
-    return nil
-  end
-
-  local selectable = self.state.mission_dashboard_selectable_rows or {}
-  local found = false
-  for _, selectable_row in ipairs(selectable) do
-    if selectable_row == row then
-      found = true
-      break
-    end
-  end
-  if not found then
-    return nil
-  end
-
-  return self.state.mission_dashboard_items and self.state.mission_dashboard_items[row] or nil
+  return dashboard_selection.selected_selectable_item(self)
 end
 
 function M:mission_list_focus_row()
-  local rows = self.state.mission_dashboard_selectable_rows or {}
-  if #rows == 0 then
-    return 1
-  end
-
-  local selected = self.state.mission_dashboard_selected_row or self.state.mission_dashboard_best_match_row
-  for _, row in ipairs(rows) do
-    if row == selected then
-      return row
-    end
-  end
-  return rows[1]
+  return dashboard_selection.mission_list_focus_row(self)
 end
 
 function M:focus_mission_list()
-  if not self.is_valid_win(self.state.mission_dashboard_win) then
-    return false
-  end
-
-  self.state.mission_dashboard_focus_match = false
-  if self.is_valid_win(self.state.mission_dashboard_command_win) then
-    return self.set_current_win(self.state.mission_dashboard_command_win)
-  end
-  return self.set_current_win(self.state.mission_dashboard_win)
+  return dashboard_selection.focus_mission_list(self)
 end
 
 function M:focus_search_input()
@@ -1048,34 +913,7 @@ function M:toggle_search_list_focus()
 end
 
 function M:move_mission_selection(delta)
-  if not self.is_valid_win(self.state.mission_dashboard_win) then
-    return false
-  end
-
-  local rows = self.state.mission_dashboard_selectable_rows or {}
-  if #rows == 0 then
-    return false
-  end
-
-  local current = self.state.mission_dashboard_selected_row
-    or self.state.mission_dashboard_best_match_row
-    or self:selected_row()
-    or rows[1]
-  local current_index = 1
-  for index, row in ipairs(rows) do
-    if row >= current then
-      current_index = index
-      break
-    end
-  end
-
-  local next_index = math.max(1, math.min(#rows, current_index + (tonumber(delta) or 0)))
-  local next_row = rows[next_index]
-  self.state.mission_dashboard_selected_row = next_row
-  self.state.mission_dashboard_search_confirmed = true
-  self.state.mission_dashboard_focus_match = false
-  self:render_dashboard()
-  return true
+  return dashboard_selection.move_mission_selection(self, delta)
 end
 
 function M:open_search_input(opts)
@@ -1083,141 +921,27 @@ function M:open_search_input(opts)
 end
 
 function M:lock_dashboard_mouse()
-  if self.state.mission_dashboard_saved_mouse == nil then
-    self.state.mission_dashboard_saved_mouse = vim.o.mouse
-  end
-  vim.o.mouse = ""
-  return true
+  return dashboard_windows.lock_dashboard_mouse(self)
 end
 
 function M:restore_dashboard_mouse()
-  local saved = self.state.mission_dashboard_saved_mouse
-  self.state.mission_dashboard_saved_mouse = nil
-  if saved ~= nil then
-    vim.o.mouse = saved
-  end
-  return true
+  return dashboard_windows.restore_dashboard_mouse(self)
 end
 
 function M:close_dashboard()
-  self:stop_monitor_timer()
-  if self.state.mission_dashboard_resize_augroup then
-    pcall(vim.api.nvim_del_augroup_by_id, self.state.mission_dashboard_resize_augroup)
-    self.state.mission_dashboard_resize_augroup = nil
-  end
-  self:close_action_palette()
-  self:close_output_panel()
-  self:close_command_bar()
-  self.ui.close_window(self.state.mission_dashboard_search_win)
-  self.ui.close_window(self.state.mission_dashboard_command_win)
-  self.ui.close_window(self.state.mission_dashboard_win)
-  self.ui.delete_buffer(self.state.mission_dashboard_search_buf)
-  self.ui.delete_buffer(self.state.mission_dashboard_command_bar_buf)
-  self.ui.delete_buffer(self.state.mission_dashboard_command_buf)
-  self.ui.delete_buffer(self.state.mission_dashboard_buf)
-
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
-    local bufnr = self.window_buffer(win)
-    if self.is_loaded_buf(bufnr) and mission_control_filetypes[self.buffer_filetype(bufnr)] then
-      self.ui.close_window(win)
-    end
-  end
-
-  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if self.is_loaded_buf(bufnr) and mission_control_filetypes[self.buffer_filetype(bufnr)] then
-      self.ui.delete_buffer(bufnr)
-    end
-  end
-
-  self.state.mission_dashboard_buf = nil
-  self.state.mission_dashboard_win = nil
-  self.state.mission_dashboard_search_buf = nil
-  self.state.mission_dashboard_search_win = nil
-  self.state.mission_dashboard_command_buf = nil
-  self.state.mission_dashboard_command_win = nil
-  self.state.mission_dashboard_command_bar_buf = nil
-  self.state.mission_dashboard_command_bar_win = nil
-  self.state.mission_dashboard_output_buf = nil
-  self.state.mission_dashboard_output_win = nil
-  self.state.mission_dashboard_output_entry = nil
-  self.state.mission_dashboard_output_key = nil
-  self.state.mission_dashboard_output_blocked_key = nil
-  self.state.mission_dashboard_output_job = nil
-  self.state.mission_dashboard_output_preview = nil
-  self.state.mission_dashboard_output_buf_kind = nil
-  self.state.mission_dashboard_action_buf = nil
-  self.state.mission_dashboard_action_win = nil
-  self.state.mission_dashboard_action_items = {}
-  self.state.mission_dashboard_action_mission = nil
-  self.state.mission_dashboard_action_workspace = nil
-  self.state.mission_dashboard_action_kind = nil
-  self.state.mission_dashboard_items = {}
-  self.state.mission_dashboard_selectable_rows = {}
-  self.state.mission_dashboard_query = ""
-  self.state.mission_dashboard_best_match_row = nil
-  self.state.mission_dashboard_selected_row = nil
-  self.state.mission_dashboard_focus_match = false
-  self.state.mission_dashboard_search_confirmed = false
-  self.state.mission_dashboard_project_root = nil
-  self.state.mission_dashboard_resize_augroup = nil
-  self.state.mission_dashboard_token_usage_refreshed_at = nil
-  self:restore_dashboard_mouse()
-  return true
+  return dashboard_windows.close_dashboard(self)
 end
 
 function M:stop_monitor_timer()
-  local timer = self.state.mission_dashboard_monitor_timer
-  self.state.mission_dashboard_monitor_timer = nil
-  if timer then
-    pcall(timer.stop, timer)
-    pcall(timer.close, timer)
-  end
+  return dashboard_windows.stop_monitor_timer(self)
 end
 
 function M:start_monitor_timer()
-  if self.state.mission_dashboard_monitor_timer then
-    return true
-  end
-
-  local loop = vim.uv or vim.loop
-  local timer = loop and type(loop.new_timer) == "function" and loop.new_timer() or nil
-  if not timer then
-    return false
-  end
-
-  self.state.mission_dashboard_monitor_timer = timer
-  local function tick()
-    if not self.is_valid_win(self.state.mission_dashboard_win) or not self.is_loaded_buf(self.state.mission_dashboard_buf) then
-      self:stop_monitor_timer()
-      return
-    end
-    self:render_dashboard()
-  end
-  local scheduled_tick = type(vim.schedule_wrap) == "function" and vim.schedule_wrap(tick) or tick
-  timer:start(1000, 1000, scheduled_tick)
-  return true
+  return dashboard_windows.start_monitor_timer(self)
 end
 
 function M:open_command_sink()
-  local bufnr, win = ui.open_hidden_command_sink({
-    ui = self.ui,
-    filetype = "codux-missions-command",
-    focusable = true,
-    enter = true,
-    on_create_buffer = function(target_bufnr)
-      ui.disable_buffer_completion(target_bufnr, { is_loaded_buf = self.is_loaded_buf })
-    end,
-    bind = function(target_bufnr)
-      self:bind_dashboard_commands(target_bufnr)
-    end,
-  })
-  if not bufnr then
-    return false
-  end
-
-  self.state.mission_dashboard_command_buf = bufnr
-  self.state.mission_dashboard_command_win = win
-  return true
+  return dashboard_windows.open_command_sink(self)
 end
 
 function M:selected_mission()
@@ -1245,21 +969,15 @@ function M:render_action_palette()
 end
 
 function M:dashboard_is_visible()
-  return self.is_loaded_buf(self.state.mission_dashboard_buf)
+  return dashboard_windows.dashboard_is_visible(self)
 end
 
 function M:refresh_loaded_dashboard()
-  if not self:dashboard_is_visible() then
-    return false
-  end
-  return self:render_dashboard()
+  return dashboard_windows.refresh_loaded_dashboard(self)
 end
 
 function M:refresh_or_open_dashboard(root)
-  if self:dashboard_is_visible() then
-    return self:render_dashboard()
-  end
-  return self:open_dashboard(root)
+  return dashboard_windows.refresh_or_open_dashboard(self, root)
 end
 
 function M:mission_count(root)
@@ -1434,96 +1152,7 @@ function M:bind_dashboard_commands(bufnr)
 end
 
 function M:open_dashboard(root)
-  self:close_dashboard()
-  root = root or self.project_root()
-  local lines, items, selectable_rows, best_match_row, mission_count = self:dashboard_lines(root)
-  if mission_count == 0 then
-    return self:open_prompt()
-  end
-  local initial_selected_item = items[selectable_rows[1]]
-  local bufnr = self.ui.create_scratch_buffer({
-    bufhidden = "wipe",
-    filetype = "codux-missions",
-    modifiable = false,
-  })
-  if not bufnr then
-    self.notify("Failed to create Codux missions dashboard", vim.log.levels.ERROR)
-    return false
-  end
-  ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
-  self:lock_dashboard_mouse()
-
-  self.ui.set_lines(bufnr, lines, { modifiable = true })
-  self.state.mission_dashboard_buf = bufnr
-  self.state.mission_dashboard_project_root = root
-  self.state.mission_dashboard_items = items
-  self.state.mission_dashboard_selectable_rows = selectable_rows
-  self.state.mission_dashboard_best_match_row = best_match_row
-  self.state.mission_dashboard_selected_row = selectable_rows[1]
-  self.state.mission_dashboard_query = ""
-  self.state.mission_dashboard_focus_match = false
-  self.state.mission_dashboard_search_confirmed = false
-  self:highlight_dashboard(bufnr, lines, items)
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, self:dashboard_config(#lines, {
-    reserve_command_bar = true,
-    reserve_output_panel = true,
-    reserve_search_input = true,
-    selected_item = initial_selected_item,
-    dashboard_min_height = self:dashboard_min_height_for_lines(lines),
-  }))
-  if not win_ok then
-    self:restore_dashboard_mouse()
-    self.ui.delete_buffer(bufnr)
-    self.state.mission_dashboard_buf = nil
-    self.state.mission_dashboard_project_root = nil
-    self.state.mission_dashboard_items = {}
-    self.state.mission_dashboard_selectable_rows = {}
-    self.state.mission_dashboard_best_match_row = nil
-    self.state.mission_dashboard_selected_row = nil
-    self.state.mission_dashboard_query = ""
-    self.state.mission_dashboard_focus_match = false
-    self.state.mission_dashboard_search_confirmed = false
-    self.notify("Failed to open Codux missions dashboard", vim.log.levels.ERROR)
-    return false
-  end
-  if vim.api and type(vim.api.nvim_set_hl) == "function" then
-    pcall(vim.api.nvim_set_hl, 0, "CoduxDashboardCursor", { fg = "NONE", bg = "NONE", blend = 100 })
-  end
-  self.ui.set_window_options(win, {
-    cursorline = false,
-    wrap = false,
-    number = false,
-    relativenumber = false,
-    signcolumn = "no",
-    winfixbuf = true,
-    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey,Cursor:CoduxDashboardCursor,CursorIM:CoduxDashboardCursor",
-  })
-  self.state.mission_dashboard_win = win
-  self:refresh_dashboard_token_usage(true)
-  self.state.mission_dashboard_resize_augroup = vim.api.nvim_create_augroup(
-    "codux-mission-dashboard-" .. tostring(bufnr),
-    { clear = true }
-  )
-  vim.api.nvim_create_autocmd("VimResized", {
-    group = self.state.mission_dashboard_resize_augroup,
-    callback = function()
-      if self.is_valid_win(self.state.mission_dashboard_win) and self.is_loaded_buf(self.state.mission_dashboard_buf) then
-        self:render_dashboard()
-      end
-    end,
-  })
-
-  self:bind_dashboard_commands(bufnr)
-  self:open_command_bar()
-  self:open_output_panel(self:selected_output_entry())
-  self:open_command_sink()
-  self:start_monitor_timer()
-  vim.schedule(function()
-    if self.is_valid_win(self.state.mission_dashboard_win) and self.is_loaded_buf(self.state.mission_dashboard_buf) then
-      self:open_search_input({ focus = false })
-    end
-  end)
-  return true
+  return dashboard_windows.open_dashboard(self, root)
 end
 
 for name, method in pairs(output_panel) do

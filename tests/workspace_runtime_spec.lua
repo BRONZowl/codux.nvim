@@ -1050,11 +1050,21 @@ do
       },
       ["/codux-worktrees/review"] = {
         workspaces = {
-          review = {
-            name = "review",
-            safe_name = "review",
+          explicit_review = {
+            name = "explicit-review",
+            safe_name = "explicit_review",
             project_root = "/codux-worktrees/review",
-            tmux_window = "review",
+            tmux_window = "explicit_review",
+            workspace_kind = "worktree",
+            git_common_dir = "/repo/.git",
+            worktree_path = "/codux-worktrees/review",
+            worktree_branch = "dev/review",
+            worktree_base = "main",
+          },
+          legacy_review = {
+            name = "legacy-review",
+            safe_name = "legacy_review",
+            tmux_window = "legacy_review",
             workspace_kind = "worktree",
             git_common_dir = "/repo/.git",
             worktree_path = "/codux-worktrees/review",
@@ -1089,8 +1099,9 @@ do
     by_name[entry.name] = entry
   end
   assert_equal(by_name.docs.project_root, "/repo")
-  assert_equal(by_name.review.project_root, "/codux-worktrees/review")
-  assert_equal(by_name.review.worktree_branch, "dev/review")
+  assert_nil(by_name["explicit-review"])
+  assert_equal(by_name["legacy-review"].project_root, "/codux-worktrees/review")
+  assert_equal(by_name["legacy-review"].worktree_branch, "dev/review")
 end
 
 do
@@ -1106,14 +1117,15 @@ do
   })
   local state_data = {
     projects = {
-      ["/codux-worktrees/alpha-builder"] = {
+      ["/repo"] = {
         workspaces = {
           ["alpha-builder"] = review_workspace_record({
             name = "alpha-builder",
             safe_name = "alpha-builder",
-            project_root = "/codux-worktrees/alpha-builder",
+            project_root = "/repo",
             workspace_kind = "worktree",
             git_common_dir = "/repo/.git",
+            worktree_path = "/codux-worktrees/alpha-builder",
             status = "active",
             codex_status = "working",
             codex_mode = "execute",
@@ -1123,16 +1135,13 @@ do
             mission_objective = "Old objective",
             resolved_instruction = builder_instruction,
           }),
-        },
-      },
-      ["/codux-worktrees/alpha-reviewer"] = {
-        workspaces = {
           ["alpha-reviewer"] = review_workspace_record({
             name = "alpha-reviewer",
             safe_name = "alpha-reviewer",
-            project_root = "/codux-worktrees/alpha-reviewer",
+            project_root = "/repo",
             workspace_kind = "worktree",
             git_common_dir = "/repo/.git",
+            worktree_path = "/codux-worktrees/alpha-reviewer",
             status = "idle",
             codex_status = "idle",
             codex_mode = "plan",
@@ -1153,7 +1162,8 @@ do
         mission_id = "mission:alpha",
         mission_objective = "Old objective",
         resolved_instruction = builder_instruction,
-        project_root = "/codux-worktrees/alpha-builder",
+        project_root = "/repo",
+        worktree_path = "/codux-worktrees/alpha-builder",
         safe_name = "alpha-builder",
       },
     },
@@ -1199,11 +1209,11 @@ do
   assert_true(ok)
   assert_nil(error_message)
   assert_equal(
-    state_data.projects["/codux-worktrees/alpha-builder"].workspaces["alpha-builder"].mission_objective,
+    state_data.projects["/repo"].workspaces["alpha-builder"].mission_objective,
     "New objective"
   )
   assert_contains(
-    state_data.projects["/codux-worktrees/alpha-reviewer"].workspaces["alpha-reviewer"].resolved_instruction,
+    state_data.projects["/repo"].workspaces["alpha-reviewer"].resolved_instruction,
     "Objective:\nNew objective\n\nRole focus:"
   )
   assert_equal(runtime.state.workspace.mission_objective, "New objective")
@@ -1216,11 +1226,11 @@ do
   assert_equal(dirty_roles[1].reason, "dirty")
 
   assert_true(runtime:close_mission("Alpha", { project_root = "/repo" }))
-  assert_equal(state_data.projects["/codux-worktrees/alpha-builder"].workspaces["alpha-builder"].status, "inactive")
-  assert_equal(state_data.projects["/codux-worktrees/alpha-builder"].workspaces["alpha-builder"].codex_status, "idle")
-  assert_nil(state_data.projects["/codux-worktrees/alpha-builder"].workspaces["alpha-builder"].codex_mode)
-  assert_equal(state_data.projects["/codux-worktrees/alpha-reviewer"].workspaces["alpha-reviewer"].status, "inactive")
-  assert_equal(state_data.projects["/codux-worktrees/alpha-reviewer"].workspaces["alpha-reviewer"].mission_id, "mission:alpha")
+  assert_equal(state_data.projects["/repo"].workspaces["alpha-builder"].status, "inactive")
+  assert_equal(state_data.projects["/repo"].workspaces["alpha-builder"].codex_status, "idle")
+  assert_nil(state_data.projects["/repo"].workspaces["alpha-builder"].codex_mode)
+  assert_equal(state_data.projects["/repo"].workspaces["alpha-reviewer"].status, "inactive")
+  assert_equal(state_data.projects["/repo"].workspaces["alpha-reviewer"].mission_id, "mission:alpha")
 
   local deleted = {}
   runtime.delete_saved_workspace = function(_, entry)
@@ -1608,10 +1618,10 @@ do
   end
   local state_data = workspace_state({}, {})
   state_data.projects = {
-    ["/codux-worktrees/review"] = {
+    ["/repo"] = {
       workspaces = {
         review = review_workspace_record({
-          project_root = "/codux-worktrees/review",
+          project_root = "/repo",
           workspace_kind = "worktree",
           git_common_dir = "/repo/.git",
           worktree_path = "/codux-worktrees/review",
@@ -1667,10 +1677,10 @@ do
   end
   local state_data = workspace_state({}, {})
   state_data.projects = {
-    ["/codux-worktrees/review"] = {
+    ["/repo"] = {
       workspaces = {
         review = review_workspace_record({
-          project_root = "/codux-worktrees/review",
+          project_root = "/repo",
           workspace_kind = "worktree",
           git_common_dir = "/repo/.git",
           worktree_path = "/codux-worktrees/review",
@@ -1737,7 +1747,7 @@ do
     assert_true(runtime:prompt_merged_workspaces("/repo"))
     assert_true(removed_worktree)
     assert_true(deleted_branch)
-    assert_nil(state_data.projects["/codux-worktrees/review"].workspaces.review)
+    assert_nil(state_data.projects["/repo"].workspaces.review)
   end)
   vim.fn.filereadable = old_filereadable
   vim.fn.confirm = old_confirm
@@ -1753,10 +1763,10 @@ do
   end
   local state_data = workspace_state({}, {})
   state_data.projects = {
-    ["/codux-worktrees/review"] = {
+    ["/repo"] = {
       workspaces = {
         review = review_workspace_record({
-          project_root = "/codux-worktrees/review",
+          project_root = "/repo",
           workspace_kind = "worktree",
           git_common_dir = "/repo/.git",
           worktree_path = "/codux-worktrees/review",
@@ -1799,7 +1809,7 @@ do
   local ok, err = pcall(function()
     assert_true(runtime:prompt_merged_workspaces("/repo"))
     assert_equal(
-      state_data.projects["/codux-worktrees/review"].workspaces.review.worktree_base_commit,
+      state_data.projects["/repo"].workspaces.review.worktree_base_commit,
       "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     )
   end)
@@ -2659,10 +2669,10 @@ do
     local closed = false
     local state_data = {
       projects = {
-        ["/codux-worktrees/review"] = {
+        ["/repo"] = {
           workspaces = {
             review = review_workspace_record({
-              project_root = "/codux-worktrees/review",
+              project_root = "/repo",
               workspace_kind = "worktree",
               git_common_dir = "/repo/.git",
               worktree_path = "/codux-worktrees/review",
@@ -2680,7 +2690,7 @@ do
         return true, nil
       end,
       delete_instruction_file = function(_, root, safe_name)
-        deleted_instruction = root == "/codux-worktrees/review" and safe_name == "review"
+        deleted_instruction = root == "/repo" and safe_name == "review"
         return true, nil
       end,
     })
@@ -2705,7 +2715,7 @@ do
     assert_true(runtime:delete_saved_workspace({
       name = "review",
       safe_name = "review",
-      project_root = "/codux-worktrees/review",
+      project_root = "/repo",
       workspace_kind = "worktree",
       git_common_dir = "/repo/.git",
       worktree_path = "/codux-worktrees/review",
@@ -2715,7 +2725,7 @@ do
     assert_true(removed_worktree)
     assert_true(deleted_branch)
     assert_true(closed)
-    assert_nil(state_data.projects["/codux-worktrees/review"].workspaces.review)
+    assert_nil(state_data.projects["/repo"].workspaces.review)
   end)
 end
 
@@ -2725,10 +2735,10 @@ do
     local removed_worktree = false
     local state_data = {
       projects = {
-        ["/codux-worktrees/review"] = {
+        ["/repo"] = {
           workspaces = {
             review = review_workspace_record({
-              project_root = "/codux-worktrees/review",
+              project_root = "/repo",
               workspace_kind = "worktree",
               git_common_dir = "/repo/.git",
               worktree_path = "/codux-worktrees/review",
@@ -2763,7 +2773,7 @@ do
     assert_false(runtime:delete_saved_workspace({
       name = "review",
       safe_name = "review",
-      project_root = "/codux-worktrees/review",
+      project_root = "/repo",
       workspace_kind = "worktree",
       git_common_dir = "/repo/.git",
       worktree_path = "/codux-worktrees/review",
@@ -2771,7 +2781,7 @@ do
     }))
     assert_false(deleted_instruction)
     assert_false(removed_worktree)
-    assert_equal(state_data.projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev/review")
+    assert_equal(state_data.projects["/repo"].workspaces.review.worktree_branch, "dev/review")
   end)
 end
 
@@ -2783,10 +2793,10 @@ do
     local attempted_branch_delete = false
     local state_data = {
       projects = {
-        ["/codux-worktrees/review"] = {
+        ["/repo"] = {
           workspaces = {
             review = review_workspace_record({
-              project_root = "/codux-worktrees/review",
+              project_root = "/repo",
               workspace_kind = "worktree",
               git_common_dir = "/repo/.git",
               worktree_path = "/codux-worktrees/review",
@@ -2833,7 +2843,7 @@ do
     assert_false(runtime:delete_saved_workspace({
       name = "review",
       safe_name = "review",
-      project_root = "/codux-worktrees/review",
+      project_root = "/repo",
       workspace_kind = "worktree",
       git_common_dir = "/repo/.git",
       worktree_path = "/codux-worktrees/review",
@@ -2844,7 +2854,7 @@ do
     assert_true(rendered)
     assert_false(closed)
     assert_false(attempted_branch_delete)
-    assert_equal(state_data.projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev/review")
+    assert_equal(state_data.projects["/repo"].workspaces.review.worktree_branch, "dev/review")
   end)
 end
 
@@ -2856,10 +2866,10 @@ do
     local removed_worktree = false
     local state_data = {
       projects = {
-        ["/codux-worktrees/review"] = {
+        ["/repo"] = {
           workspaces = {
             review = review_workspace_record({
-              project_root = "/codux-worktrees/review",
+              project_root = "/repo",
               workspace_kind = "worktree",
               git_common_dir = "/repo/.git",
               worktree_path = "/codux-worktrees/review",
@@ -2906,7 +2916,7 @@ do
     assert_false(runtime:delete_saved_workspace({
       name = "review",
       safe_name = "review",
-      project_root = "/codux-worktrees/review",
+      project_root = "/repo",
       workspace_kind = "worktree",
       git_common_dir = "/repo/.git",
       worktree_path = "/codux-worktrees/review",
@@ -2917,7 +2927,7 @@ do
     assert_contains(notification, "fatal: branch delete failed")
     assert_true(rendered)
     assert_false(closed)
-    assert_nil(state_data.projects["/codux-worktrees/review"].workspaces.review)
+    assert_nil(state_data.projects["/repo"].workspaces.review)
   end)
 end
 
@@ -2926,10 +2936,10 @@ do
     local deleted_branch = false
     local state_data = {
       projects = {
-        ["/codux-worktrees/review"] = {
+        ["/repo"] = {
           workspaces = {
             review = review_workspace_record({
-              project_root = "/codux-worktrees/review",
+              project_root = "/repo",
               workspace_kind = "worktree",
               git_common_dir = "/repo/.git",
               worktree_path = "/codux-worktrees/review",
@@ -2967,28 +2977,29 @@ do
     assert_true(runtime:delete_saved_workspace({
       name = "review",
       safe_name = "review",
-      project_root = "/codux-worktrees/review",
+      project_root = "/repo",
       workspace_kind = "worktree",
       git_common_dir = "/repo/.git",
       worktree_path = "/codux-worktrees/review",
       worktree_branch = "dev/review",
     }))
     assert_true(deleted_branch)
-    assert_nil(state_data.projects["/codux-worktrees/review"].workspaces.review)
+    assert_nil(state_data.projects["/repo"].workspaces.review)
   end)
 end
 
 do
   local state_data = {
     projects = {
-      ["/codux-worktrees/alpha-research"] = {
+      ["/repo"] = {
         workspaces = {
           ["alpha-research"] = review_workspace_record({
             name = "alpha-research",
             safe_name = "alpha-research",
-            project_root = "/codux-worktrees/alpha-research",
+            project_root = "/repo",
             workspace_kind = "worktree",
             git_common_dir = "/repo/.git",
+            worktree_path = "/codux-worktrees/alpha-research",
             worktree_branch = "dev/alpha-research",
             mission_id = "mission:alpha",
             mission_name = "Alpha",

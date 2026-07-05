@@ -125,6 +125,49 @@ do
 end
 
 do
+  local rt = runtime({
+    git_common_dir = "/repo/.git",
+    state_data = {
+      projects = {
+        ["/repo"] = {
+          workspaces = {
+            local_role = {
+              name = "Local Role",
+              safe_name = "local_role",
+              project_root = "/repo",
+              workspace_kind = "worktree",
+              git_common_dir = "/repo/.git",
+            },
+          },
+        },
+        ["/other"] = {
+          workspaces = {
+            explicit_other = {
+              name = "Explicit Other",
+              safe_name = "explicit_other",
+              project_root = "/other",
+              workspace_kind = "worktree",
+              git_common_dir = "/repo/.git",
+            },
+            legacy_shared = {
+              name = "Legacy Shared",
+              safe_name = "legacy_shared",
+              workspace_kind = "worktree",
+              git_common_dir = "/repo/.git",
+            },
+          },
+        },
+      },
+    },
+  })
+
+  local entries = workspace_registry.entries_for_project(rt, "/repo")
+  assert_equal(#entries, 2)
+  assert_equal(entries[1].name, "Legacy Shared")
+  assert_equal(entries[2].name, "Local Role")
+end
+
+do
   local opts = {
     state = { workspace_manager_project_root = "/repo" },
     state_data = {

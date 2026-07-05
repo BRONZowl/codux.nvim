@@ -223,7 +223,7 @@ function M.workspace_branch_merged(runtime, entry)
   local branch = entry.worktree_branch
   local base = entry.worktree_base
   local base_commit = entry.worktree_base_commit
-  local root = entry.project_root or entry.worktree_path
+  local root = entry.worktree_path or entry.project_root
   if
     type(branch) ~= "string"
     or branch == ""
@@ -261,7 +261,7 @@ function M.workspace_branch_state(runtime, entry)
   local branch = entry.worktree_branch
   local base = entry.worktree_base
   local base_commit = entry.worktree_base_commit
-  local root = entry.project_root or entry.worktree_path
+  local root = entry.worktree_path or entry.project_root
   if
     type(branch) ~= "string"
     or branch == ""
@@ -299,7 +299,7 @@ function M.backfill_workspace_base_commit(runtime, entry)
     return false
   end
 
-  local root = entry.project_root or entry.worktree_path
+  local root = entry.worktree_path or entry.project_root
   local branch = entry.worktree_branch
   local base = entry.worktree_base
   if type(root) ~= "string" or root == "" or type(branch) ~= "string" or branch == "" or type(base) ~= "string" or base == "" then

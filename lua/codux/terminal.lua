@@ -3,16 +3,13 @@ M.__index = M
 
 local command_util = require("codux.command")
 local terminal_mode = require("codux.terminal_mode")
+local terminal_prompt = require("codux.terminal_prompt")
+local terminal_question = require("codux.terminal_question")
 local terminal_startup = require("codux.terminal_startup")
-local text_util = require("codux.text")
 local ui = require("codux.ui")
 local working_indicator = require("codux.working_indicator")
 
 local function noop() end
-
-local function trim(value)
-  return text_util.trim(value)
-end
 
 local is_valid_buf = ui.is_valid_buf
 local is_loaded_buf = ui.is_loaded_buf
@@ -234,78 +231,31 @@ function M:send_shift_tab_mode_toggle()
 end
 
 function M:reset_terminal_prompt_input()
-  self.state.terminal_prompt_input = ""
-  self.state.terminal_prompt_tracking_valid = true
+  return terminal_prompt.reset_input(self)
 end
 
 function M:invalidate_terminal_prompt_tracking()
-  self.state.terminal_prompt_input = ""
-  self.state.terminal_prompt_tracking_valid = false
+  return terminal_prompt.invalidate_tracking(self)
 end
 
 function M:append_terminal_prompt_input(input)
-  if self.state.terminal_prompt_tracking_valid ~= true then
-    return
-  end
-  self.state.terminal_prompt_input = (self.state.terminal_prompt_input or "") .. tostring(input or "")
+  return terminal_prompt.append_input(self, input)
 end
 
 function M:delete_terminal_prompt_input_char()
-  if self.state.terminal_prompt_tracking_valid ~= true then
-    return
-  end
-  local input = tostring(self.state.terminal_prompt_input or "")
-  local length = vim.fn.strchars(input)
-  if length <= 0 then
-    return
-  end
-
-  self.state.terminal_prompt_input = vim.fn.strcharpart(input, 0, length - 1)
+  return terminal_prompt.delete_input_char(self)
 end
 
 function M:terminal_input_key(input, opts)
-  opts = type(opts) == "table" and opts or {}
-  return function()
-    if not self:terminal_running() then
-      return false
-    end
-
-    if opts.delete_previous then
-      self:delete_terminal_prompt_input_char()
-    else
-      self:append_terminal_prompt_input(input)
-    end
-    local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, input)
-    return send_ok and sent ~= 0
-  end
+  return terminal_prompt.input_key(self, input, opts)
 end
 
 function M:terminal_buffer_prompt_is_plan_toggle()
-  if not self:valid_buf() then
-    return false
-  end
-
-  local line_count = vim.api.nvim_buf_line_count(self.state.buf)
-  local start_line = math.max(0, line_count - 4)
-  local lines = buffer_lines(self.state.buf, start_line, line_count)
-  if type(lines) ~= "table" then
-    return false
-  end
-
-  for index = #lines, 1, -1 do
-    local line = trim(M.strip_terminal_control_sequences(lines[index]))
-    if line ~= "" then
-      return M.terminal_line_is_plan_toggle(line)
-    end
-  end
-
-  return false
+  return terminal_prompt.buffer_prompt_is_plan_toggle(self)
 end
 
 function M:terminal_prompt_key(input)
-  return function()
-    return self:focus_terminal_prompt(input)
-  end
+  return terminal_prompt.prompt_key(self, input)
 end
 
 function M:focus_window()
@@ -453,23 +403,11 @@ function M:start_working_idle_timer()
 end
 
 function M:mark_terminal_prompt_submission()
-  if not self:valid_buf() then
-    self.state.last_prompt_line = nil
-    return
-  end
-
-  self.state.last_prompt_line = vim.api.nvim_buf_line_count(self.state.buf)
+  return terminal_prompt.mark_submission(self)
 end
 
 function M:plan_question_pending()
-  if self.state.mode ~= "plan" or not self:valid_buf() or type(self.state.last_prompt_line) ~= "number" then
-    return false
-  end
-
-  local line_count = vim.api.nvim_buf_line_count(self.state.buf)
-  local start_line = math.max(0, math.min(self.state.last_prompt_line, line_count))
-  local lines = buffer_lines(self.state.buf, start_line, line_count)
-  return M.output_looks_like_question(lines)
+  return terminal_prompt.plan_question_pending(self)
 end
 
 function M:set_codex_working(working, opts)
@@ -640,49 +578,15 @@ function M:update_working_indicator()
 end
 
 function M:submit_terminal_prompt()
-  if not self:terminal_running() then
-    return false
-  end
-
-  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, "\r")
-  if send_ok and sent ~= 0 then
-    if
-      M.terminal_prompt_is_plan_toggle(self.state.terminal_prompt_input, self.state.terminal_prompt_tracking_valid)
-      and self:terminal_buffer_prompt_is_plan_toggle()
-    then
-      self:set_mode("plan")
-      self.notify("Codex mode: " .. self.state.mode)
-    else
-      self:mark_terminal_prompt_submission()
-      self:set_codex_working(true)
-    end
-    self:reset_terminal_prompt_input()
-    return true
-  end
-
-  return false
+  return terminal_prompt.submit(self)
 end
 
 function M:interrupt_terminal_prompt()
-  if not self:terminal_running() then
-    return false
-  end
-
-  self:set_codex_working(false, { force_idle = true })
-  self:reset_terminal_prompt_input()
-  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, "\3")
-  return send_ok and sent ~= 0
+  return terminal_prompt.interrupt(self)
 end
 
 function M:interrupt_codex_session()
-  if not self:terminal_running() then
-    return false
-  end
-
-  self:set_codex_working(false, { force_idle = true })
-  self:reset_terminal_prompt_input()
-  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, "\3")
-  return send_ok and sent ~= 0
+  return terminal_prompt.interrupt(self)
 end
 
 function M:ensure_buffer()
@@ -1146,75 +1050,11 @@ function M:send_to_codex(message)
 end
 
 function M:select_codex_question_option(option, with_note)
-  option = trim(option)
-  local option_number = tonumber(option)
-  if
-    option == ""
-    or not option:match("^%d+$")
-    or option_number == nil
-    or option_number < 1
-    or option_number > 4
-    or not self:terminal_running()
-  then
-    return false
-  end
-
-  local function send_key(key)
-    local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, key)
-    if send_ok and sent ~= 0 then
-      return true
-    end
-    self.notify("Failed to answer Codex question", vim.log.levels.ERROR)
-    return false
-  end
-
-  for _ = 1, 20 do
-    if not send_key("\27[A") then
-      return false
-    end
-    pcall(vim.fn.sleep, "15m")
-  end
-  for _ = 1, option_number - 1 do
-    if not send_key("\27[B") then
-      return false
-    end
-    pcall(vim.fn.sleep, "15m")
-  end
-
-  local suffix = with_note == true and "\t" or "\r"
-  pcall(vim.fn.sleep, "40m")
-  if not send_key(suffix) then
-    return false
-  end
-
-  if with_note == true then
-    pcall(vim.fn.sleep, "40m")
-  end
-  self:invalidate_terminal_prompt_tracking()
-  if with_note ~= true then
-    self:mark_terminal_prompt_submission()
-    self:set_codex_working(true)
-  end
-  return true
+  return terminal_question.select_option(self, option, with_note)
 end
 
 function M:submit_codex_question_note(note)
-  note = tostring(note or "")
-  if trim(note) == "" or not self:terminal_running() then
-    return false
-  end
-
-  local paste = "\27[200~" .. note .. "\27[201~\r"
-  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, paste)
-  if not send_ok or sent == 0 then
-    self.notify("Failed to send Codex question note", vim.log.levels.ERROR)
-    return false
-  end
-
-  self:mark_terminal_prompt_submission()
-  self:invalidate_terminal_prompt_tracking()
-  self:set_codex_working(true)
-  return true
+  return terminal_question.submit_note(self, note)
 end
 
 function M:terminal_snapshot(max_lines)

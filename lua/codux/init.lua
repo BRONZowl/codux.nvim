@@ -1,9 +1,11 @@
 local M = {}
+local autocmds_mod = require("codux.autocmds")
 local command_util = require("codux.command")
 local commands_mod = require("codux.commands")
 local compat_mod = require("codux.compat")
 local context_mod = require("codux.context")
 local health_mod = require("codux.health")
+local keymaps_mod = require("codux.keymaps")
 local mission_control_mod = require("codux.mission_control")
 local mission_mod = require("codux.mission")
 local prompt_actions_mod = require("codux.prompt_actions")
@@ -1082,35 +1084,12 @@ local function create_commands()
   })
 end
 
-local function mapping_id(mode, lhs)
-  return tostring(mode) .. "\0" .. tostring(lhs)
-end
-
 local function remove_installed_mappings()
-  for id, mapping in pairs(state.installed_mappings or {}) do
-    local mode = mapping.mode
-    local lhs = mapping.lhs
-    if type(mode) == "string" and type(lhs) == "string" and lhs ~= "" then
-      local current = vim.fn.maparg(lhs, mode, false, true)
-      if type(current) == "table" and current.desc == mapping.desc then
-        pcall(vim.keymap.del, mode, lhs)
-      end
-    end
-    state.installed_mappings[id] = nil
-  end
+  return keymaps_mod.remove_installed(state)
 end
 
 local function set_mapping(mode, lhs, rhs, desc)
-  if type(lhs) == "string" and lhs ~= "" then
-    vim.keymap.set(mode, lhs, rhs, { desc = desc })
-    if type(mode) == "string" then
-      state.installed_mappings[mapping_id(mode, lhs)] = {
-        mode = mode,
-        lhs = lhs,
-        desc = desc,
-      }
-    end
-  end
+  return keymaps_mod.set(state, mode, lhs, rhs, desc)
 end
 
 which_key_controller = which_key_mod.new({
@@ -1146,23 +1125,10 @@ refresh_which_key = function()
 end
 
 M._install_workspace_target_autocmds = function()
-  pcall(vim.api.nvim_clear_autocmds, {
-    group = augroup,
-    event = { "BufEnter", "BufWinEnter", "WinEnter", "DirChanged", "CursorMoved" },
-  })
-  pcall(vim.api.nvim_create_autocmd, { "BufEnter", "BufWinEnter", "WinEnter", "DirChanged" }, {
-    group = augroup,
-    callback = function(args)
-      M._schedule_workspace_target_sync(args.event)
-    end,
-  })
-  pcall(vim.api.nvim_create_autocmd, "CursorMoved", {
-    group = augroup,
-    callback = function(args)
-      if is_explorer_filetype(current_filetype()) then
-        M._schedule_workspace_target_sync(args.event)
-      end
-    end,
+  return autocmds_mod.install_workspace_target_autocmds(augroup, {
+    current_filetype = current_filetype,
+    is_explorer_filetype = is_explorer_filetype,
+    schedule_workspace_target_sync = M._schedule_workspace_target_sync,
   })
 end
 
@@ -1175,29 +1141,10 @@ function M.setup(opts)
 
   local mappings = type(config.mappings) == "table" and config.mappings or {}
   refresh_which_key()
-  set_mapping("n", mappings.open, M.open_with_keyed_profile_menu, "open codex")
-  set_mapping("n", mappings.review_file, M.send_file_review, "send file/folder to codex")
-  set_mapping("n", mappings.review_selection, M.send_selection, "send selection to codex")
-  set_mapping("v", mappings.review_selection, M.send_selection, "send selection to codex")
-  set_mapping("n", mappings.diagnostics, M.send_diagnostics, "send diagnostics to codex")
-  set_mapping("n", mappings.diff, M.send_git_diff, "send git diff to codex")
-  set_mapping("n", mappings.workspace, M.open_workspace_prompt, "create codux workspace")
-  set_mapping("n", mappings.workspaces, M.open_workspaces, "current codux workspaces")
-  set_mapping("n", mappings.mission, M.open_mission_prompt, "create codux mission")
-  set_mapping("n", mappings.missions, M.open_missions, "mission control")
-  local action_desc = which_key_controller:mode_action_desc()
-  if action_desc then
-    set_mapping("n", mappings.mode, M.toggle_plan_mode, action_desc)
-  end
+  keymaps_mod.install_defaults(state, mappings, M, which_key_controller:mode_action_desc())
   M._install_workspace_target_autocmds()
 
-  pcall(vim.api.nvim_clear_autocmds, { group = augroup, event = "VimLeavePre" })
-  pcall(vim.api.nvim_create_autocmd, "VimLeavePre", {
-    group = augroup,
-    callback = function()
-      stop_token_monitor_timer()
-    end,
-  })
+  autocmds_mod.install_shutdown_autocmd(augroup, stop_token_monitor_timer)
 
   which_key_controller:install_header_hook()
 end
