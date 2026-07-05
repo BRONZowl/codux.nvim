@@ -91,6 +91,7 @@ function M.new(opts)
       or function()
         return {}
       end,
+    missions_for_project = type(opts.missions_for_project) == "function" and opts.missions_for_project or nil,
     edit_saved_workspace_instruction = type(opts.edit_saved_workspace_instruction) == "function"
         and opts.edit_saved_workspace_instruction
       or noop,

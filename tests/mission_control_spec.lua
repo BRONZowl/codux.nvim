@@ -14,6 +14,39 @@ local mission_role_entry = fixtures.mission_role_entry
 
 do
   local controller = mission_control_mod.new({
+    missions_for_project = function(root)
+      assert_equal(root, "/repo")
+      return {
+        {
+          name = "Alpha",
+          mission_id = "mission:alpha",
+          objective = "Build it",
+          roles = {
+            {
+              name = "alpha-builder",
+              safe_name = "alpha-builder",
+              project_root = "/codux-worktrees/alpha-builder",
+              mission_role = "Builder",
+              status = "inactive",
+              workspace_kind = "worktree",
+            },
+          },
+        },
+      }
+    end,
+    workspace_entries_for_project = function()
+      error("dashboard should use mission lookup when available")
+    end,
+  })
+
+  local lines = controller:dashboard_lines("/repo", { dashboard_width = 100, now = 100 })
+  assert_equal(controller:mission_count("/repo"), 1)
+  assert_contains(table.concat(lines, "\n"), "Alpha")
+  assert_contains(table.concat(lines, "\n"), "Builder")
+end
+
+do
+  local controller = mission_control_mod.new({
     workspace_entries_for_project = function()
       return {
         {

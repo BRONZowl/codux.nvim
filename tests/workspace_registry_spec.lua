@@ -154,6 +154,21 @@ do
             },
           },
         },
+        ["/codux-worktrees/alpha-builder"] = {
+          workspaces = {
+            ["alpha-builder"] = {
+              name = "alpha-builder",
+              safe_name = "alpha-builder",
+              project_root = "/codux-worktrees/alpha-builder",
+              workspace_kind = "worktree",
+              git_common_dir = "/repo/.git",
+              mission_id = "mission:alpha",
+              mission_name = "Alpha",
+              mission_role = "Builder",
+              mission_objective = "Build it",
+            },
+          },
+        },
       },
     },
   })
@@ -162,6 +177,12 @@ do
   assert_equal(#entries, 2)
   assert_equal(entries[1].name, "Legacy Shared")
   assert_equal(entries[2].name, "Local Role")
+
+  local missions = workspace_registry.missions_for_project(rt, "/repo")
+  assert_equal(#missions, 1)
+  assert_equal(missions[1].name, "Alpha")
+  assert_equal(missions[1].roles[1].project_root, "/codux-worktrees/alpha-builder")
+  assert_equal(missions[1].roles[1].mission_role, "Builder")
 end
 
 do

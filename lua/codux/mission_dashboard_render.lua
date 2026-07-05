@@ -259,6 +259,10 @@ function M.refresh_dashboard_token_usage(controller, force)
 end
 
 function M.missions_for_root(controller, root)
+  if type(controller.missions_for_project) == "function" then
+    return controller.missions_for_project(root)
+  end
+
   local entries, error_message = controller.workspace_entries_for_project(root)
   if error_message then
     return nil, error_message

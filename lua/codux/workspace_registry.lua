@@ -10,6 +10,50 @@ end
 
 local inactive_like_status = workspace_git.inactive_like_status
 
+local function workspace_entry(runtime, session, record, safe_name, record_root)
+  local entry_safe_name = record.safe_name or safe_name
+  local window_name = record.tmux_window or record.window_name or entry_safe_name
+  local window_id = session and runtime:tmux_window_id(session, window_name) or nil
+  local status = runtime:dashboard_workspace_status(record, window_id)
+  local codex_mode = not inactive_like_status(status) and runtime:normalize_codex_mode(record.codex_mode) or nil
+
+  return {
+    name = record.name or entry_safe_name,
+    safe_name = entry_safe_name,
+    project_root = record_root,
+    target_path = record.target_path,
+    target_type = record.target_type,
+    git_branch = record.git_branch or "",
+    workspace_kind = record.workspace_kind,
+    git_common_dir = record.git_common_dir,
+    worktree_path = record.worktree_path,
+    worktree_branch = record.worktree_branch,
+    worktree_base = record.worktree_base,
+    worktree_base_commit = record.worktree_base_commit,
+    mission_id = record.mission_id,
+    mission_name = record.mission_name,
+    mission_role = record.mission_role,
+    mission_objective = record.mission_objective,
+    custom_instruction = record.custom_instruction,
+    resolved_instruction = record.resolved_instruction,
+    window_name = window_name,
+    tmux_target = runtime.tmux_target(session, window_name) or record.tmux_target,
+    nvim_server = record.nvim_server or runtime:workspace_server_path(record_root, entry_safe_name),
+    initial_mode = record.initial_mode,
+    codex_status = record.codex_status or "idle",
+    codex_mode = codex_mode,
+    permission_profile = record.permission_profile or "default",
+    codex_session_captured_at = record.codex_session_captured_at,
+    created_at = record.created_at,
+    last_opened_at = record.last_opened_at,
+    last_activity_at = record.last_activity_at,
+    last_target_at = record.last_target_at,
+    last_reconciled_at = record.last_reconciled_at,
+    window_id = window_id,
+    status = status,
+  }
+end
+
 function M.entries_for_project(runtime, root)
   local state_data, state_error = runtime:read_state()
   if state_error then
@@ -37,47 +81,8 @@ function M.entries_for_project(runtime, root)
                 and record.git_common_dir == current_common_dir
               )
             if include then
-              local entry_safe_name = record.safe_name or safe_name
-              local window_name = record.tmux_window or record.window_name or entry_safe_name
-              local window_id = session and runtime:tmux_window_id(session, window_name) or nil
-              local status = runtime:dashboard_workspace_status(record, window_id)
-              local codex_mode = not inactive_like_status(status) and runtime:normalize_codex_mode(record.codex_mode) or nil
-              seen[tostring(record_root) .. "\0" .. tostring(entry_safe_name)] = true
-              table.insert(entries, {
-                name = record.name or entry_safe_name,
-                safe_name = entry_safe_name,
-                project_root = record_root,
-                target_path = record.target_path,
-                target_type = record.target_type,
-                git_branch = record.git_branch or "",
-                workspace_kind = record.workspace_kind,
-                git_common_dir = record.git_common_dir,
-                worktree_path = record.worktree_path,
-                worktree_branch = record.worktree_branch,
-                worktree_base = record.worktree_base,
-                worktree_base_commit = record.worktree_base_commit,
-                mission_id = record.mission_id,
-                mission_name = record.mission_name,
-                mission_role = record.mission_role,
-                mission_objective = record.mission_objective,
-                custom_instruction = record.custom_instruction,
-                resolved_instruction = record.resolved_instruction,
-                window_name = window_name,
-                tmux_target = runtime.tmux_target(session, window_name) or record.tmux_target,
-                nvim_server = record.nvim_server or runtime:workspace_server_path(record_root, entry_safe_name),
-                initial_mode = record.initial_mode,
-                codex_status = record.codex_status or "idle",
-                codex_mode = codex_mode,
-                permission_profile = record.permission_profile or "default",
-                codex_session_captured_at = record.codex_session_captured_at,
-                created_at = record.created_at,
-                last_opened_at = record.last_opened_at,
-                last_activity_at = record.last_activity_at,
-                last_target_at = record.last_target_at,
-                last_reconciled_at = record.last_reconciled_at,
-                window_id = window_id,
-                status = status,
-              })
+              seen[tostring(record_root) .. "\0" .. tostring(record.safe_name or safe_name)] = true
+              table.insert(entries, workspace_entry(runtime, session, record, safe_name, record_root))
             end
           end
         end
@@ -124,8 +129,51 @@ function M.entries_for_project(runtime, root)
   return entries, nil
 end
 
+function M.mission_entries_for_project(runtime, root)
+  local state_data, state_error = runtime:read_state()
+  if state_error then
+    return {}, state_error
+  end
+
+  local current_common_dir = runtime:git_common_dir(root)
+  local session = runtime:current_tmux_session()
+  local entries = {}
+  local seen = {}
+
+  if type(state_data.projects) == "table" then
+    for project_root, project in pairs(state_data.projects) do
+      local workspaces = type(project) == "table" and project.workspaces or nil
+      if type(workspaces) == "table" then
+        for safe_name, record in pairs(workspaces) do
+          if type(record) == "table" and type(record.mission_id) == "string" and record.mission_id ~= "" then
+            local record_root = type(record.project_root) == "string" and record.project_root ~= "" and record.project_root
+              or project_root
+            local include = record_root == root
+              or (
+                current_common_dir ~= nil
+                and record.workspace_kind == "worktree"
+                and record.git_common_dir == current_common_dir
+              )
+            local key = tostring(record_root) .. "\0" .. tostring(record.safe_name or safe_name)
+            if include and not seen[key] then
+              seen[key] = true
+              table.insert(entries, workspace_entry(runtime, session, record, safe_name, record_root))
+            end
+          end
+        end
+      end
+    end
+  end
+
+  table.sort(entries, function(left, right)
+    return tostring(left.name):lower() < tostring(right.name):lower()
+  end)
+
+  return entries, nil
+end
+
 function M.missions_for_project(runtime, root)
-  local entries, error_message = runtime:entries_for_project(root)
+  local entries, error_message = M.mission_entries_for_project(runtime, root)
   if error_message then
     return {}, error_message
   end
