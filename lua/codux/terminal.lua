@@ -3,6 +3,7 @@ M.__index = M
 
 local command_util = require("codux.command")
 local terminal_mode = require("codux.terminal_mode")
+local terminal_startup = require("codux.terminal_startup")
 local text_util = require("codux.text")
 local ui = require("codux.ui")
 local working_indicator = require("codux.working_indicator")
@@ -547,241 +548,31 @@ function M:terminal_screen_lines()
 end
 
 function M:startup_sequence_ready()
-  if self.state.job_id == nil then
-    return false
-  end
-
-  local lines = self:terminal_screen_lines()
-  if type(lines) ~= "table" then
-    return false
-  end
-
-  local saw_ready_surface = false
-  for index = #lines, 1, -1 do
-    local line = trim(M.strip_terminal_control_sequences(lines[index]):lower():gsub("%s+", " "))
-    if line ~= "" then
-      if line:find("booting mcp server", 1, true) or line:find("esc to interrupt", 1, true) then
-        return false
-      end
-      saw_ready_surface = saw_ready_surface
-        or line:match("^›") ~= nil
-        or line:match("^>") ~= nil
-        or M.detect_terminal_mode_from_line(line) ~= nil
-    end
-  end
-
-  return saw_ready_surface
+  return terminal_startup.startup_sequence_ready(self)
 end
 
 function M:startup_plan_command_busy()
-  local lines = self:recent_terminal_lines(24)
-  if type(lines) ~= "table" then
-    return false
-  end
-
-  for index = #lines, 1, -1 do
-    local line = trim(M.strip_terminal_control_sequences(lines[index]):lower():gsub("%s+", " "))
-    if line:find("'/plan' is disabled while a task is in progress", 1, true) then
-      return true
-    end
-  end
-
-  return false
+  return terminal_startup.startup_plan_command_busy(self)
 end
 
 function M:send_startup_plan_toggle()
-  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, "\27[200~/plan\27[201~\r")
-  return send_ok and sent ~= 0
+  return terminal_startup.send_startup_plan_toggle(self)
 end
 
 function M:paste_startup_prompt(initial_prompt)
-  local paste = "\27[200~" .. initial_prompt .. "\27[201~\r"
-  local paste_ok, pasted = pcall(vim.fn.chansend, self.state.job_id, paste)
-  if paste_ok and pasted ~= 0 then
-    self:mark_terminal_prompt_submission()
-    self:invalidate_terminal_prompt_tracking()
-    self:set_codex_working(true)
-    return true
-  end
-
-  return false
+  return terminal_startup.paste_startup_prompt(self, initial_prompt)
 end
 
 function M:confirm_startup_plan_sequence(initial_prompt, prompt_after_mode, attempts_remaining, retry_toggle, opts)
-  opts = type(opts) == "table" and opts or {}
-  attempts_remaining = tonumber(attempts_remaining) or 60
-  retry_toggle = retry_toggle == true
-
-  local function run(attempts_left)
-    if not self:terminal_running() then
-      return
-    end
-
-    local mode = self:sync_terminal_mode_from_buffer()
-    if mode == "plan" then
-      self:set_mode("plan")
-      if prompt_after_mode then
-        self:paste_startup_prompt(initial_prompt)
-      end
-      return
-    end
-
-    if mode == "execute" and retry_toggle then
-      if self:send_startup_plan_toggle() then
-        retry_toggle = false
-      end
-      if attempts_left > 0 and type(vim.defer_fn) == "function" then
-        vim.defer_fn(function()
-          run(attempts_left - 1)
-        end, 250)
-        return
-      end
-    end
-
-    if self:startup_plan_command_busy() then
-      self:send_startup_plan_toggle()
-    end
-
-    if attempts_left > 0 and type(vim.defer_fn) == "function" then
-      vim.defer_fn(function()
-        run(attempts_left - 1)
-      end, 250)
-      return
-    end
-
-    if opts.suppress_warning ~= true then
-      self.notify("Codex did not confirm plan mode on startup", vim.log.levels.WARN)
-    end
-  end
-
-  if type(vim.defer_fn) == "function" then
-    vim.defer_fn(function()
-      run(attempts_remaining - 1)
-    end, 250)
-  else
-    run(0)
-  end
+  return terminal_startup.confirm_startup_plan_sequence(self, initial_prompt, prompt_after_mode, attempts_remaining, retry_toggle, opts)
 end
 
 function M:schedule_startup_plan_sequence(initial_prompt, prompt_after_mode, attempts_remaining, opts)
-  opts = type(opts) == "table" and opts or {}
-  attempts_remaining = tonumber(attempts_remaining) or 20
-  local settle_ms = math.max(250, tonumber(self:config().startup_plan_settle_ms) or 4000)
-
-  local function run(attempts_left)
-    if not self:terminal_running() then
-      return
-    end
-
-    local mode = self:sync_terminal_mode_from_buffer()
-    if mode == "plan" then
-      self:set_mode("plan")
-      if prompt_after_mode then
-        self:paste_startup_prompt(initial_prompt)
-      end
-      return
-    end
-
-    if mode == "execute" then
-      if not self:send_startup_plan_toggle() then
-        return
-      end
-
-      self:confirm_startup_plan_sequence(initial_prompt, prompt_after_mode, nil, false, {
-        suppress_warning = opts.suppress_warning,
-      })
-      return
-    end
-
-    if not self:startup_sequence_ready() then
-      if attempts_left > 0 and type(vim.defer_fn) == "function" then
-        vim.defer_fn(function()
-          run(attempts_left - 1)
-        end, 250)
-      end
-      return
-    end
-
-    local function send_after_settle()
-      if not self:terminal_running() then
-        return
-      end
-
-      local settled_mode = self:sync_terminal_mode_from_buffer()
-      if settled_mode == "plan" then
-        self:set_mode("plan")
-        if prompt_after_mode then
-          self:paste_startup_prompt(initial_prompt)
-        end
-        return
-      end
-
-      if not self:send_startup_plan_toggle() then
-        return
-      end
-
-      self:confirm_startup_plan_sequence(initial_prompt, prompt_after_mode, nil, false, {
-        suppress_warning = opts.suppress_warning,
-      })
-    end
-
-    if type(vim.defer_fn) == "function" then
-      vim.defer_fn(send_after_settle, settle_ms)
-    else
-      send_after_settle()
-    end
-    return
-  end
-
-  if type(vim.defer_fn) == "function" then
-    vim.defer_fn(function()
-      run(attempts_remaining - 1)
-    end, 250)
-  else
-    run(0)
-  end
+  return terminal_startup.schedule_startup_plan_sequence(self, initial_prompt, prompt_after_mode, attempts_remaining, opts)
 end
 
 function M:ensure_plan_mode(opts)
-  opts = type(opts) == "table" and opts or {}
-  local attempts = math.max(1, tonumber(opts.attempts) or 60)
-  local sleep_ms = math.max(1, tonumber(opts.sleep_ms) or 250)
-  local retry_toggle = opts.retry_toggle == true
-  local sent_toggle = false
-
-  if not self:terminal_running() then
-    return false
-  end
-
-  for attempt = 1, attempts do
-    local mode = self:sync_terminal_mode_from_buffer()
-    if mode == "plan" then
-      self:set_mode("plan")
-      return true
-    end
-
-    if not sent_toggle then
-      sent_toggle = self:send_startup_plan_toggle()
-    elseif self:startup_plan_command_busy() then
-      self:send_startup_plan_toggle()
-    elseif mode == "execute" and retry_toggle then
-      if self:send_startup_plan_toggle() then
-        retry_toggle = false
-      end
-    end
-
-    if attempt < attempts then
-      pcall(vim.fn.sleep, tostring(sleep_ms) .. "m")
-    end
-  end
-
-  local mode = self:sync_terminal_mode_from_buffer()
-  if mode == "plan" then
-    self:set_mode("plan")
-    return true
-  end
-
-  return false
+  return terminal_startup.ensure_plan_mode(self, opts)
 end
 
 function M:schedule_terminal_buffer_observation()

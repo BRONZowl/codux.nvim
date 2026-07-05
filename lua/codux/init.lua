@@ -281,49 +281,15 @@ local function terminal_running()
   return terminal:terminal_running()
 end
 
-function M._v5.set_buffer_keymap(bufnr, modes, lhs, rhs, desc, opts)
-  return ui.set_keymap(bufnr, modes, lhs, rhs, desc, opts)
-end
+compat_mod.install_ui(M._v5, {
+  ui = ui,
+  notify = notify,
+})
 
-function M._v5.bind_close_keys(bufnr, close_fn, desc, modes, opts)
-  return ui.bind_close_keys(bufnr, close_fn, desc, modes, opts)
-end
-
-function M._v5.single_line_prompt(opts, callback)
-  return ui.single_line_prompt(opts, callback, {
-    notify = notify,
-    set_buffer_keymap = M._v5.set_buffer_keymap,
-    bind_close_keys = M._v5.bind_close_keys,
-  })
-end
-
-function M._v5.mark_terminal_prompt_submission()
-  return terminal:mark_terminal_prompt_submission()
-end
-
-function M._v5.plan_question_pending()
-  return terminal:plan_question_pending()
-end
-
-function M._v5.sync_terminal_mode_from_buffer()
-  return terminal:sync_terminal_mode_from_buffer()
-end
-
-function M._v5.schedule_terminal_buffer_observation()
-  return terminal:schedule_terminal_buffer_observation()
-end
-
-function M._v5.command_with_args(command, args)
-  return command_util.with_args(command, args)
-end
-
-function M._v5.toml_basic_string(value)
-  return command_util.toml_basic_string(value)
-end
-
-function M._v5.command_with_developer_instructions(command, instructions)
-  return command_util.with_developer_instructions(command, instructions)
-end
+compat_mod.install_terminal(M._v5, {
+  terminal = terminal,
+  command_util = command_util,
+})
 
 local function json_encode(value)
   if vim.json and type(vim.json.encode) == "function" then
@@ -429,9 +395,7 @@ local function sanitize_workspace_name(name)
   return workspace_runtime_mod.sanitize_workspace_name(name)
 end
 
-function M._v5.workspace_window_name(safe_name)
-  return workspace_runtime_mod.workspace_window_name(safe_name)
-end
+compat_mod.install_workspace_static(M._v5)
 
 local workspace_store = workspace_store_mod.new({
   get_workspace_config = workspace_config,
@@ -492,104 +456,17 @@ local function current_tmux_session()
   return workspace_runtime:current_tmux_session()
 end
 
-function M._v5.tmux_window_command(window_id)
-  return workspace_runtime:tmux_window_command(window_id)
-end
-
-function M._v5.status_for_window(window_id)
-  return workspace_runtime:status_for_window(window_id)
-end
-
-function M._v5.dashboard_workspace_status(record, window_id)
-  return workspace_runtime:dashboard_workspace_status(record, window_id)
-end
-
-function M._v5.tmux_target(session, window_name)
-  return workspace_runtime_mod.tmux_target(session, window_name)
-end
-
-function M._v5.normalize_codex_session_id(value)
-  return workspace_store.normalize_session_id(value)
-end
-
-function M._v5.codex_home()
-  return workspace_runtime:codex_home()
-end
-
-function M._v5.codex_session_files()
-  return workspace_runtime:codex_session_files()
-end
-
-function M._v5.read_codex_session_meta(path)
-  return workspace_runtime:read_codex_session_meta(path)
-end
-
-function M._v5.codex_session_for_id(session_id)
-  return workspace_runtime:codex_session_for_id(session_id)
-end
-
-function M._v5.latest_codex_session_for_cwd(cwd, min_mtime)
-  return workspace_runtime:latest_codex_session_for_cwd(cwd, min_mtime)
-end
+compat_mod.install_workspace_runtime(M._v5, {
+  runtime = workspace_runtime,
+  store = workspace_store,
+})
 
 local function workspace_state_file()
   return workspace_runtime:state_file()
 end
 
-function M._v5.workspace_instruction_files_config()
-  return workspace_runtime:instruction_files_config()
-end
-
-function M._v5.workspace_instruction_directory(root)
-  return workspace_runtime:instruction_directory(root)
-end
-
-function M._v5.workspace_instruction_file_path(root, safe_name)
-  return workspace_runtime:instruction_file_path(root, safe_name)
-end
-
-function M._v5.read_workspace_instruction_file(root, safe_name)
-  return workspace_runtime:read_instruction_file(root, safe_name)
-end
-
-function M._v5.write_workspace_instruction_file(root, safe_name, instruction)
-  return workspace_runtime:write_instruction_file(root, safe_name, instruction)
-end
-
-function M._v5.delete_workspace_instruction_file(root, safe_name)
-  return workspace_runtime:delete_instruction_file(root, safe_name)
-end
-
-function M._v5.workspace_instruction_file_records(root)
-  return workspace_runtime:instruction_file_records(root)
-end
-
-function M._v5.workspace_instruction_ignore_status(root)
-  return workspace_runtime:workspace_instruction_ignore_status(root)
-end
-
-function M._v5.normalize_record(record, safe_name, root)
-  return workspace_runtime:normalize_record(record, safe_name, root)
-end
-
 local function read_workspace_state()
   return workspace_runtime:read_state()
-end
-
-function M._v5.apply_codex_session_meta(workspace, meta)
-  return workspace_runtime:apply_codex_session_meta(workspace, meta)
-end
-
-function M._v5.resolve_workspace_resume_session(workspace)
-  return workspace_runtime:resolve_workspace_resume_session(workspace)
-end
-
-function M._v5.persist_workspace_session_meta(workspace, meta)
-  return workspace_runtime:persist_workspace_session_meta(workspace, meta)
-end
-
-function M._v5.schedule_workspace_session_capture(workspace, min_mtime)
-  return workspace_runtime:schedule_workspace_session_capture(workspace, min_mtime)
 end
 
 M._sync_workspace_activity = function(codex_status)
@@ -602,22 +479,6 @@ end
 
 local function workspace_entries_for_project(root)
   return workspace_runtime:entries_for_project(root)
-end
-
-function M._v5.entry_for_name(root, name)
-  return workspace_runtime:entry_for_name(root, name)
-end
-
-function M._v5.names_for_project(root)
-  return workspace_runtime:names_for_project(root)
-end
-
-function M._v5.mission_names_for_project(root)
-  return workspace_runtime:mission_names_for_project(root)
-end
-
-function M._v5.reconcile_project(root)
-  return workspace_runtime:reconcile_project(root)
 end
 
 local function workspace_manager_project_root()
@@ -636,14 +497,6 @@ close_workspace_manager = function()
   return workspace_manager_controller:close()
 end
 
-function M._v5.fuzzy_workspace_score(value, query)
-  return workspace_manager_mod.fuzzy_workspace_score(value, query)
-end
-
-function M._v5.fuzzy_workspace_filter(entries, query)
-  return workspace_manager_mod.fuzzy_workspace_filter(entries, query)
-end
-
 render_workspace_manager = function()
   return workspace_manager_controller:render()
 end
@@ -660,52 +513,12 @@ local function workspace_manager_max_height()
   return type(popup_config) == "table" and popup_config.height or nil
 end
 
-function M._v5.render_workspace_manager_search()
-  return workspace_manager_controller:render_search()
-end
-
-function M._v5.update_workspace_manager_query(query)
-  return workspace_manager_controller:update_query(query)
-end
-
-function M._v5.append_workspace_manager_query(input)
-  return workspace_manager_controller:append_query(input)
-end
-
-function M._v5.delete_workspace_manager_query_char()
-  return workspace_manager_controller:delete_query_char()
-end
-
-function M._v5.clear_workspace_manager_query()
-  return workspace_manager_controller:clear_query()
-end
-
-function M._v5.open_workspace_manager_search_input()
-  return workspace_manager_controller:open_search_input()
-end
-
 local function rename_saved_workspace(entry, new_name)
   return workspace_runtime:rename_saved_workspace(entry, new_name)
 end
 
 local function delete_saved_workspace(entry)
   return workspace_runtime:delete_saved_workspace(entry)
-end
-
-function M._v5.close_saved_workspace_window(entry)
-  return workspace_runtime:close_saved_workspace_window(entry)
-end
-
-function M._v5.close_all_saved_workspace_windows(root)
-  return workspace_runtime:close_all_saved_workspace_windows(root)
-end
-
-function M._v5.saved_workspace_instruction_request(entry)
-  return workspace_runtime:saved_workspace_instruction_request(entry)
-end
-
-function M._v5.update_saved_workspace_instruction(entry, instruction)
-  return workspace_runtime:update_saved_workspace_instruction(entry, instruction)
 end
 
 local function edit_saved_workspace_instruction(entry)
@@ -776,9 +589,10 @@ workspace_manager_controller = workspace_manager_mod.new({
   namespace = state.workspace_manager_ns,
 })
 
-function M._v5.parse_create_args(args)
-  return workspace_runtime_mod.parse_create_args(args)
-end
+compat_mod.install_workspace_manager(M._v5, {
+  controller = workspace_manager_controller,
+  runtime = workspace_runtime,
+})
 
 local function restart_with_command(command, focus, permission_profile, initial_prompt, opts)
   return terminal:restart_with_command(command, focus, permission_profile, initial_prompt, opts)
@@ -844,18 +658,13 @@ function M.open_with_profile_menu(opts)
   return M.open_with_keyed_profile_menu(opts)
 end
 
-function M._v5.send_prompt_or_open_with_profile(message)
-  if not M._v5.should_select_permission_profile(state.job_id) then
-    return terminal:send_to_codex(message)
-  end
-
-  return M.open_with_keyed_profile_menu({
-    initial_prompt = message,
-    open_opts = {
-      initial_mode = "plan",
-    },
-  })
-end
+compat_mod.install_prompt_open(M._v5, {
+  state = state,
+  terminal = terminal,
+  open_with_keyed_profile_menu = function(opts)
+    return M.open_with_keyed_profile_menu(opts)
+  end,
+})
 
 function M.open_workspace_session(workspace, initial_prompt, opts)
   opts = opts or {}
@@ -885,50 +694,6 @@ function M.open_workspace_session(workspace, initial_prompt, opts)
     initial_mode = workspace and workspace.initial_mode,
     suppress_startup_plan_warning = M._v5.suppress_startup_plan_warning_for_workspace(workspace),
   })
-end
-
-function M._v5.remote_terminal_snapshot(max_lines)
-  max_lines = math.max(1, tonumber(max_lines) or 14)
-  return terminal:terminal_snapshot(max_lines) or ""
-end
-
-function M._v5.remote_send_to_codex(message)
-  return terminal:send_to_codex(tostring(message or "")) and "ok" or "failed"
-end
-
-function M._v5.remote_select_codex_question_option(option, with_note)
-  return terminal:select_codex_question_option(tostring(option or ""), with_note == true) and "ok" or "failed"
-end
-
-function M._v5.remote_submit_codex_question_note(note)
-  return terminal:submit_codex_question_note(tostring(note or "")) and "ok" or "failed"
-end
-
-function M._v5.remote_interrupt_codex_session()
-  return terminal:interrupt_codex_session() and "ok" or "failed"
-end
-
-function M._v5.remote_switch_codex_mode()
-  return terminal:toggle_plan_mode() and "ok" or "failed"
-end
-
-function M._v5.remote_show_existing_codex_terminal()
-  if not terminal:terminal_running() then
-    return "not_running"
-  end
-  return terminal:open_window(true) and "ok" or "failed"
-end
-
-function M._v5.remote_workspace_status()
-  return terminal:terminal_running() and "ready" or "not_running"
-end
-
-function M._v5.suppress_startup_plan_warning_for_workspace(workspace)
-  return type(workspace) == "table" and type(workspace.mission_id) == "string" and workspace.mission_id ~= ""
-end
-
-function M._v5.remote_ensure_plan_mode()
-  return terminal:ensure_plan_mode() and "ok" or "failed"
 end
 
 function M.open_hidden(initial_prompt)
@@ -1049,57 +814,9 @@ workspace_create_controller = workspace_create_mod.new({
   namespace = state.workspace_manager_ns,
 })
 
-function M._v5.workspace_create_preview_lines(request)
-  return workspace_create_controller:preview_lines(request)
-end
-
-function M._v5.workspace_create_preview_config(line_count)
-  return workspace_create_controller:create_preview_config(line_count)
-end
-
-function M._v5.workspace_create_footer_segments()
-  return workspace_create_controller:create_footer_segments()
-end
-
-function M._v5.workspace_create_footer_line()
-  return workspace_create_controller:create_footer_line()
-end
-
-function M._v5.render_workspace_create_footer(bufnr, width)
-  return workspace_create_controller:render_create_footer(bufnr, width)
-end
-
-function M._v5.open_workspace_create_footer(win)
-  return workspace_create_controller:open_create_footer(win)
-end
-
-function M._v5.workspace_instruction_editor_config(line_count)
-  return workspace_create_controller:instruction_editor_config(line_count)
-end
-
-function M._v5.workspace_instruction_mode_label(mode)
-  return workspace_create_mod.instruction_mode_label(mode)
-end
-
-function M._v5.update_workspace_instruction_mode_footer(win)
-  return workspace_create_controller:update_instruction_mode_footer(win)
-end
-
-function M._v5.disable_workspace_instruction_completion(bufnr)
-  return workspace_create_controller:disable_instruction_completion(bufnr)
-end
-
-function M._v5.open_workspace_instruction_editor(request, opts)
-  return workspace_create_controller:open_instruction_editor(request, opts)
-end
-
-function M._v5.open_workspace_create_preview(request)
-  return workspace_create_controller:open_create_preview(request)
-end
-
-function M._v5.open_custom_workspace_instruction_prompt(name)
-  return workspace_create_controller:open_custom_instruction_prompt(name)
-end
+compat_mod.install_workspace_create(M._v5, {
+  controller = workspace_create_controller,
+})
 
 function M.open_workspace_prompt(opts)
   return workspace_create_controller:open_prompt(opts)

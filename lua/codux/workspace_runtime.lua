@@ -2,12 +2,15 @@ local M = {}
 M.__index = M
 
 local command_util = require("codux.command")
-local filetypes = require("codux.filetypes")
 local mission_mod = require("codux.mission")
 local text_util = require("codux.text")
 local workspace_git = require("codux.workspace_git")
+local workspace_instructions = require("codux.workspace_instructions")
 local workspace_lifecycle = require("codux.workspace_lifecycle")
 local workspace_remote = require("codux.workspace_remote")
+local workspace_sessions = require("codux.workspace_sessions")
+local workspace_target = require("codux.workspace_target")
+local workspace_worktree = require("codux.workspace_worktree")
 
 local function noop() end
 
@@ -15,11 +18,6 @@ local function trim(value)
   return text_util.trim(value)
 end
 
-local strip_trailing_slashes = workspace_git.strip_trailing_slashes
-local normalize_absolute_path = workspace_git.normalize_absolute_path
-local normalize_relative_directory = workspace_git.normalize_relative_directory
-local starts_with_path = workspace_git.starts_with_path
-local relative_path_escapes_root = workspace_git.relative_path_escapes_root
 local normalize_codex_mode = workspace_git.normalize_codex_mode
 local inactive_like_status = workspace_git.inactive_like_status
 local prepend_command = workspace_git.prepend_command
@@ -243,522 +241,119 @@ function M:nvim_system(args)
 end
 
 function M:git_output(root, ...)
-  local args = { "git", "-C", root }
-  for _, arg in ipairs({ ... }) do
-    table.insert(args, arg)
-  end
-  local output, code = self.system(args)
-  if code ~= 0 then
-    return nil, code
-  end
-  return trim(output), code
+  return workspace_worktree.git_output(self, root, ...)
 end
 
 function M:git_common_dir(root)
-  local output = self:git_output(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
-  if output and output ~= "" then
-    return strip_trailing_slashes(output)
-  end
-
-  output = self:git_output(root, "rev-parse", "--git-common-dir")
-  if output and output ~= "" then
-    return strip_trailing_slashes(normalize_absolute_path(root, output))
-  end
-
-  return nil
+  return workspace_worktree.git_common_dir(self, root)
 end
 
 function M:git_current_ref(root)
-  local branch = self:git_output(root, "branch", "--show-current")
-  if branch and branch ~= "" then
-    return branch
-  end
-
-  local head = self:git_output(root, "rev-parse", "--short", "HEAD")
-  if head and head ~= "" then
-    return head
-  end
-
-  return "HEAD"
+  return workspace_worktree.git_current_ref(self, root)
 end
 
 function M:git_rev_parse(root, ref)
-  local output = self:git_output(root, "rev-parse", tostring(ref or "HEAD"))
-  if output and output ~= "" then
-    return output
-  end
-  return nil
+  return workspace_worktree.git_rev_parse(self, root, ref)
 end
 
 function M:git_checkout_clean(root)
-  local output, code = self.system({ "git", "-C", root, "status", "--porcelain" })
-  if code ~= 0 then
-    return false, "not inside a Git repository"
-  end
-  if trim(output) ~= "" then
-    return false, "current branch must be clean before creating a Codux workspace"
-  end
-  return true, nil
+  return workspace_worktree.git_checkout_clean(self, root)
 end
 
 function M:git_branch_exists(root, branch)
-  local _, code = self.system({ "git", "-C", root, "show-ref", "--verify", "--quiet", "refs/heads/" .. tostring(branch or "") })
-  return code == 0
+  return workspace_worktree.git_branch_exists(self, root, branch)
 end
 
 function M:resolve_worktree_branch(root, safe_name)
-  local prefix = self:worktree_config().branch_prefix
-  local prefix_namespace = prefix:match("^(.-)/+$")
-  if not prefix_namespace or prefix_namespace == "" then
-    local branch = prefix .. tostring(safe_name or "")
-    if self:git_branch_exists(root, branch) then
-      return nil, "branch already exists: " .. branch
-    end
-    return branch, nil
-  end
-
-  for index = 0, 99 do
-    local namespace = index == 0 and prefix_namespace or (prefix_namespace .. tostring(index))
-    if not self:git_branch_exists(root, namespace) then
-      local branch = namespace .. "/" .. tostring(safe_name or "")
-      if self:git_branch_exists(root, branch) then
-        return nil, "branch already exists: " .. branch
-      end
-      return branch, nil
-    end
-  end
-
-  return nil, "no available branch namespace for " .. prefix_namespace .. "/"
+  return workspace_worktree.resolve_worktree_branch(self, root, safe_name)
 end
 
 function M:worktree_path(base_root, safe_name)
-  local config = self:worktree_config()
-  local directory = config.directory
-  if directory:sub(1, 1) ~= "/" then
-    directory = normalize_absolute_path(base_root, directory)
-  end
-  return normalize_absolute_path(directory, safe_name)
+  return workspace_worktree.worktree_path(self, base_root, safe_name)
 end
 
 function M:worktree_branch(safe_name)
-  return self:worktree_config().branch_prefix .. tostring(safe_name or "")
+  return workspace_worktree.worktree_branch(self, safe_name)
 end
 
 function M:renamed_worktree_branch(existing, safe_name)
-  existing = type(existing) == "table" and existing or {}
-  local branch = existing.worktree_branch
-  if type(branch) == "string" then
-    local namespace = branch:match("^(.*)/[^/]+$")
-    if namespace and namespace ~= "" then
-      return namespace .. "/" .. tostring(safe_name or "")
-    end
-  end
-  return self:worktree_branch(safe_name)
+  return workspace_worktree.renamed_worktree_branch(self, existing, safe_name)
 end
 
 function M:target_in_worktree(path, target_type, base_root, worktree_root)
-  if type(path) ~= "string" or path == "" then
-    return worktree_root, "directory"
-  end
-
-  local normalized_base = strip_trailing_slashes(base_root)
-  local normalized_path = strip_trailing_slashes(path)
-  if starts_with_path(normalized_path, normalized_base) then
-    local suffix = normalized_path:sub(#normalized_base + 1)
-    if suffix:sub(1, 1) == "/" then
-      suffix = suffix:sub(2)
-    end
-    if suffix == "" then
-      return worktree_root, "directory"
-    end
-    return normalize_absolute_path(worktree_root, suffix), target_type == "directory" and "directory" or "file"
-  end
-
-  return worktree_root, "directory"
+  return workspace_worktree.target_in_worktree(self, path, target_type, base_root, worktree_root)
 end
 
 function M:create_git_worktree(base_root, worktree_path, branch, base_ref)
-  local output, code = self.system({ "git", "-C", base_root, "worktree", "add", "-b", branch, worktree_path, base_ref })
-  if code ~= 0 then
-    local detail = trim(output)
-    local message = "Failed to create Git worktree " .. tostring(worktree_path)
-    if detail ~= "" then
-      message = message .. ": " .. detail
-    end
-    return false, message
-  end
-  return true, nil
+  return workspace_worktree.create_git_worktree(self, base_root, worktree_path, branch, base_ref)
 end
 
 function M:remove_git_worktree(base_root, worktree_path)
-  local output, code = self.system({ "git", "-C", base_root, "worktree", "remove", "--force", worktree_path })
-  if code == 0 then
-    return true, nil
-  end
-  local message = "Failed to remove Git worktree " .. tostring(worktree_path)
-  local detail = trim(output)
-  if detail:find("is not a working tree", 1, true) then
-    return true, nil
-  end
-  if detail ~= "" then
-    message = message .. ": " .. detail
-  end
-  return false, message
+  return workspace_worktree.remove_git_worktree(self, base_root, worktree_path)
 end
 
 function M:remove_git_worktree_in_common_dir(git_common_dir, worktree_path)
-  local output, code = self.system({ "git", "--git-dir=" .. tostring(git_common_dir or ""), "worktree", "remove", "--force", worktree_path })
-  if code == 0 then
-    return true, nil
-  end
-  local message = "Failed to remove Git worktree " .. tostring(worktree_path)
-  local detail = trim(output)
-  if detail:find("is not a working tree", 1, true) then
-    return true, nil
-  end
-  if detail ~= "" then
-    message = message .. ": " .. detail
-  end
-  return false, message
+  return workspace_worktree.remove_git_worktree_in_common_dir(self, git_common_dir, worktree_path)
 end
 
 function M:delete_git_branch(base_root, branch)
-  local _, code = self.system({ "git", "-C", base_root, "branch", "-D", branch })
-  return code == 0
+  return workspace_worktree.delete_git_branch(self, base_root, branch)
 end
 
 function M:delete_git_branch_in_common_dir(git_common_dir, branch)
-  local output, code = self.system({ "git", "--git-dir=" .. tostring(git_common_dir or ""), "branch", "-D", branch })
-  if code == 0 then
-    return true, nil
-  end
-  local message = "Failed to delete Git branch " .. tostring(branch)
-  local detail = trim(output)
-  if detail ~= "" then
-    message = message .. ": " .. detail
-  end
-  return false, message
+  return workspace_worktree.delete_git_branch_in_common_dir(self, git_common_dir, branch)
 end
 
 function M:move_git_worktree(base_root, old_path, new_path)
-  local _, code = self.system({ "git", "-C", base_root, "worktree", "move", old_path, new_path })
-  return code == 0
+  return workspace_worktree.move_git_worktree(self, base_root, old_path, new_path)
 end
 
 function M:rename_git_branch(base_root, old_branch, new_branch)
-  local _, code = self.system({ "git", "-C", base_root, "branch", "-m", old_branch, new_branch })
-  return code == 0
+  return workspace_worktree.rename_git_branch(self, base_root, old_branch, new_branch)
 end
 
 function M:workspace_branch_merged(entry)
-  entry = type(entry) == "table" and entry or {}
-  if entry.workspace_kind ~= "worktree" then
-    return false
-  end
-  local branch = entry.worktree_branch
-  local base = entry.worktree_base
-  local base_commit = entry.worktree_base_commit
-  local root = entry.project_root or entry.worktree_path
-  if
-    type(branch) ~= "string"
-    or branch == ""
-    or type(base) ~= "string"
-    or base == ""
-    or type(base_commit) ~= "string"
-    or base_commit == ""
-    or type(root) ~= "string"
-  then
-    return false
-  end
-
-  local count_output, count_code = self.system({ "git", "-C", root, "rev-list", "--count", base_commit .. ".." .. branch })
-  if count_code ~= 0 or tonumber(trim(count_output)) == nil or tonumber(trim(count_output)) <= 0 then
-    return false
-  end
-
-  local _, code = self.system({ "git", "-C", root, "merge-base", "--is-ancestor", branch, base })
-  return code == 0
+  return workspace_worktree.workspace_branch_merged(self, entry)
 end
 
 function M:workspace_branch_state(entry)
-  entry = type(entry) == "table" and entry or {}
-  local state = {
-    worktree = entry.workspace_kind == "worktree",
-    branch = entry.worktree_branch,
-    base = entry.worktree_base,
-    ahead_count = 0,
-    merged = false,
-  }
-  if not state.worktree then
-    return state
-  end
-
-  local branch = entry.worktree_branch
-  local base = entry.worktree_base
-  local base_commit = entry.worktree_base_commit
-  local root = entry.project_root or entry.worktree_path
-  if
-    type(branch) ~= "string"
-    or branch == ""
-    or type(base) ~= "string"
-    or base == ""
-    or type(base_commit) ~= "string"
-    or base_commit == ""
-    or type(root) ~= "string"
-    or root == ""
-  then
-    state.error = "missing base"
-    return state
-  end
-
-  local count_output, count_code = self.system({ "git", "-C", root, "rev-list", "--count", base_commit .. ".." .. branch })
-  local ahead = tonumber(trim(count_output))
-  if count_code ~= 0 or ahead == nil then
-    state.error = "ahead unknown"
-    return state
-  end
-
-  state.ahead_count = ahead
-  if ahead <= 0 then
-    return state
-  end
-
-  local _, code = self.system({ "git", "-C", root, "merge-base", "--is-ancestor", branch, base })
-  state.merged = code == 0
-  return state
+  return workspace_worktree.workspace_branch_state(self, entry)
 end
 
 function M:backfill_workspace_base_commit(entry)
-  entry = type(entry) == "table" and entry or {}
-  if entry.workspace_kind ~= "worktree" or (type(entry.worktree_base_commit) == "string" and entry.worktree_base_commit ~= "") then
-    return false
-  end
-
-  local root = entry.project_root or entry.worktree_path
-  local branch = entry.worktree_branch
-  local base = entry.worktree_base
-  if type(root) ~= "string" or root == "" or type(branch) ~= "string" or branch == "" or type(base) ~= "string" or base == "" then
-    return false
-  end
-
-  local commit = self:git_output(root, "merge-base", branch, base)
-  if not commit or commit == "" then
-    return false
-  end
-
-  local state_data, state_error = self:read_state()
-  if state_error then
-    return false
-  end
-  local project = type(state_data.projects) == "table" and state_data.projects[entry.project_root] or nil
-  local workspaces = type(project) == "table" and project.workspaces or nil
-  local record = type(workspaces) == "table" and workspaces[entry.safe_name] or nil
-  if type(record) ~= "table" then
-    return false
-  end
-
-  record.worktree_base_commit = commit
-  project.updated_at = self:timestamp()
-  local write_ok = self:write_state(state_data)
-  if write_ok then
-    entry.worktree_base_commit = commit
-  end
-  return write_ok
+  return workspace_worktree.backfill_workspace_base_commit(self, entry)
 end
 
 function M:prompt_merged_workspaces(root)
-  local entries, error_message = self:entries_for_project(root)
-  if error_message then
-    return false
-  end
-
-  self.state.merged_workspace_cleanup_declined = type(self.state.merged_workspace_cleanup_declined) == "table"
-      and self.state.merged_workspace_cleanup_declined
-    or {}
-
-  for _, entry in ipairs(entries) do
-    local key = tostring(entry.project_root or "") .. "\0" .. tostring(entry.safe_name or "")
-    if entry.workspace_kind == "worktree" and (type(entry.worktree_base_commit) ~= "string" or entry.worktree_base_commit == "") then
-      self:backfill_workspace_base_commit(entry)
-    elseif not self.state.merged_workspace_cleanup_declined[key] and self:workspace_branch_merged(entry) then
-      local choice = vim.fn.confirm(
-        "Codux workspace " .. tostring(entry.name or entry.safe_name) .. " has been merged. Delete workspace/worktree?",
-        "&Yes\n&No",
-        2
-      )
-      if choice == 1 then
-        return self:delete_saved_workspace(entry)
-      end
-      self.state.merged_workspace_cleanup_declined[key] = true
-    end
-  end
-
-  return true
+  return workspace_worktree.prompt_merged_workspaces(self, root)
 end
 
 function M:cleanup_created_worktree(base_root, worktree_path, branch)
-  if type(worktree_path) == "string" and worktree_path ~= "" then
-    self:remove_git_worktree(base_root, worktree_path)
-  end
-  if type(branch) == "string" and branch ~= "" then
-    self:delete_git_branch(base_root, branch)
-  end
+  return workspace_worktree.cleanup_created_worktree(self, base_root, worktree_path, branch)
 end
 
 function M:workspace_instruction_relative_dir(root)
-  local config = self:instruction_files_config()
-  if type(config) ~= "table" or config.enabled == false then
-    return nil
-  end
-  if type(root) ~= "string" or root == "" then
-    return nil
-  end
-
-  local configured = normalize_relative_directory(config.directory)
-  if configured == "" then
-    return nil
-  end
-  if relative_path_escapes_root(configured) then
-    return nil
-  end
-  if configured:match("^/") or configured:match("^~") then
-    local directory = self:instruction_directory(root)
-    if type(directory) ~= "string" or directory == "" or not starts_with_path(directory, root) or directory == root then
-      return nil
-    end
-    return normalize_relative_directory(directory:sub(#strip_trailing_slashes(root) + 2))
-  end
-
-  return configured
+  return workspace_instructions.relative_dir(self, root)
 end
 
 function M:workspace_instruction_ignore_rule(root)
-  local relative_dir = self:workspace_instruction_relative_dir(root)
-  if not relative_dir then
-    return nil
-  end
-
-  if relative_dir == ".agents" or relative_dir:sub(1, 8) == ".agents/" then
-    return ".agents/"
-  end
-
-  return relative_dir .. "/"
+  return workspace_instructions.ignore_rule(self, root)
 end
 
 function M:workspace_instruction_ignore_status(root)
-  local relative_dir = self:workspace_instruction_relative_dir(root)
-  if not relative_dir then
-    return {
-      status = "skipped",
-      reason = "workspace instruction files are disabled or outside the project",
-    }
-  end
-
-  local marker = relative_dir .. "/.codux-ignore-check"
-  local _, code = self.system({ "git", "-C", root, "check-ignore", "--quiet", "--", marker })
-  if code == 0 then
-    return {
-      status = "ignored",
-      relative_dir = relative_dir,
-      marker = marker,
-      rule = self:workspace_instruction_ignore_rule(root),
-    }
-  end
-  if code == 1 then
-    return {
-      status = "not_ignored",
-      relative_dir = relative_dir,
-      marker = marker,
-      rule = self:workspace_instruction_ignore_rule(root),
-    }
-  end
-
-  return {
-    status = "unknown",
-    relative_dir = relative_dir,
-    marker = marker,
-    rule = self:workspace_instruction_ignore_rule(root),
-  }
+  return workspace_instructions.ignore_status(self, root)
 end
 
 function M:workspace_instruction_ignore_warning(root)
-  local status = self:workspace_instruction_ignore_status(root)
-  if status.status ~= "not_ignored" then
-    return nil
-  end
-
-  return "Codux workspace instructions are not ignored by Git. Add "
-    .. tostring(status.rule or status.relative_dir .. "/")
-    .. " to .gitignore or run :CoduxWorkspaceIgnore."
+  return workspace_instructions.ignore_warning(self, root)
 end
 
 function M:warn_workspace_instruction_ignore(root)
-  local warning = self:workspace_instruction_ignore_warning(root)
-  if not warning then
-    return false
-  end
-
-  self.state.workspace_instruction_ignore_warnings = type(self.state.workspace_instruction_ignore_warnings) == "table"
-      and self.state.workspace_instruction_ignore_warnings
-    or {}
-  local relative_dir = self:workspace_instruction_relative_dir(root) or ""
-  local key = tostring(root or "") .. "\n" .. relative_dir
-  if self.state.workspace_instruction_ignore_warnings[key] then
-    return false
-  end
-
-  self.state.workspace_instruction_ignore_warnings[key] = true
-  self.notify(warning, vim.log.levels.WARN)
-  return true
+  return workspace_instructions.warn_ignore(self, root)
 end
 
 function M:ensure_workspace_instruction_gitignore(root)
-  root = type(root) == "string" and root ~= "" and root or self:target_context().root
-  if type(root) ~= "string" or root == "" then
-    return false, "project root not detected"
-  end
-
-  local status = self:workspace_instruction_ignore_status(root)
-  if status.status == "skipped" then
-    return false, "workspace instruction files are disabled or outside the project"
-  end
-  if status.status == "unknown" then
-    return false, "not inside a Git repository or unable to check .gitignore"
-  end
-
-  local rule = status.rule or self:workspace_instruction_ignore_rule(root)
-  if type(rule) ~= "string" or rule == "" then
-    return false, "workspace instruction ignore rule could not be determined"
-  end
-
-  local path = root .. "/.gitignore"
-  local lines = {}
-  if vim.fn.filereadable(path) == 1 then
-    local ok, read_lines = pcall(vim.fn.readfile, path)
-    if not ok or type(read_lines) ~= "table" then
-      return false, "Failed to read .gitignore"
-    end
-    lines = read_lines
-  end
-
-  for _, line in ipairs(lines) do
-    if trim(line) == rule then
-      return true, "Codux workspace instructions are already ignored by Git"
-    end
-  end
-
-  if #lines > 0 and lines[#lines] ~= "" then
-    table.insert(lines, "")
-  end
-  table.insert(lines, "# Codux workspace instructions")
-  table.insert(lines, rule)
-
-  local ok, result = pcall(vim.fn.writefile, lines, path)
-  if not ok or result ~= 0 then
-    return false, "Failed to update .gitignore"
-  end
-
-  return true, "Added " .. rule .. " to .gitignore"
+  return workspace_instructions.ensure_gitignore(self, root)
 end
 
 function M:path_directory(path)
@@ -1284,62 +879,31 @@ function M:state_record(workspace, existing)
 end
 
 function M:instruction_files_config()
-  if self.store and type(self.store.instruction_files_config) == "function" then
-    return self.store:instruction_files_config()
-  end
-  local workspaces = self:workspace_config()
-  if workspaces.enabled == false or workspaces.instruction_files == false then
-    return { enabled = false }
-  end
-  local defaults = self.defaults.workspaces or {}
-  local default_instruction_files = defaults.instruction_files or { enabled = true, directory = ".agents/codux" }
-  local value = type(workspaces.instruction_files) == "table" and workspaces.instruction_files or default_instruction_files
-  local directory = type(value.directory) == "string" and trim(value.directory) or ""
-  if directory == "" then
-    directory = default_instruction_files.directory or ".agents/codux"
-  end
-  return {
-    enabled = value.enabled ~= false,
-    directory = directory,
-  }
+  return workspace_instructions.files_config(self)
 end
 
 function M:instruction_directory(root)
-  if self.store and type(self.store.instruction_directory) == "function" then
-    return self.store:instruction_directory(root)
-  end
-  local file_config = self:instruction_files_config()
-  if file_config.enabled == false or type(root) ~= "string" or root == "" then
-    return nil
-  end
-  local directory = vim.fn.expand(file_config.directory)
-  if directory == "" then
-    return nil
-  end
-  if directory:match("^/") then
-    return directory
-  end
-  return root .. "/" .. directory
+  return workspace_instructions.directory(self, root)
 end
 
 function M:instruction_file_path(root, safe_name)
-  return self.store:instruction_file_path(root, safe_name)
+  return workspace_instructions.file_path(self, root, safe_name)
 end
 
 function M:read_instruction_file(root, safe_name)
-  return self.store:read_instruction_file(root, safe_name)
+  return workspace_instructions.read_file(self, root, safe_name)
 end
 
 function M:write_instruction_file(root, safe_name, instruction)
-  return self.store:write_instruction_file(root, safe_name, instruction)
+  return workspace_instructions.write_file(self, root, safe_name, instruction)
 end
 
 function M:delete_instruction_file(root, safe_name)
-  return self.store:delete_instruction_file(root, safe_name)
+  return workspace_instructions.delete_file(self, root, safe_name)
 end
 
 function M:instruction_file_records(root)
-  return self.store:instruction_file_records(root)
+  return workspace_instructions.file_records(self, root)
 end
 
 function M:normalize_record(record, safe_name, root)
@@ -1347,119 +911,39 @@ function M:normalize_record(record, safe_name, root)
 end
 
 function M:apply_codex_session_meta(workspace, meta)
-  return self.store.apply_codex_session_meta(workspace, meta)
+  return workspace_sessions.apply_meta(self, workspace, meta)
 end
 
 function M:resolve_workspace_resume_session(workspace)
-  return self.store:resolve_workspace_resume_session(workspace)
+  return workspace_sessions.resolve_resume(self, workspace)
 end
 
 function M:codex_home()
-  return self.store:codex_home()
+  return workspace_sessions.codex_home(self)
 end
 
 function M:codex_session_files()
-  return self.store:codex_session_files()
+  return workspace_sessions.session_files(self)
 end
 
 function M:read_codex_session_meta(path)
-  return self.store:read_codex_session_meta(path)
+  return workspace_sessions.read_meta(self, path)
 end
 
 function M:codex_session_for_id(session_id)
-  return self.store:codex_session_for_id(session_id)
+  return workspace_sessions.session_for_id(self, session_id)
 end
 
 function M:latest_codex_session_for_cwd(cwd, min_mtime)
-  return self.store:latest_codex_session_for_cwd(cwd, min_mtime)
+  return workspace_sessions.latest_for_cwd(self, cwd, min_mtime)
 end
 
 function M:persist_workspace_session_meta(workspace, meta)
-  if type(workspace) ~= "table" or type(meta) ~= "table" then
-    return false
-  end
-
-  local root = workspace.project_root
-  local safe_name = workspace.safe_name
-  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
-    return false
-  end
-
-  local state_data, state_error = self:read_state()
-  if state_error then
-    return false
-  end
-
-  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
-  local workspaces = type(project) == "table" and project.workspaces or nil
-  local record = type(workspaces) == "table" and workspaces[safe_name] or nil
-  if type(record) ~= "table" then
-    return false
-  end
-
-  local session_id = self.store.normalize_session_id(meta.session_id)
-  if not session_id then
-    return false
-  end
-  if meta.cwd ~= root then
-    return false
-  end
-
-  record.codex_session_id = session_id
-  record.codex_session_path = meta.path
-  record.codex_session_captured_at = self:timestamp()
-  project.updated_at = record.codex_session_captured_at
-
-  local write_ok = self:write_state(state_data)
-  if not write_ok then
-    return false
-  end
-
-  workspace.codex_session_id = record.codex_session_id
-  workspace.codex_session_path = record.codex_session_path
-  workspace.codex_session_captured_at = record.codex_session_captured_at
-  if
-    self.state.workspace == workspace
-    or (self.state.workspace and self.state.workspace.safe_name == safe_name and self.state.workspace.project_root == root)
-  then
-    self.state.workspace.codex_session_id = record.codex_session_id
-    self.state.workspace.codex_session_path = record.codex_session_path
-    self.state.workspace.codex_session_captured_at = record.codex_session_captured_at
-  end
-  if self.state.workspace_manager_project_root == root then
-    self.render_workspace_manager()
-  end
-
-  return true
+  return workspace_sessions.persist_meta(self, workspace, meta)
 end
 
 function M:schedule_workspace_session_capture(workspace, min_mtime)
-  if type(workspace) ~= "table" then
-    return
-  end
-
-  min_mtime = tonumber(min_mtime) or 0
-  local attempts = 0
-
-  local function capture()
-    attempts = attempts + 1
-    local meta = nil
-    local session_id = self.store.normalize_session_id(workspace.codex_session_id)
-    if session_id then
-      meta = self:codex_session_for_id(session_id)
-    end
-    if not meta then
-      meta = self:latest_codex_session_for_cwd(workspace.project_root, min_mtime)
-    end
-    if meta and self:persist_workspace_session_meta(workspace, meta) then
-      return
-    end
-    if attempts < 12 then
-      vim.defer_fn(capture, 500)
-    end
-  end
-
-  vim.defer_fn(capture, 500)
+  return workspace_sessions.schedule_capture(self, workspace, min_mtime)
 end
 
 function M:sync_activity(codex_status)
@@ -3274,113 +2758,19 @@ function M:restore_workspaces(opts)
 end
 
 function M:target_sync_allowed(event, current_filetype)
-  if type(self.state.workspace) ~= "table" or type(self.state.workspace.safe_name) ~= "string" then
-    return false
-  end
-
-  local filetype = current_filetype()
-  if filetypes.is_internal(filetype) then
-    return false
-  end
-
-  if event == "CursorMoved" and not self.is_explorer_filetype(filetype) then
-    return false
-  end
-
-  return true
+  return workspace_target.sync_allowed(self, event, current_filetype)
 end
 
 function M:sync_target(event, current_filetype)
-  if not self:target_sync_allowed(event, current_filetype) then
-    return false
-  end
-
-  local workspace = self.state.workspace
-  local root = workspace.project_root
-  local safe_name = workspace.safe_name
-  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
-    return false
-  end
-
-  local context = self:target_context()
-  local path = context.path
-  if type(path) ~= "string" or path == "" or M.virtual_path(path) then
-    return false
-  end
-
-  local target_type = context.target and context.target.type or (vim.fn.isdirectory(path) == 1 and "directory" or "file")
-  local branch = context.branch or ""
-  path, target_type = M.normalize_workspace_target(path, target_type, root)
-  local signature = M.workspace_target_signature(path, target_type, branch)
-  if signature == self.state.workspace_target_signature then
-    return true
-  end
-
-  local state_data, state_error = self:read_state()
-  if state_error then
-    return false
-  end
-
-  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
-  local workspaces = type(project) == "table" and project.workspaces or nil
-  local record = type(workspaces) == "table" and workspaces[safe_name] or nil
-  if type(record) ~= "table" then
-    return false
-  end
-
-  record.target_path = path
-  record.target_type = target_type
-  record.git_branch = branch
-  record.last_target_at = self:timestamp()
-  project.updated_at = record.last_target_at
-
-  local write_ok = self:write_state(state_data)
-  if not write_ok then
-    return false
-  end
-
-  workspace.target_path = path
-  workspace.target_type = target_type
-  workspace.git_branch = branch
-  self.state.workspace_target_signature = signature
-
-  if self.state.workspace_manager_project_root == root then
-    self.render_workspace_manager()
-  end
-
-  return true
+  return workspace_target.sync(self, event, current_filetype)
 end
 
 function M:schedule_target_sync(event, sync_fn)
-  if self.state.workspace_target_update_pending then
-    return
-  end
-
-  self.state.workspace_target_update_pending = true
-  vim.defer_fn(function()
-    self.state.workspace_target_update_pending = false
-    sync_fn(event)
-  end, 150)
+  return workspace_target.schedule(self, event, sync_fn)
 end
 
 function M:attach_workspace(workspace, schedule_sync)
-  if type(workspace) ~= "table" then
-    return false
-  end
-
-  local attached = self:workspace_from_state(workspace, workspace)
-  if type(attached.safe_name) ~= "string" or attached.safe_name == "" then
-    return false
-  end
-  if type(attached.project_root) ~= "string" or attached.project_root == "" then
-    return false
-  end
-
-  self.state.workspace = attached
-  self.state.workspace_target_signature =
-    M.workspace_target_signature(attached.target_path, attached.target_type, attached.git_branch)
-  schedule_sync("attach")
-  return true
+  return workspace_target.attach(self, workspace, schedule_sync)
 end
 
 return M

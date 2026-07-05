@@ -2,6 +2,9 @@ local M = {}
 M.__index = M
 
 local action_palette_mod = require("codux.action_palette")
+local dashboard_actions = require("codux.mission_dashboard_actions")
+local dashboard_layout = require("codux.mission_dashboard_layout")
+local dashboard_render = require("codux.mission_dashboard_render")
 local dashboard_search_mod = require("codux.dashboard_search")
 local filetypes = require("codux.filetypes")
 local mission_dashboard = require("codux.mission_dashboard")
@@ -16,40 +19,7 @@ local function trim(value)
   return text_util.trim(value)
 end
 
-local function available_dimension(total, margin)
-  return math.max(1, total - margin)
-end
-
-local function bordered_float_outer_height(content_height)
-  return math.max(1, tonumber(content_height) or 1) + 2
-end
-
-local function next_bordered_float_row(row, content_height)
-  return math.max(0, tonumber(row) or 0) + bordered_float_outer_height(content_height)
-end
-
 local dashboard_command_items = mission_dashboard.command_items()
-
-local function entry_key(entry)
-  entry = type(entry) == "table" and entry or {}
-  return tostring(entry.safe_name or entry.name or entry.mission_role or "")
-end
-
-local function mission_cache_key(root, mission)
-  mission = type(mission) == "table" and mission or {}
-  return tostring(root or "") .. "\0" .. tostring(mission.mission_id or mission.name or "")
-end
-
-local function role_cache_key(entry)
-  entry = type(entry) == "table" and entry or {}
-  return table.concat({
-    tostring(entry.project_root or entry.worktree_path or ""),
-    tostring(entry.safe_name or entry.name or entry.mission_role or ""),
-    tostring(entry.worktree_branch or ""),
-    tostring(entry.worktree_base or ""),
-    tostring(entry.worktree_base_commit or ""),
-  }, "\0")
-end
 
 local mission_control_filetypes = filetypes.mission_control
 
@@ -336,363 +306,59 @@ function M:dashboard_search_controller()
 end
 
 function M:window_height()
-  if not self.is_valid_win(self.state.mission_dashboard_win) then
-    return nil
-  end
-
-  local height = self.get_window_height(self.state.mission_dashboard_win)
-  if type(height) == "number" and height > 0 then
-    return height
-  end
-
-  return nil
+  return dashboard_layout.window_height(self)
 end
 
 function M:window_width()
-  if not self.is_valid_win(self.state.mission_dashboard_win) then
-    return nil
-  end
-
-  local width = self.get_window_width(self.state.mission_dashboard_win)
-  if type(width) == "number" and width > 0 then
-    return width
-  end
-
-  return nil
+  return dashboard_layout.window_width(self)
 end
 
 function M:mission_filter_score(mission, query)
-  mission = type(mission) == "table" and mission or {}
-  query = tostring(query or "")
-  if query == "" then
-    return nil
-  end
-
-  local best = nil
-  local best_kind = "mission"
-  local best_entry = nil
-  for _, value in ipairs({ mission.name, mission.mission_id }) do
-    local score = self.workspace_ui.fuzzy_workspace_score(value, query)
-    if score and (not best or score < best) then
-      best = score
-      best_kind = "mission"
-      best_entry = nil
-    end
-  end
-
-  for _, entry in ipairs(type(mission.roles) == "table" and mission.roles or {}) do
-    for _, value in ipairs({ entry.mission_role, entry.name, entry.safe_name }) do
-      local score = self.workspace_ui.fuzzy_workspace_score(value, query)
-      if score and (not best or score < best) then
-        best = score
-        best_kind = "role"
-        best_entry = entry
-      end
-    end
-  end
-
-  return best, best_kind, best_entry
+  return dashboard_render.mission_filter_score(self, mission, query)
 end
 
 function M:filter_missions(missions, query)
-  missions = type(missions) == "table" and missions or {}
-  query = tostring(query or "")
-  if query == "" then
-    return missions
-  end
-
-  local scored = {}
-  for _, mission in ipairs(missions) do
-    local score, match_kind, match_entry = self:mission_filter_score(mission, query)
-    if score then
-      table.insert(scored, {
-        mission = mission,
-        score = score,
-        match_kind = match_kind,
-        match_entry_key = match_entry and entry_key(match_entry) or nil,
-      })
-    end
-  end
-
-  table.sort(scored, function(left, right)
-    if left.score == right.score then
-      return tostring(left.mission.name or left.mission.mission_id):lower()
-        < tostring(right.mission.name or right.mission.mission_id):lower()
-    end
-    return left.score < right.score
-  end)
-
-  local filtered = {}
-  for _, item in ipairs(scored) do
-    item.mission._codux_match_kind = item.match_kind
-    item.mission._codux_match_entry_key = item.match_entry_key
-    table.insert(filtered, item.mission)
-  end
-  return filtered
+  return dashboard_render.filter_missions(self, missions, query)
 end
 
 function M:objective_editor_config(line_count, opts)
-  opts = type(opts) == "table" and opts or {}
-  local total_width = math.max(1, vim.o.columns)
-  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
-  local max_width = available_dimension(total_width, 4)
-  local max_height = available_dimension(total_height, 4)
-  local width = math.min(max_width, math.min(96, math.max(58, math.floor(total_width * 0.72))))
-  local height = math.min(max_height, math.max(10, line_count or 1))
-
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = opts.title or " Codux Mission Objective ",
-    title_pos = "center",
-    footer = opts.footer or " Ctrl-s/:w preview | Ctrl-q cancel ",
-    footer_pos = "center",
-    width = width,
-    height = height,
-    col = math.max(0, math.floor((total_width - width) / 2)),
-    row = math.max(0, math.floor((total_height - height) / 2)),
-  }
+  return dashboard_layout.objective_editor_config(self, line_count, opts)
 end
 
 function M:preview_config(line_count)
-  local total_width = math.max(1, vim.o.columns)
-  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
-  local max_width = available_dimension(total_width, 4)
-  local max_height = available_dimension(total_height, 4)
-  local width = math.min(max_width, math.min(92, math.max(56, math.floor(total_width * 0.68))))
-  local height = math.min(max_height, math.max(12, (line_count or 1) + 1))
-
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = " Codux Mission Control ",
-    title_pos = "center",
-    footer = " y yes | n no | e edit instruction ",
-    footer_pos = "center",
-    width = width,
-    height = height,
-    col = math.max(0, math.floor((total_width - width) / 2)),
-    row = math.max(0, math.floor((total_height - height) / 2)),
-    focusable = false,
-  }
+  return dashboard_layout.preview_config(self, line_count)
 end
 
 function M:dashboard_workspace_preview_active(entry)
-  if type(entry) ~= "table" then
-    return false
-  end
-  local status = entry.status
-  return status == "active" or status == "idle" or status == "question"
+  return dashboard_layout.dashboard_workspace_preview_active(self, entry)
 end
 
 function M:dashboard_preview_mode(item)
-  if type(item) == "table" and item.kind == "role" and self:dashboard_workspace_preview_active(item.entry) then
-    return "workspace"
-  end
-  return "compact"
+  return dashboard_layout.dashboard_preview_mode(self, item)
 end
 
 function M:dashboard_preview_height(total_height, command_height, mode, dashboard_min_height)
-  total_height = math.max(1, tonumber(total_height) or (vim.o.lines - vim.o.cmdheight))
-  command_height = math.max(0, tonumber(command_height) or 0)
-  mode = mode == "workspace" and "workspace" or "compact"
-  dashboard_min_height = math.max(1, tonumber(dashboard_min_height) or 1)
-
-  if mode == "compact" then
-    return 1
-  end
-
-  local target = math.min(40, math.max(14, math.floor(total_height * 0.80)))
-  local reserved_gaps = (command_height > 0 and 1 or 0) + 1
-  local content_capacity = available_dimension(total_height, 4)
-  local preferred_available = content_capacity - command_height - reserved_gaps - dashboard_min_height
-  if preferred_available >= 1 then
-    return math.min(target, preferred_available)
-  end
-
-  local compact_available = content_capacity - command_height - reserved_gaps - dashboard_min_height
-  return math.min(target, math.max(1, compact_available))
+  return dashboard_layout.dashboard_preview_height(self, total_height, command_height, mode, dashboard_min_height)
 end
 
 function M:dashboard_config(line_count, opts)
-  opts = type(opts) == "table" and opts or {}
-  local total_width = math.max(1, vim.o.columns)
-  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
-  local max_width = available_dimension(total_width, 4)
-  local width = math.min(max_width, math.max(80, math.min(160, math.floor(total_width * 0.92))))
-  local search_reserve = opts.reserve_search_input and bordered_float_outer_height(1) or 0
-  local command_height = opts.reserve_command_bar and #self:dashboard_command_lines(width) or 0
-  local preview_mode = opts.preview_mode or self:dashboard_preview_mode(opts.selected_item)
-  local dashboard_min_height = math.max(1, tonumber(opts.dashboard_min_height) or 1)
-  local preview_height = opts.reserve_output_panel
-      and self:dashboard_preview_height(total_height, command_height, preview_mode, dashboard_min_height)
-    or 0
-  local command_reserve = command_height > 0 and bordered_float_outer_height(command_height) or 0
-  local preview_reserve = preview_height > 0 and bordered_float_outer_height(preview_height) or 0
-  local output_reserve = search_reserve + command_reserve + preview_reserve
-  local max_height = output_reserve > 0 and math.max(dashboard_min_height, total_height - output_reserve - 2)
-    or available_dimension(total_height, 4)
-  local height = math.min(max_height, math.max(8, dashboard_min_height, line_count or 1))
-  local stack_height = bordered_float_outer_height(height) + output_reserve
-  local stack_top = math.max(0, math.floor((total_height - stack_height) / 2))
-
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = " Mission Control ",
-    title_pos = "center",
-    footer = " Commands shown below ",
-    footer_pos = "center",
-    width = width,
-    height = height,
-    col = math.max(0, math.floor((total_width - width) / 2)),
-    row = stack_top + search_reserve,
-  }
+  return dashboard_layout.dashboard_config(self, line_count, opts)
 end
 
 function M:dashboard_search_config()
-  local dashboard_config = {}
-  if self.is_valid_win(self.state.mission_dashboard_win) then
-    local ok, config = pcall(self.get_window_config, self.state.mission_dashboard_win)
-    dashboard_config = ok and type(config) == "table" and config or {}
-  end
-  local width_ok, window_width = pcall(function()
-    return self:window_width()
-  end)
-  local dashboard_width = width_ok and window_width or nil
-  dashboard_width = dashboard_width or dashboard_config.width or self:dashboard_config(1).width
-  local dashboard_col = type(dashboard_config.col) == "number" and dashboard_config.col or 0
-  local dashboard_row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
-  local height = 1
-
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = " Codux mission: ",
-    title_pos = "center",
-    width = math.max(20, dashboard_width),
-    height = height,
-    col = math.max(0, dashboard_col),
-    row = math.max(0, dashboard_row - bordered_float_outer_height(height)),
-    zindex = 60,
-  }
+  return dashboard_layout.dashboard_search_config(self)
 end
 
 function M:dashboard_command_config(line_count)
-  local dashboard_config = self.is_valid_win(self.state.mission_dashboard_win)
-      and self.get_window_config(self.state.mission_dashboard_win)
-    or {}
-  local dashboard_width = self:window_width() or self:dashboard_config(1).width
-  local dashboard_height = self:window_height() or 8
-  local dashboard_col = type(dashboard_config.col) == "number"
-      and dashboard_config.col
-    or math.max(0, math.floor((math.max(1, vim.o.columns) - dashboard_width) / 2))
-  local dashboard_row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
-
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = " Commands ",
-    title_pos = "center",
-    width = dashboard_width,
-    height = math.max(1, tonumber(line_count) or 1),
-    col = math.max(0, dashboard_col),
-    row = next_bordered_float_row(dashboard_row, dashboard_height),
-    zindex = 54,
-    focusable = false,
-  }
+  return dashboard_layout.dashboard_command_config(self, line_count)
 end
 
 function M:dashboard_output_config(line_count, opts)
-  opts = type(opts) == "table" and opts or {}
-  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
-  local dashboard_config = self.is_valid_win(self.state.mission_dashboard_win)
-      and self.get_window_config(self.state.mission_dashboard_win)
-    or {}
-  local dashboard_width = self:window_width() or self:dashboard_config(1).width
-  local dashboard_height = self:window_height() or 8
-  local dashboard_col = type(dashboard_config.col) == "number"
-      and dashboard_config.col
-    or math.max(0, math.floor((math.max(1, vim.o.columns) - dashboard_width) / 2))
-  local dashboard_row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
-  local command_config = self.is_valid_win(self.state.mission_dashboard_command_bar_win)
-      and self.get_window_config(self.state.mission_dashboard_command_bar_win)
-    or nil
-  local command_height = self.is_valid_win(self.state.mission_dashboard_command_bar_win)
-      and self.get_window_height(self.state.mission_dashboard_command_bar_win)
-    or nil
-  command_height = command_height or #self:dashboard_command_lines(dashboard_width)
-  local row = command_config and type(command_config.row) == "number" and command_height
-      and next_bordered_float_row(command_config.row, command_height)
-    or next_bordered_float_row(dashboard_row, dashboard_height)
-  local available_below = total_height - row - 2
-  local preview_mode = opts.preview_mode or self:dashboard_preview_mode(opts.selected_item)
-  local desired_height = self:dashboard_preview_height(
-    total_height,
-    command_height,
-    preview_mode,
-    opts.dashboard_min_height
-  )
-  local height = math.min(desired_height, math.max(1, available_below))
-
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = " Output ",
-    title_pos = "center",
-    width = dashboard_width,
-    height = height,
-    col = math.max(0, dashboard_col),
-    row = math.max(0, row),
-    zindex = 55,
-    focusable = false,
-  }
+  return dashboard_layout.dashboard_output_config(self, line_count, opts)
 end
 
 function M:resize_dashboard_stack(line_count, opts)
-  opts = type(opts) == "table" and opts or {}
-  if not self.is_valid_win(self.state.mission_dashboard_win) then
-    return false
-  end
-
-  local dashboard_config = self:dashboard_config(line_count, {
-    reserve_command_bar = true,
-    reserve_output_panel = true,
-    reserve_search_input = self.is_valid_win(self.state.mission_dashboard_search_win),
-    selected_item = opts.selected_item,
-    preview_mode = opts.preview_mode,
-    dashboard_min_height = opts.dashboard_min_height,
-  })
-  local ok = self.set_window_config(self.state.mission_dashboard_win, dashboard_config)
-  if not ok then
-    return false
-  end
-
-  if self.is_valid_win(self.state.mission_dashboard_search_win) then
-    ok = self.set_window_config(self.state.mission_dashboard_search_win, self:dashboard_search_config()) and ok
-  end
-  if self.is_valid_win(self.state.mission_dashboard_command_bar_win) then
-    local command_lines = self:dashboard_command_lines(dashboard_config.width)
-    ok = self.set_window_config(self.state.mission_dashboard_command_bar_win, self:dashboard_command_config(#command_lines))
-      and ok
-  end
-  if self.is_valid_win(self.state.mission_dashboard_output_win) then
-    ok = self.set_window_config(
-      self.state.mission_dashboard_output_win,
-      self:dashboard_output_config(line_count, {
-        selected_item = opts.selected_item,
-        preview_mode = opts.preview_mode,
-        dashboard_min_height = opts.dashboard_min_height,
-      })
-    ) and ok
-  end
-  return ok
+  return dashboard_layout.resize_dashboard_stack(self, line_count, opts)
 end
 
 function M:open_objective_editor(name, default_objective, opts)
@@ -924,216 +590,87 @@ function M:open_prompt()
 end
 
 function M:dashboard_now(opts)
-  opts = type(opts) == "table" and opts or {}
-  return tonumber(opts.now) or os.time()
+  return dashboard_render.dashboard_now(self, opts)
 end
 
 function M:cached_mission_dirty_roles(root, mission, now)
-  local cache = type(self.state.mission_dashboard_dirty_cache) == "table" and self.state.mission_dashboard_dirty_cache or {}
-  self.state.mission_dashboard_dirty_cache = cache
-  local key = mission_cache_key(root, mission)
-  local cached = cache[key]
-  if type(cached) == "table" and now - (tonumber(cached.checked_at) or 0) <= 15 then
-    return cached.roles, cached.error
-  end
-
-  local name = mission.name or mission.mission_id
-  local roles, error_message = self.mission_dirty_roles(name, root)
-  roles = type(roles) == "table" and roles or {}
-  cache[key] = {
-    checked_at = now,
-    roles = roles,
-    error = error_message,
-  }
-  return roles, error_message
+  return dashboard_render.cached_mission_dirty_roles(self, root, mission, now)
 end
 
 function M:cached_workspace_branch_state(entry, now)
-  local cache = type(self.state.mission_dashboard_branch_cache) == "table" and self.state.mission_dashboard_branch_cache or {}
-  self.state.mission_dashboard_branch_cache = cache
-  local key = role_cache_key(entry)
-  local cached = cache[key]
-  if type(cached) == "table" and now - (tonumber(cached.checked_at) or 0) <= 15 then
-    return cached.state
-  end
-
-  local state = self.workspace_branch_state(entry)
-  state = type(state) == "table" and state or {}
-  cache[key] = {
-    checked_at = now,
-    state = state,
-  }
-  return state
+  return dashboard_render.cached_workspace_branch_state(self, entry, now)
 end
 
 function M:role_freshness(entry, now)
-  entry = type(entry) == "table" and entry or {}
-  if entry.status == "inactive" then
-    return "--"
-  end
-
-  local timestamp = self.workspace_ui.activity_timestamp(entry)
-  local seconds = self.workspace_ui.parse_timestamp(timestamp)
-  if not seconds then
-    return "stale"
-  end
-
-  local elapsed = math.max(0, now - seconds)
-  if elapsed < 300 then
-    return "live"
-  end
-  if elapsed < 1800 then
-    return "quiet"
-  end
-  return "stale"
+  return dashboard_render.role_freshness(self, entry, now)
 end
 
 function M:mission_dirty_status_by_role(root, mission, now)
-  local dirty_roles = self:cached_mission_dirty_roles(root, mission, now)
-  local dirty_by_role = {}
-  for _, role in ipairs(dirty_roles) do
-    local label = type(role) == "table" and (role.name or role.safe_name or role.label) or role
-    local reason = type(role) == "table" and role.reason or "dirty"
-    dirty_by_role[tostring(label or "")] = reason
-  end
-  return dirty_by_role
+  return dashboard_render.mission_dirty_status_by_role(self, root, mission, now)
 end
 
 function M:mission_workspace_details(entry, dirty_by_role, now)
-  entry = type(entry) == "table" and entry or {}
-  dirty_by_role = type(dirty_by_role) == "table" and dirty_by_role or {}
-  local status = entry.status or "inactive"
-  local dirty_status = dirty_by_role[tostring(entry.name or "")]
-    or dirty_by_role[tostring(entry.safe_name or "")]
-    or dirty_by_role[tostring(entry.mission_role or "")]
-    or nil
-  local branch_state = self:cached_workspace_branch_state(entry, now)
-  local window_status = "not running"
-  if status ~= "inactive" then
-    window_status = type(entry.window_id) == "string" and entry.window_id ~= "" and "open" or "missing"
-  end
-
-  local worktree = "unknown"
-  local worktree_status = "unknown"
-  if entry.workspace_kind == "worktree" then
-    worktree = "yes"
-    worktree_status = dirty_status == "dirty" and "dirty" or dirty_status == "unknown" and "unknown" or "clean"
-  elseif type(entry.workspace_kind) == "string" and entry.workspace_kind ~= "" then
-    worktree = "no"
-    worktree_status = "not a worktree"
-  end
-
-  local freshness = self:role_freshness(entry, now)
-  local needs_review = status == "question"
-    or dirty_status == "dirty"
-    or dirty_status == "unknown"
-    or ((status == "active" or status == "idle") and freshness == "stale")
-    or (status ~= "inactive" and window_status == "missing")
-    or branch_state.merged == true
-
-  return {
-    last_activity = self.workspace_ui.relative_age_label(self.workspace_ui.activity_timestamp(entry), now):gsub("^%-%-$", "unknown"),
-    needs_review = needs_review and "yes" or "no",
-    worktree_status = worktree_status,
-    window_status = window_status,
-    worktree = worktree,
-    branch = entry.worktree_branch or entry.git_branch or "none",
-    cleanup_status = branch_state.merged and "merged" or "not ready",
-  }
+  return dashboard_render.mission_workspace_details(self, entry, dirty_by_role, now)
 end
 
 function M:permission_profile_label(entry)
-  entry = type(entry) == "table" and entry or {}
-  local profile = entry.permission_profile or "default"
-  if profile == "default" then
-    return "Default"
-  end
-  if profile == "auto" then
-    return "Autopilot"
-  end
-  if profile == "danger" then
-    return "Full Access"
-  end
-  return tostring(profile)
+  return dashboard_render.permission_profile_label(self, entry)
 end
 
 function M:mission_mode_label(entry)
-  entry = type(entry) == "table" and entry or {}
-  if entry.status == "inactive" then
-    return "not set"
-  end
-  if entry.codex_mode == "execute" then
-    return "execute"
-  end
-  if entry.codex_mode == "plan" then
-    return "plan"
-  end
-  return "not set"
+  return dashboard_render.mission_mode_label(self, entry)
 end
 
 function M:mission_dashboard_line(mission, counts, status, dashboard_width)
-  return mission_dashboard.mission_line(self, mission, counts, status, dashboard_width)
+  return dashboard_render.mission_dashboard_line(self, mission, counts, status, dashboard_width)
 end
 
 function M:mission_role_header_line(dashboard_width)
-  return mission_dashboard.role_header_line(self, dashboard_width)
+  return dashboard_render.mission_role_header_line(self, dashboard_width)
 end
 
 function M:mission_role_table_width(dashboard_width)
-  return mission_dashboard.role_table_width(dashboard_width)
+  return dashboard_render.mission_role_table_width(self, dashboard_width)
 end
 
 function M:mission_role_column_widths(dashboard_width)
-  return mission_dashboard.role_column_widths(dashboard_width)
+  return dashboard_render.mission_role_column_widths(self, dashboard_width)
 end
 
 function M:mission_role_table_line(columns, values)
-  return mission_dashboard.role_table_line(self.workspace_ui, columns, values)
+  return dashboard_render.mission_role_table_line(self, columns, values)
 end
 
 function M:mission_role_line(entry, dashboard_width, now, dirty_by_role)
-  return mission_dashboard.role_line(self, entry, dashboard_width, now, dirty_by_role)
+  return dashboard_render.mission_role_line(self, entry, dashboard_width, now, dirty_by_role)
 end
 
 function M:dashboard_row_highlight_range(line)
-  return mission_dashboard.row_highlight_range(line)
+  return dashboard_render.dashboard_row_highlight_range(self, line)
 end
 
 function M:dashboard_command_lines(dashboard_width)
-  return mission_dashboard.command_lines(self, dashboard_width)
+  return dashboard_render.dashboard_command_lines(self, dashboard_width)
 end
 
 function M:dashboard_token_usage_line(dashboard_width)
-  return mission_dashboard.token_usage_line(self, dashboard_width)
+  return dashboard_render.dashboard_token_usage_line(self, dashboard_width)
 end
 
 function M:dashboard_min_height_for_lines(lines)
-  return mission_dashboard.min_height_for_lines(lines)
+  return dashboard_render.dashboard_min_height_for_lines(self, lines)
 end
 
 function M:refresh_dashboard_token_usage(force)
-  local now = tonumber(self.token_usage_now_ms()) or (os.time() * 1000)
-  local refresh_ms = tonumber(self.token_usage_refresh_ms()) or 60000
-  refresh_ms = math.max(10000, refresh_ms)
-  local last = tonumber(self.state.mission_dashboard_token_usage_refreshed_at)
-  if not force and last and now - last < refresh_ms then
-    return false
-  end
-
-  self.state.mission_dashboard_token_usage_refreshed_at = now
-  return self.refresh_token_usage(force == true)
+  return dashboard_render.refresh_dashboard_token_usage(self, force)
 end
 
 function M:missions_for_root(root)
-  local entries, error_message = self.workspace_entries_for_project(root)
-  if error_message then
-    return nil, error_message
-  end
-  return self.mission.group_entries(entries)
+  return dashboard_render.missions_for_root(self, root)
 end
 
 function M:dashboard_lines(root, opts)
-  return mission_dashboard.lines(self, root, opts)
+  return dashboard_render.dashboard_lines(self, root, opts)
 end
 
 function M:mission_for_name(root, name)
@@ -1163,27 +700,7 @@ function M:open_saved_objective_editor(name, root)
 end
 
 function M:objective_preview_config(line_count)
-  local total_width = math.max(1, vim.o.columns)
-  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
-  local max_width = available_dimension(total_width, 4)
-  local max_height = available_dimension(total_height, 4)
-  local width = math.min(max_width, math.min(92, math.max(56, math.floor(total_width * 0.68))))
-  local height = math.min(max_height, math.max(8, (line_count or 1) + 2))
-
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = " Codux Mission Objective ",
-    title_pos = "center",
-    footer = " q close ",
-    footer_pos = "center",
-    width = width,
-    height = height,
-    col = math.max(0, math.floor((total_width - width) / 2)),
-    row = math.max(0, math.floor((total_height - height) / 2)),
-    zindex = 80,
-  }
+  return dashboard_layout.objective_preview_config(self, line_count)
 end
 
 function M:view_mission_objective(mission)
@@ -1698,58 +1215,27 @@ function M:open_command_sink()
 end
 
 function M:selected_mission()
-  local item = self:selected_item()
-  return item and item.mission or nil
+  return dashboard_actions.selected_mission(self)
 end
 
 function M:selected_mission_or_notify()
-  local mission = self:selected_mission()
-  if not mission then
-    self.notify("No Codux mission selected", vim.log.levels.WARN)
-    return nil
-  end
-  return mission
+  return dashboard_actions.selected_mission_or_notify(self)
 end
 
 function M:close_action_palette()
-  return self:action_palette_controller():close()
+  return dashboard_actions.close_action_palette(self)
 end
 
 function M:action_palette_width()
-  local dashboard_width = self:window_width() or 58
-  return math.min(math.max(32, dashboard_width - 8), 48)
+  return dashboard_actions.action_palette_width(self)
 end
 
 function M:action_palette_config(target, item_count, kind)
-  local dashboard_config = self.is_valid_win(self.state.mission_dashboard_win)
-      and self.get_window_config(self.state.mission_dashboard_win)
-    or {}
-  local dashboard_width = self:window_width() or 58
-  local dashboard_height = self:window_height() or math.max(1, item_count or 1)
-  local width = self:action_palette_width()
-  local height = math.max(1, item_count or 1)
-  local col = type(dashboard_config.col) == "number" and dashboard_config.col or math.floor((vim.o.columns - dashboard_width) / 2)
-  local row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
-  local title = target and (target.name or target.safe_name or target.mission_role or target.mission_id) or "item"
-  local prefix = kind == "workspace" and " Codux workspace: " or " Codux mission: "
-  local title_width = kind == "workspace" and width - 19 or width - 17
-
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = prefix .. self.workspace_ui.truncate_display_tail(title, title_width) .. " ",
-    title_pos = "center",
-    width = width,
-    height = height,
-    col = math.max(0, col + math.floor((dashboard_width - width) / 2)),
-    row = math.max(0, row + math.floor((dashboard_height - height) / 2)),
-    zindex = 70,
-  }
+  return dashboard_actions.action_palette_config(self, target, item_count, kind)
 end
 
 function M:render_action_palette()
-  return self:action_palette_controller():render(nil, self.state.mission_dashboard_action_kind)
+  return dashboard_actions.render_action_palette(self)
 end
 
 function M:dashboard_is_visible()
@@ -1790,486 +1276,99 @@ function M:update_dashboard_after_mission_delete(root)
 end
 
 function M:edit_selected_mission(mission)
-  local root = self.state.mission_dashboard_project_root or self.project_root()
-  mission = mission or self:selected_mission()
-  if not mission then
-    self.notify("No Codux mission selected", vim.log.levels.WARN)
-    return false
-  end
-  return self:open_objective_editor(mission.name, mission.objective, {
-    title = " Edit Codux Mission Objective ",
-    footer = " Ctrl-s/:w save | Ctrl-q cancel ",
-    on_save = function(_, objective)
-      local ok = self.update_mission_objective(mission.name, objective, root)
-      if ok ~= false then
-        vim.schedule(function()
-          self:refresh_loaded_dashboard(root)
-        end)
-      end
-      return ok
-    end,
-  })
+  return dashboard_actions.edit_selected_mission(self, mission)
 end
 
 function M:delete_selected_mission(mission)
-  local root = self.state.mission_dashboard_project_root or self.project_root()
-  mission = mission or self:selected_mission()
-  if not mission then
-    self.notify("No Codux mission selected", vim.log.levels.WARN)
-    return false
-  end
-  if not self:confirm_delete_mission(mission, root) then
-    return false
-  end
-  local ok = self.delete_mission(mission.name or mission.mission_id, root)
-  if ok then
-    self:update_dashboard_after_mission_delete(root)
-  end
-  return ok
+  return dashboard_actions.delete_selected_mission(self, mission)
 end
 
 function M:close_selected_mission(mission)
-  local root = self.state.mission_dashboard_project_root or self.project_root()
-  mission = mission or self:selected_mission()
-  if not mission then
-    self.notify("No Codux mission selected", vim.log.levels.WARN)
-    return false
-  end
-  local ok = self.close_mission(mission.name or mission.mission_id, root)
-  if ok then
-    self:refresh_loaded_dashboard(root)
-  end
-  return ok
+  return dashboard_actions.close_selected_mission(self, mission)
 end
 
 function M:start_selected_mission(mission)
-  local root = self.state.mission_dashboard_project_root or self.project_root()
-  mission = mission or self:selected_mission()
-  if not mission then
-    self.notify("No Codux mission selected", vim.log.levels.WARN)
-    return false
-  end
-  local ok = self.start_mission(mission.name or mission.mission_id, root, {
-    restart_inactive = true,
-    focus_first = false,
-  })
-  self:refresh_loaded_dashboard(root)
-  return ok
+  return dashboard_actions.start_selected_mission(self, mission)
 end
 
 function M:action_palette_target()
-  if self.state.mission_dashboard_action_kind == "workspace" then
-    return self.state.mission_dashboard_action_workspace
-  end
-  return self.state.mission_dashboard_action_mission
+  return dashboard_actions.action_palette_target(self)
 end
 
 function M:run_workspace_action(action, target)
-  local workspace = target or self.state.mission_dashboard_action_workspace
-  if action == "open_workspace" then
-    return false
-  end
-  if action == "prompt_workspace" then
-    workspace = workspace or self:selected_role_workspace_or_notify()
-    if not workspace then
-      return false
-    end
-    self:close_action_palette()
-    return self:open_workspace_prompt(workspace)
-  end
-  if action == "answer_question" then
-    workspace = workspace or self:selected_role_workspace_or_notify()
-    if not workspace then
-      return false
-    end
-    self:close_action_palette()
-    return self:open_workspace_question_answer(workspace)
-  end
-  if action == "edit_instructions" then
-    workspace = workspace or self:selected_role_workspace_or_notify()
-    if not workspace then
-      return false
-    end
-    self:close_action_palette()
-    return self.edit_saved_workspace_instruction(workspace)
-  end
-  if action == "close_workspace" then
-    workspace = workspace or self:selected_role_workspace_or_notify()
-    if not workspace then
-      return false
-    end
-    self:close_action_palette()
-    return self.close_saved_workspace_window(workspace)
-  end
-  if action == "delete_workspace" then
-    workspace = workspace or self:selected_role_workspace_or_notify()
-    if not workspace then
-      return false
-    end
-    self:close_action_palette()
-    return self:delete_role_workspace(workspace)
-  end
-  if action == "create_workspace" then
-    self:close_action_palette()
-    return self:create_new_workspace(workspace)
-  end
-  return nil
+  return dashboard_actions.run_workspace_action(self, action, target)
 end
 
 function M:run_mission_action(action, target)
-  if action == "create_mission" then
-    self:close_action_palette()
-    return self:create_new_mission()
-  end
-  local mission = target or self.state.mission_dashboard_action_mission or self:selected_mission_or_notify()
-  if not mission then
-    return false
-  end
-
-  if action == "edit_objective" then
-    self:close_action_palette()
-    return self:edit_selected_mission(mission)
-  end
-  if action == "view_objective" then
-    self:close_action_palette()
-    return self:view_mission_objective(mission)
-  end
-  if action == "start_mission" then
-    self:close_action_palette()
-    return self:start_selected_mission(mission)
-  end
-  if action == "close_mission" then
-    self:close_action_palette()
-    return self:close_selected_mission(mission)
-  end
-  if action == "delete_mission" then
-    self:close_action_palette()
-    return self:delete_selected_mission(mission)
-  end
-  return false
+  return dashboard_actions.run_mission_action(self, action, target)
 end
 
 function M:run_action(action, target)
-  local workspace_result = self:run_workspace_action(action, target)
-  if workspace_result ~= nil then
-    return workspace_result
-  end
-  return self:run_mission_action(action, target)
+  return dashboard_actions.run_action(self, action, target)
 end
 
 function M:run_highlighted_action()
-  return self:action_palette_controller():run_highlighted()
+  return dashboard_actions.run_highlighted_action(self)
 end
 
 function M:move_action_cursor(delta)
-  return self:action_palette_controller():move_cursor(delta)
+  return dashboard_actions.move_action_cursor(self, delta)
 end
 
 function M:open_action_palette_for(target, kind)
-  target = type(target) == "table" and target or nil
-  if not target then
-    return false
-  end
-
-  return self:action_palette_controller():open(target, kind)
+  return dashboard_actions.open_action_palette_for(self, target, kind)
 end
 
 function M:selected_role_workspace_or_notify()
-  local item = self:selected_selectable_item()
-  if not item or item.kind ~= "role" or type(item.entry) ~= "table" then
-    self.notify("No Codux workspace selected", vim.log.levels.WARN)
-    return nil
-  end
-  return item.entry
+  return dashboard_actions.selected_role_workspace_or_notify(self)
 end
 
 function M:mission_context_for_workspace(entry)
-  entry = type(entry) == "table" and entry or nil
-  if not entry then
-    return nil
-  end
-
-  local mission_id = entry.mission_id
-  if type(mission_id) ~= "string" or mission_id == "" then
-    return nil
-  end
-
-  return {
-    mission_id = mission_id,
-    mission_name = entry.mission_name,
-    mission_objective = entry.mission_objective,
-  }
+  return dashboard_actions.mission_context_for_workspace(self, entry)
 end
 
 function M:open_workspace_prompt(entry)
-  entry = type(entry) == "table" and entry or self:selected_role_workspace_or_notify()
-  if not entry then
-    return false
-  end
-
-  local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
-  if entry.status == "inactive" then
-    self.notify("workspace is inactive", vim.log.levels.WARN)
-    return false
-  end
-
-  local prompt_fn = self.ui.single_line_prompt
-  if type(prompt_fn) ~= "function" then
-    self.notify("Codux prompt input is unavailable", vim.log.levels.ERROR)
-    return false
-  end
-
-  return self:open_workspace_prompt_input(entry, label, self.send_prompt_to_workspace, "Sent prompt to ")
+  return dashboard_actions.open_workspace_prompt(self, entry)
 end
 
 function M:workspace_question_pending(entry)
-  entry = type(entry) == "table" and entry or {}
-  return entry.status ~= "inactive"
+  return dashboard_actions.workspace_question_pending(self, entry)
 end
 
 function M:open_workspace_question_answer(entry)
-  entry = type(entry) == "table" and entry or self:selected_role_workspace_or_notify()
-  if not entry then
-    return false
-  end
-  if entry.status == "inactive" then
-    self.notify("workspace is inactive", vim.log.levels.WARN)
-    return false
-  end
-
-  local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
-  return ui.key_choice_menu({
-    title = " Answer " .. tostring(label) .. " ",
-    filetype = "codux-mission-question-answer",
-    zindex = 85,
-    choices = {
-      { key = "o", action = "option", label = "option", desc = "Send Codux Plan Option" },
-      { key = "n", action = "option_note", label = "option + note", desc = "Send Codux Plan Option With Note" },
-    },
-    create_error = "Failed to create Codux answer menu",
-    open_error = "Failed to open Codux answer menu",
-    cancel_desc = "Cancel Codux Answer",
-  }, function(choice)
-    if type(choice) ~= "table" then
-      return
-    end
-    if choice.action == "option_note" then
-      self:open_question_option_input(entry, label, true)
-      return
-    end
-    self:open_question_option_input(entry, label, false)
-  end, {
-    notify = self.notify,
-    create_scratch_buffer = self.ui.create_scratch_buffer,
-    set_lines = self.ui.set_lines,
-    set_window_options = self.ui.set_window_options,
-    close_window = self.ui.close_window,
-    delete_buffer = self.ui.delete_buffer,
-    set_buffer_keymap = self.set_buffer_keymap,
-    bind_close_keys = self.bind_close_keys,
-  })
+  return dashboard_actions.open_workspace_question_answer(self, entry)
 end
 
 function M:open_question_option_input(entry, label, with_note)
-  local prompt_fn = self.ui.single_line_prompt
-  if type(prompt_fn) ~= "function" then
-    self.notify("Codux prompt input is unavailable", vim.log.levels.ERROR)
-    return false
-  end
-
-  label = label or (entry and (entry.mission_role or entry.name or entry.safe_name)) or "workspace"
-  return prompt_fn({
-    prompt = "Plan option " .. tostring(label) .. ": ",
-    filetype = "codux-mission-question-option",
-    zindex = 86,
-    allowed_chars = "1234",
-    max_length = 1,
-    on_create_buffer = function(bufnr)
-      ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
-    end,
-  }, function(input)
-    local option = trim(input)
-    if option == "" then
-      self.notify("Option number is required", vim.log.levels.WARN)
-      return
-    end
-    if not option:match("^[1-4]$") then
-      self.notify("Option number must be 1, 2, 3, or 4", vim.log.levels.WARN)
-      return
-    end
-
-    local ok, error_message = self.select_workspace_question_option(entry, option, { with_note = with_note == true })
-    if not ok then
-      self.notify(error_message or "Failed to answer question", vim.log.levels.ERROR)
-      return
-    end
-    if with_note == true then
-      self:open_question_note_input(entry, label)
-      return
-    end
-    self.notify("Answered question for " .. tostring(label))
-    self:render_dashboard()
-  end, {
-    notify = self.notify,
-    set_buffer_keymap = self.set_buffer_keymap,
-    bind_close_keys = self.bind_close_keys,
-  })
+  return dashboard_actions.open_question_option_input(self, entry, label, with_note)
 end
 
 function M:open_question_note_input(entry, label)
-  local prompt_fn = self.ui.single_line_prompt
-  if type(prompt_fn) ~= "function" then
-    self.notify("Codux prompt input is unavailable", vim.log.levels.ERROR)
-    return false
-  end
-
-  label = label or (entry and (entry.mission_role or entry.name or entry.safe_name)) or "workspace"
-  local function restore_dashboard_focus()
-    self:focus_mission_list()
-  end
-  return prompt_fn({
-    prompt = "Note " .. tostring(label) .. ": ",
-    filetype = "codux-mission-question-note",
-    zindex = 86,
-    insert_input = true,
-    on_create_buffer = function(bufnr)
-      ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
-    end,
-  }, function(input)
-    local note = trim(input)
-    if note == "" then
-      self.notify("Note is required", vim.log.levels.WARN)
-      restore_dashboard_focus()
-      return
-    end
-
-    local ok, error_message = self.submit_workspace_question_note(entry, note)
-    if ok then
-      self.notify("Sent note to " .. tostring(label))
-      self:render_dashboard()
-      restore_dashboard_focus()
-    else
-      self.notify(error_message or "Failed to send question note", vim.log.levels.ERROR)
-      restore_dashboard_focus()
-    end
-  end, {
-    notify = self.notify,
-    set_buffer_keymap = self.set_buffer_keymap,
-    bind_close_keys = self.bind_close_keys,
-  })
+  return dashboard_actions.open_question_note_input(self, entry, label)
 end
 
 function M:open_workspace_prompt_input(entry, label, submit_fn, success_prefix)
-  entry = type(entry) == "table" and entry or nil
-  label = label or (entry and (entry.mission_role or entry.name or entry.safe_name)) or "workspace"
-  submit_fn = type(submit_fn) == "function" and submit_fn or self.send_prompt_to_workspace
-  success_prefix = type(success_prefix) == "string" and success_prefix or "Sent prompt to "
-  local prompt_fn = self.ui.single_line_prompt
-  if type(prompt_fn) ~= "function" then
-    self.notify("Codux prompt input is unavailable", vim.log.levels.ERROR)
-    return false
-  end
-
-  return prompt_fn({
-    prompt = "Prompt " .. tostring(label) .. ": ",
-    filetype = "codux-mission-workspace-prompt",
-    zindex = 80,
-    on_create_buffer = function(bufnr)
-      ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
-    end,
-  }, function(input)
-    if input == nil then
-      return
-    end
-    if trim(input) == "" then
-      self.notify("Prompt is required", vim.log.levels.WARN)
-      return
-    end
-
-    local ok, error_message = submit_fn(entry, input)
-    if ok then
-      self.notify(success_prefix .. tostring(label))
-      self:render_dashboard()
-    else
-      self.notify(error_message or "Failed to send prompt", vim.log.levels.ERROR)
-    end
-  end, {
-    notify = self.notify,
-    set_buffer_keymap = self.set_buffer_keymap,
-    bind_close_keys = self.bind_close_keys,
-  })
+  return dashboard_actions.open_workspace_prompt_input(self, entry, label, submit_fn, success_prefix)
 end
 
 function M:interrupt_workspace_action(entry)
-  entry = type(entry) == "table" and entry or self:selected_role_workspace_or_notify()
-  if not entry then
-    return false
-  end
-  if entry.status ~= "active" and entry.codex_status ~= "working" then
-    return false
-  end
-
-  local ok, error_message = self.interrupt_workspace(entry)
-  if not ok then
-    self.notify(error_message or "Failed to interrupt workspace", vim.log.levels.ERROR)
-    return false
-  end
-
-  local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
-  self.notify("Interrupted " .. tostring(label))
-  self:render_dashboard()
-  return true
+  return dashboard_actions.interrupt_workspace_action(self, entry)
 end
 
 function M:interrupt_selected_workspace(entry)
-  entry = type(entry) == "table" and entry or self:selected_role_workspace_or_notify()
-  if not entry then
-    return false
-  end
-  return self:interrupt_workspace_action(entry)
+  return dashboard_actions.interrupt_selected_workspace(self, entry)
 end
 
 function M:switch_selected_workspace_mode(entry)
-  entry = type(entry) == "table" and entry or self:selected_role_workspace_or_notify()
-  if not entry then
-    return false
-  end
-
-  local ok, error_message = self.switch_workspace_mode(entry)
-  if ok then
-    self.notify("Switched Codux mode for " .. tostring(entry.mission_role or entry.name or entry.safe_name))
-    self:render_dashboard()
-    return true
-  end
-
-  self.notify(error_message or "Failed to switch workspace mode", vim.log.levels.ERROR)
-  return false
+  return dashboard_actions.switch_selected_workspace_mode(self, entry)
 end
 
 function M:delete_role_workspace(entry)
-  if type(entry) ~= "table" then
-    return false
-  end
-  if self.workspace_ui.confirm_delete_workspace(entry) then
-    return self.delete_saved_workspace(entry)
-  end
-  return false
+  return dashboard_actions.delete_role_workspace(self, entry)
 end
 
 function M:open_action_palette()
-  local item = self:selected_selectable_item()
-  if not item then
-    self.notify("No Codux mission or workspace selected", vim.log.levels.WARN)
-    return false
-  end
-  if item.kind == "mission" then
-    return self:open_action_palette_for(item.mission, "mission")
-  end
-  if item.kind == "role" then
-    return self:open_action_palette_for(item.entry, "workspace")
-  end
-  self.notify("No Codux mission or workspace selected", vim.log.levels.WARN)
-  return false
+  return dashboard_actions.open_action_palette(self)
 end
 
 function M:refresh_dashboard()
