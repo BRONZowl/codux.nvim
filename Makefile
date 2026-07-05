@@ -12,18 +12,22 @@ TEST_SPECS := \
 	tests/mission_spec.lua \
 	tests/mission_dashboard_spec.lua \
 	tests/mission_control_spec.lua \
+	tests/mission_lifecycle_spec.lua \
 	tests/mission_output_panel_spec.lua \
 	tests/open_profile_spec.lua \
 	tests/prompt_actions_spec.lua \
 	tests/workspace_create_spec.lua \
 	tests/workspace_git_spec.lua \
+	tests/workspace_lifecycle_actions_spec.lua \
 	tests/workspace_lifecycle_spec.lua \
 	tests/workspace_launch_spec.lua \
 	tests/workspace_prepare_spec.lua \
 	tests/workspace_registry_spec.lua \
+	tests/workspace_remote_actions_spec.lua \
 	tests/workspace_remote_spec.lua \
 	tests/workspace_runtime_spec.lua \
 	tests/workspace_store_spec.lua \
+	tests/workspace_sync_spec.lua \
 	tests/workspace_manager_spec.lua \
 	tests/workspace_ui_spec.lua \
 	tests/terminal_spec.lua \

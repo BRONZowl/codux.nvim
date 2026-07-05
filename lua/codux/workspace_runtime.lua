@@ -2,15 +2,18 @@ local M = {}
 M.__index = M
 
 local command_util = require("codux.command")
+local mission_lifecycle = require("codux.mission_lifecycle")
 local text_util = require("codux.text")
 local workspace_git = require("codux.workspace_git")
 local workspace_instructions = require("codux.workspace_instructions")
 local workspace_launch = require("codux.workspace_launch")
-local workspace_lifecycle = require("codux.workspace_lifecycle")
+local workspace_lifecycle_actions = require("codux.workspace_lifecycle_actions")
 local workspace_prepare = require("codux.workspace_prepare")
 local workspace_remote = require("codux.workspace_remote")
+local workspace_remote_actions = require("codux.workspace_remote_actions")
 local workspace_registry = require("codux.workspace_registry")
 local workspace_sessions = require("codux.workspace_sessions")
+local workspace_sync = require("codux.workspace_sync")
 local workspace_target = require("codux.workspace_target")
 local workspace_worktree = require("codux.workspace_worktree")
 
@@ -560,285 +563,47 @@ function M:workspace_preview_session_name(entry)
 end
 
 function M:workspace_interactive_preview(entry, opts)
-  opts = type(opts) == "table" and opts or {}
-  local workspace, ensure_error = self:ensure_workspace_remote(entry, {
-    attempts = opts.remote_attempts or 1,
-    sleep_ms = opts.remote_sleep_ms or 100,
-  })
-  if not workspace then
-    return nil, ensure_error or "workspace is inactive"
-  end
-
-  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
-  local output, remote_error = self:remote_luaeval(
-    server,
-    "require('codux')._v5.remote_show_existing_codex_terminal()",
-    { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
-  )
-  if output ~= "ok" then
-    if output == "not_running" then
-      return nil, "workspace Codex session is not running"
-    end
-    return nil, remote_error or output or "workspace Codex session is not reachable"
-  end
-
-  local session = self:current_tmux_session()
-  if not session then
-    return nil, "no tmux session running"
-  end
-
-  local preview_session = opts.preview_session or self:workspace_preview_session_name(workspace)
-  self:kill_tmux_session(preview_session)
-  local _, create_code = self:tmux_system({ "new-session", "-d", "-t", session, "-s", preview_session })
-  if create_code ~= 0 then
-    return nil, "failed to create Codux preview session"
-  end
-
-  local window_name = workspace.tmux_window or workspace.window_name or M.workspace_window_name(workspace.safe_name or workspace.name)
-  local _, select_code = self:tmux_system({ "select-window", "-t", preview_session .. ":" .. window_name })
-  if select_code ~= 0 then
-    self:kill_tmux_session(preview_session)
-    return nil, "failed to select Codux workspace preview window"
-  end
-
-  return {
-    command = { "env", "-u", "TMUX", self:tmux_cmd(), "attach-session", "-t", preview_session },
-    preview_session = preview_session,
-    workspace = workspace,
-    window_name = window_name,
-    window_id = workspace.window_id,
-  }, nil
+  return workspace_remote_actions.workspace_interactive_preview(self, entry, opts)
 end
 
 function M:close_workspace_interactive_preview(preview)
-  local session_name = type(preview) == "table" and preview.preview_session or preview
-  return self:kill_tmux_session(session_name)
+  return workspace_remote_actions.close_workspace_interactive_preview(self, preview)
 end
 
 function M:ensure_workspace_remote(entry, opts)
-  opts = type(opts) == "table" and opts or {}
-  entry = type(entry) == "table" and entry or {}
-  local safe_name = entry.safe_name or entry.name
-  local root = entry.project_root
-  if type(safe_name) ~= "string" or safe_name == "" then
-    return nil, "workspace name is required"
-  end
-  if type(root) ~= "string" or root == "" then
-    return nil, "workspace root is required"
-  end
-
-  local window_name = entry.tmux_window or entry.window_name or M.workspace_window_name(safe_name)
-  local attempts = math.max(1, tonumber(opts.attempts) or 1)
-  local sleep_ms = math.max(1, tonumber(opts.sleep_ms) or 100)
-  local last_error = "workspace is inactive"
-
-  for attempt = 1, attempts do
-    local session = self:current_tmux_session()
-    if not session then
-      last_error = "workspace is inactive"
-    else
-      local window_id = self:tmux_window_id(session, window_name)
-      if not window_id then
-        last_error = "workspace is inactive"
-      elseif self:status_for_window(window_id) == "active" then
-        entry.window_id = window_id
-        entry.nvim_server = entry.nvim_server or self:workspace_server_path(root, safe_name)
-        return entry, nil
-      else
-        last_error = "workspace is inactive"
-      end
-    end
-
-    if attempt < attempts then
-      pcall(vim.fn.sleep, tostring(sleep_ms) .. "m")
-    end
-  end
-
-  return nil, last_error
+  return workspace_remote_actions.ensure_workspace_remote(self, entry, opts)
 end
 
 function M:remote_workspace_call(entry, lua_expression, opts)
-  opts = type(opts) == "table" and opts or {}
-  local workspace = type(opts.workspace) == "table" and opts.workspace or nil
-  local ensure_error = nil
-  if not workspace then
-    workspace, ensure_error = self:ensure_workspace_remote(entry, {
-      attempts = opts.remote_attempts,
-      sleep_ms = opts.remote_sleep_ms,
-    })
-  end
-  if not workspace then
-    return false, ensure_error or opts.missing_error or "workspace not found"
-  end
-
-  local server = workspace.nvim_server or self:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
-  local output, remote_error = self:remote_luaeval(server, lua_expression, {
-    attempts = opts.attempts or 15,
-    sleep_ms = opts.sleep_ms or 120,
-  })
-  if output == "ok" then
-    return true, nil, workspace
-  end
-
-  return false, remote_error or output or opts.error_message or "workspace command failed", workspace
+  return workspace_remote_actions.remote_workspace_call(self, entry, lua_expression, opts)
 end
 
 function M:send_prompt_to_workspace(entry, prompt, opts)
-  opts = type(opts) == "table" and opts or {}
-  prompt = tostring(prompt or "")
-  if trim(prompt) == "" then
-    return false, "Prompt is required"
-  end
-
-  local plan_ok, plan_error, workspace = self:ensure_workspace_plan_mode(entry, {
-    attempts = opts.plan_attempts or opts.attempts,
-    sleep_ms = opts.plan_sleep_ms or opts.sleep_ms,
-    remote_attempts = opts.remote_attempts,
-    remote_sleep_ms = opts.remote_sleep_ms,
-  })
-  if not plan_ok then
-    return false, plan_error or "Failed to switch workspace to plan mode"
-  end
-
-  return self:remote_workspace_call(entry, "require('codux')._v5.remote_send_to_codex(" .. self:lua_string(prompt) .. ")", {
-    attempts = opts.attempts,
-    sleep_ms = opts.sleep_ms,
-    remote_attempts = opts.remote_attempts,
-    remote_sleep_ms = opts.remote_sleep_ms,
-    workspace = workspace,
-    error_message = "Failed to send prompt",
-  })
+  return workspace_remote_actions.send_prompt_to_workspace(self, entry, prompt, opts)
 end
 
 function M:select_workspace_question_option(entry, option, opts)
-  opts = type(opts) == "table" and opts or {}
-  option = trim(option)
-  if option == "" then
-    return false, "Option number is required"
-  end
-  if not option:match("^[1-4]$") then
-    return false, "Option number must be 1, 2, 3, or 4"
-  end
-
-  return self:remote_workspace_call(
-    entry,
-    "require('codux')._v5.remote_select_codex_question_option("
-      .. self:lua_string(option)
-      .. ", "
-      .. tostring(opts.with_note == true)
-      .. ")",
-    {
-      attempts = opts.attempts,
-      sleep_ms = opts.sleep_ms,
-      remote_attempts = opts.remote_attempts,
-      remote_sleep_ms = opts.remote_sleep_ms,
-      error_message = "Failed to answer question",
-    }
-  )
+  return workspace_remote_actions.select_workspace_question_option(self, entry, option, opts)
 end
 
 function M:submit_workspace_question_note(entry, note, opts)
-  opts = type(opts) == "table" and opts or {}
-  note = tostring(note or "")
-  if trim(note) == "" then
-    return false, "Note is required"
-  end
-
-  return self:remote_workspace_call(
-    entry,
-    "require('codux')._v5.remote_submit_codex_question_note(" .. self:lua_string(note) .. ")",
-    {
-      attempts = opts.attempts,
-      sleep_ms = opts.sleep_ms,
-      remote_attempts = opts.remote_attempts,
-      remote_sleep_ms = opts.remote_sleep_ms,
-      error_message = "Failed to send question note",
-    }
-  )
+  return workspace_remote_actions.submit_workspace_question_note(self, entry, note, opts)
 end
 
 function M:interrupt_workspace(entry, opts)
-  opts = type(opts) == "table" and opts or {}
-  return self:remote_workspace_call(entry, "require('codux')._v5.remote_interrupt_codex_session()", {
-    attempts = opts.attempts,
-    sleep_ms = opts.sleep_ms,
-    remote_attempts = opts.remote_attempts,
-    remote_sleep_ms = opts.remote_sleep_ms,
-    error_message = "Failed to interrupt workspace",
-  })
+  return workspace_remote_actions.interrupt_workspace(self, entry, opts)
 end
 
 function M:switch_workspace_mode(entry, opts)
-  opts = type(opts) == "table" and opts or {}
-  return self:remote_workspace_call(entry, "require('codux')._v5.remote_switch_codex_mode()", {
-    attempts = opts.attempts,
-    sleep_ms = opts.sleep_ms,
-    remote_attempts = opts.remote_attempts,
-    remote_sleep_ms = opts.remote_sleep_ms,
-    error_message = "Failed to switch workspace mode",
-  })
+  return workspace_remote_actions.switch_workspace_mode(self, entry, opts)
 end
 
 function M:ensure_workspace_plan_mode(entry, opts)
-  opts = type(opts) == "table" and opts or {}
-  return self:remote_workspace_call(entry, "require('codux')._v5.remote_ensure_plan_mode()", {
-    attempts = opts.attempts or 60,
-    sleep_ms = opts.sleep_ms or 250,
-    remote_attempts = opts.remote_attempts or 60,
-    remote_sleep_ms = opts.remote_sleep_ms or 250,
-    error_message = "Failed to switch workspace to plan mode",
-  })
+  return workspace_remote_actions.ensure_workspace_plan_mode(self, entry, opts)
 end
 
 function M:verify_workspace_launch(workspace, opts)
-  opts = type(opts) == "table" and opts or {}
-  workspace = type(workspace) == "table" and workspace or {}
-  local safe_name = workspace.safe_name or workspace.name
-  local root = workspace.project_root
-  local server = workspace.nvim_server or self:workspace_server_path(root, safe_name)
-  local window_name = workspace.tmux_window or workspace.window_name or M.workspace_window_name(safe_name)
-  local attempts = math.max(1, tonumber(opts.attempts) or 24)
-  local sleep_ms = math.max(1, tonumber(opts.sleep_ms) or 500)
-  local require_codex = opts.require_codex == true
-  local last_error = "workspace did not become ready"
-
-  for attempt = 1, attempts do
-    local session = self:current_tmux_session()
-    if not session then
-      last_error = "no tmux session running"
-    else
-      local window_id = self:tmux_window_id(session, window_name)
-      if not window_id then
-        last_error = "workspace tmux window disappeared"
-      elseif self:status_for_window(window_id) ~= "active" then
-        last_error = "workspace Neovim process is not running"
-      else
-        workspace.window_id = window_id
-        local output, remote_error = self:remote_luaeval(
-          server,
-          "require('codux')._v5.remote_workspace_status()",
-          { attempts = 1 }
-        )
-        if output == "ready" then
-          return true, nil
-        end
-        if output == "not_running" then
-          if not require_codex then
-            return true, nil
-          end
-          last_error = "workspace Codex session is not running"
-        else
-          last_error = remote_error or output or "workspace Neovim server is not reachable"
-        end
-      end
-    end
-
-    if attempt < attempts then
-      pcall(vim.fn.sleep, tostring(sleep_ms) .. "m")
-    end
-  end
-
-  return false, last_error
+  return workspace_remote_actions.verify_workspace_launch(self, workspace, opts)
 end
 
 function M:normalize_codex_mode(mode)
@@ -949,142 +714,11 @@ function M:schedule_workspace_session_capture(workspace, min_mtime)
 end
 
 function M:sync_activity(codex_status)
-  if codex_status ~= "working" and codex_status ~= "question" and codex_status ~= "idle" then
-    return false
-  end
-  if type(self.state.workspace) ~= "table" then
-    return false
-  end
-
-  local root = self.state.workspace.project_root
-  local safe_name = self.state.workspace.safe_name
-  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
-    return false
-  end
-
-  local state_data, state_error = self:read_state()
-  if state_error then
-    return false
-  end
-
-  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
-  local workspaces = type(project) == "table" and project.workspaces or nil
-  local record = type(workspaces) == "table" and workspaces[safe_name] or nil
-  if type(record) ~= "table" then
-    return false
-  end
-
-  local session = self:current_tmux_session()
-  local window_name = record.tmux_window or record.window_name or self.state.workspace.window_name or safe_name
-  local window_id = session and self:tmux_window_id(session, window_name) or nil
-  local dashboard_status = self:dashboard_workspace_status(record, window_id)
-  if inactive_like_status(dashboard_status) then
-    if
-      record.codex_status == "idle"
-      and record.status == dashboard_status
-      and record.codex_mode == nil
-      and record.tmux_window == window_name
-    then
-      self.state.workspace.codex_status = "idle"
-      self.state.workspace.status = dashboard_status
-      self.state.workspace.codex_mode = nil
-      return true
-    end
-
-    record.codex_status = "idle"
-    record.status = dashboard_status
-    record.codex_mode = nil
-    record.tmux_window = window_name
-    record.tmux_target = M.tmux_target(session, window_name) or record.tmux_target
-    record.last_activity_at = self:timestamp()
-    project.updated_at = record.last_activity_at
-
-    local write_ok = self:write_state(state_data)
-    if not write_ok then
-      return false
-    end
-
-    self.state.workspace.codex_status = "idle"
-    self.state.workspace.status = dashboard_status
-    self.state.workspace.codex_mode = nil
-    if self.state.workspace_manager_project_root == root then
-      self.render_workspace_manager()
-    end
-
-    return true
-  end
-
-  local workspace_status = codex_status == "working" and "active"
-    or codex_status == "question" and "question"
-    or "idle"
-  if record.codex_status == codex_status and record.status == workspace_status then
-    self.state.workspace.codex_status = codex_status
-    self.state.workspace.status = workspace_status
-    return true
-  end
-
-  record.codex_status = codex_status
-  record.status = workspace_status
-  record.last_activity_at = self:timestamp()
-  project.updated_at = record.last_activity_at
-
-  local write_ok = self:write_state(state_data)
-  if not write_ok then
-    return false
-  end
-
-  self.state.workspace.codex_status = codex_status
-  self.state.workspace.status = record.status
-  if self.state.workspace_manager_project_root == root then
-    self.render_workspace_manager()
-  end
-
-  return true
+  return workspace_sync.sync_activity(self, codex_status)
 end
 
 function M:sync_mode(mode)
-  mode = self:normalize_codex_mode(mode)
-  if type(self.state.workspace) ~= "table" then
-    return false
-  end
-
-  local root = self.state.workspace.project_root
-  local safe_name = self.state.workspace.safe_name
-  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
-    return false
-  end
-
-  local state_data, state_error = self:read_state()
-  if state_error then
-    return false
-  end
-
-  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
-  local workspaces = type(project) == "table" and project.workspaces or nil
-  local record = type(workspaces) == "table" and workspaces[safe_name] or nil
-  if type(record) ~= "table" then
-    return false
-  end
-
-  if record.codex_mode == mode then
-    self.state.workspace.codex_mode = mode
-    return true
-  end
-
-  record.codex_mode = mode
-  project.updated_at = self:timestamp()
-
-  local write_ok = self:write_state(state_data)
-  if not write_ok then
-    return false
-  end
-
-  self.state.workspace.codex_mode = mode
-  if self.state.workspace_manager_project_root == root then
-    self.render_workspace_manager()
-  end
-
-  return true
+  return workspace_sync.sync_mode(self, mode)
 end
 
 function M:entries_for_project(root)
@@ -1108,80 +742,11 @@ function M:update_mission_objective(name, objective, opts)
 end
 
 function M:saved_workspace_instruction_request(entry)
-  entry = type(entry) == "table" and entry or {}
-  local root = entry.project_root or self.state.workspace_manager_project_root
-  local safe_name = entry.safe_name
-  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
-    return nil, "workspace not found"
-  end
-
-  local instruction = self:read_instruction_file(root, safe_name)
-  if type(instruction) ~= "string" or trim(instruction) == "" then
-    local state_data = self:read_state()
-    local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
-    local workspaces = type(project) == "table" and project.workspaces or nil
-    local record = type(workspaces) == "table" and workspaces[safe_name] or nil
-    if type(record) == "table" and type(record.resolved_instruction) == "string" then
-      instruction = record.resolved_instruction
-    elseif type(entry.resolved_instruction) == "string" then
-      instruction = entry.resolved_instruction
-    end
-  end
-
-  return {
-    name = entry.name or safe_name,
-    safe_name = safe_name,
-    project_root = root,
-    custom_instruction = instruction,
-    resolved_instruction = instruction,
-  }, nil
+  return workspace_lifecycle_actions.saved_workspace_instruction_request(self, entry)
 end
 
 function M:update_saved_workspace_instruction(entry, instruction)
-  entry = type(entry) == "table" and entry or {}
-  instruction = type(instruction) == "string" and trim(instruction) or ""
-  if instruction == "" then
-    return false, "Workspace instruction is required"
-  end
-
-  local root = entry.project_root or self.state.workspace_manager_project_root
-  local safe_name = entry.safe_name
-  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
-    return false, "workspace not found"
-  end
-
-  local instruction_ok, instruction_error = self:write_instruction_file(root, safe_name, instruction)
-  if not instruction_ok then
-    return false, instruction_error
-  end
-
-  local state_data, state_error = self:read_state()
-  if state_error then
-    return false, state_error
-  end
-
-  local project = self:project_state(state_data, root)
-  local record = project.workspaces[safe_name]
-  if type(record) == "table" then
-    record.custom_instruction = instruction
-    record.resolved_instruction = instruction
-    project.updated_at = self:timestamp()
-
-    local write_ok, write_error = self:write_state(state_data)
-    if not write_ok then
-      return false, write_error
-    end
-  end
-
-  if self.state.workspace and self.state.workspace.project_root == root and self.state.workspace.safe_name == safe_name then
-    self.state.workspace.custom_instruction = instruction
-    self.state.workspace.resolved_instruction = instruction
-  end
-  if self.state.workspace_manager_project_root == root then
-    self.render_workspace_manager()
-  end
-
-  return true, nil
+  return workspace_lifecycle_actions.update_saved_workspace_instruction(self, entry, instruction)
 end
 
 function M:entry_for_name(root, name)
@@ -1229,583 +794,31 @@ function M:kill_tmux_window_deferred(window_id, window_name)
 end
 
 function M:rename_saved_workspace(entry, new_name)
-  local display_name, safe_name_or_error = M.sanitize_workspace_name(new_name)
-  if not display_name then
-    self.notify(safe_name_or_error, vim.log.levels.ERROR)
-    return false
-  end
-
-  local root = entry.project_root or self.state.workspace_manager_project_root
-  local state_data, state_error = self:read_state()
-  if state_error then
-    self.notify(state_error, vim.log.levels.ERROR)
-    return false
-  end
-
-  local project = self:project_state(state_data, root)
-  local existing = project.workspaces[entry.safe_name]
-  if type(existing) ~= "table" then
-    self.notify("workspace not found", vim.log.levels.ERROR)
-    return false
-  end
-  if safe_name_or_error ~= entry.safe_name and project.workspaces[safe_name_or_error] ~= nil then
-    self.notify("workspace already exists", vim.log.levels.ERROR)
-    return false
-  end
-
-  local new_window_name = M.workspace_window_name(safe_name_or_error)
-  local old_window_name = existing.tmux_window or existing.window_name or entry.window_name or entry.safe_name
-  local previous_project = vim.deepcopy(project)
-  local previous_next_project = nil
-  local worktree_renamed = false
-  local branch_renamed = false
-  local old_worktree_path = existing.worktree_path or existing.project_root or root
-  local new_worktree_path = nil
-  local old_branch = existing.worktree_branch
-  local new_branch = nil
-  if existing.workspace_kind == "worktree" then
-    new_worktree_path = workspace_lifecycle.renamed_worktree_path(old_worktree_path, safe_name_or_error)
-    new_branch = self:renamed_worktree_branch(existing, safe_name_or_error)
-    if M.target_path_exists(new_worktree_path) then
-      self.notify("worktree path already exists", vim.log.levels.ERROR)
-      return false
-    end
-    if old_branch ~= new_branch and self:git_branch_exists(root, new_branch) then
-      self.notify("branch already exists: " .. new_branch, vim.log.levels.ERROR)
-      return false
-    end
-    previous_next_project = state_data.projects[new_worktree_path] and vim.deepcopy(state_data.projects[new_worktree_path]) or nil
-    if not self:move_git_worktree(root, old_worktree_path, new_worktree_path) then
-      self.notify("Failed to move Git worktree " .. tostring(old_worktree_path), vim.log.levels.ERROR)
-      return false
-    end
-    worktree_renamed = true
-    if old_branch ~= new_branch then
-      if not self:rename_git_branch(new_worktree_path, old_branch, new_branch) then
-        self:move_git_worktree(new_worktree_path, new_worktree_path, old_worktree_path)
-        self.notify("Failed to rename Git branch " .. tostring(old_branch), vim.log.levels.ERROR)
-        return false
-      end
-      branch_renamed = true
-    end
-  end
-  if not self:rename_tmux_window(entry.window_id, new_window_name) then
-    if existing.workspace_kind == "worktree" then
-      if branch_renamed then
-        self:rename_git_branch(new_worktree_path, new_branch, old_branch)
-      end
-      if worktree_renamed then
-        self:move_git_worktree(new_worktree_path or root, new_worktree_path, old_worktree_path)
-      end
-    end
-    self.notify("Failed to rename tmux window " .. tostring(entry.window_name), vim.log.levels.ERROR)
-    return false
-  end
-
-  project.workspaces[entry.safe_name] = nil
-  existing.name = display_name
-  existing.safe_name = safe_name_or_error
-  if existing.workspace_kind == "worktree" then
-    existing.project_root = new_worktree_path
-    existing.worktree_path = new_worktree_path
-    existing.worktree_branch = new_branch
-    existing.git_branch = new_branch
-    existing.target_path =
-      workspace_lifecycle.retarget_path_after_worktree_move(existing.target_path, old_worktree_path, new_worktree_path)
-  end
-  existing.tmux_window = new_window_name
-  existing.tmux_target = entry.window_id and M.tmux_target(self:current_tmux_session(), new_window_name) or nil
-  existing.status = self:dashboard_workspace_status(existing, entry.window_id)
-  existing.last_opened_at = self:timestamp()
-  if existing.workspace_kind == "worktree" then
-    if next(project.workspaces) == nil and vim.empty_dict then
-      project.workspaces = vim.empty_dict()
-    end
-    local next_project = self:project_state(state_data, new_worktree_path)
-    next_project.workspaces[safe_name_or_error] = existing
-    next_project.updated_at = self:timestamp()
-  else
-    project.workspaces[safe_name_or_error] = existing
-  end
-  project.updated_at = self:timestamp()
-
-  local write_ok, write_error = self:write_state(state_data)
-  if not write_ok then
-    local rollback_errors = {}
-    if entry.window_id and old_window_name ~= new_window_name and not self:rename_tmux_window(entry.window_id, old_window_name) then
-      table.insert(rollback_errors, "failed to restore tmux window")
-    end
-    if branch_renamed and not self:rename_git_branch(new_worktree_path, new_branch, old_branch) then
-      table.insert(rollback_errors, "failed to restore Git branch")
-    end
-    if worktree_renamed and not self:move_git_worktree(new_worktree_path or root, new_worktree_path, old_worktree_path) then
-      table.insert(rollback_errors, "failed to restore Git worktree")
-    end
-    state_data.projects[root] = previous_project
-    if new_worktree_path then
-      state_data.projects[new_worktree_path] = previous_next_project
-    end
-    local message = write_error or "Failed to write Codux workspace state"
-    if #rollback_errors > 0 then
-      message = message .. "; " .. table.concat(rollback_errors, "; ")
-    end
-    self.notify(message, vim.log.levels.ERROR)
-    return false
-  end
-
-  local instruction_root = existing.workspace_kind == "worktree" and new_worktree_path or root
-  local old_instruction_path = self:instruction_file_path(instruction_root, entry.safe_name)
-  local new_instruction_path = self:instruction_file_path(existing.workspace_kind == "worktree" and new_worktree_path or root, safe_name_or_error)
-  if
-    old_instruction_path
-    and new_instruction_path
-    and old_instruction_path ~= new_instruction_path
-    and vim.fn.filereadable(old_instruction_path) == 1
-    and vim.fn.filereadable(new_instruction_path) ~= 1
-  then
-    local rename_ok, rename_result = pcall(vim.fn.rename, old_instruction_path, new_instruction_path)
-    if not rename_ok or rename_result ~= 0 then
-      self.notify("Renamed workspace, but failed to move Codux instruction file", vim.log.levels.WARN)
-    end
-  end
-
-  self.notify("Renamed Codux workspace to " .. display_name)
-  self.close_workspace_manager()
-  return true
+  return workspace_lifecycle_actions.rename_saved_workspace(self, entry, new_name)
 end
 
 function M:delete_saved_workspace(entry)
-  entry = type(entry) == "table" and entry or {}
-  local root = entry.project_root or self.state.workspace_manager_project_root
-  local state_data, state_error = self:read_state()
-  if state_error then
-    self.notify(state_error, vim.log.levels.ERROR)
-    return false
-  end
-
-  local project = self:project_state(state_data, root)
-  local existing = project.workspaces[entry.safe_name]
-  local instruction_path = self:instruction_file_path(root, entry.safe_name)
-  local has_instruction_file = instruction_path and vim.fn.filereadable(instruction_path) == 1
-  if type(existing) ~= "table" and not has_instruction_file then
-    self.notify("workspace not found", vim.log.levels.ERROR)
-    self.render_workspace_manager()
-    return false
-  end
-
-  if type(existing) == "table" and existing.workspace_kind == "worktree" then
-    local worktree_path = existing.worktree_path or existing.project_root or root
-    local worktree_branch = existing.worktree_branch
-    local git_common_dir = existing.git_common_dir
-    local previous_project = vim.deepcopy(project)
-    if type(git_common_dir) ~= "string" or git_common_dir == "" then
-      git_common_dir = self:git_common_dir(worktree_path)
-    end
-    if type(git_common_dir) ~= "string" or git_common_dir == "" then
-      self.notify("Failed to resolve Git common directory for " .. tostring(worktree_path), vim.log.levels.ERROR)
-      self.render_workspace_manager()
-      return false
-    end
-    project.workspaces[entry.safe_name] = nil
-    if next(project.workspaces) == nil and vim.empty_dict then
-      project.workspaces = vim.empty_dict()
-    end
-    project.updated_at = self:timestamp()
-    local write_ok, write_error = self:write_state(state_data)
-    if not write_ok then
-      state_data.projects[root] = previous_project
-      self.notify(write_error, vim.log.levels.ERROR)
-      return false
-    end
-
-    local function restore_state_after_delete(message)
-      state_data.projects[root] = previous_project
-      local restore_ok, restore_error = self:write_state(state_data)
-      if not restore_ok then
-        message = tostring(message or "Failed to delete Codux workspace")
-          .. "; "
-          .. tostring(restore_error or "failed to restore workspace state")
-      end
-      self.notify(message, vim.log.levels.ERROR)
-      self.render_workspace_manager()
-      return false
-    end
-
-    if entry.window_id and not self:kill_tmux_window(entry.window_id) then
-      return restore_state_after_delete("Failed to close tmux window " .. tostring(entry.window_name))
-    end
-
-    local delete_instruction_ok, delete_instruction_error = self:delete_instruction_file(root, entry.safe_name)
-    if not delete_instruction_ok then
-      return restore_state_after_delete(delete_instruction_error)
-    end
-
-    local remove_ok, remove_error = self:remove_git_worktree_in_common_dir(git_common_dir, worktree_path)
-    if not remove_ok then
-      return restore_state_after_delete(remove_error or ("Failed to remove Git worktree " .. tostring(worktree_path)))
-    end
-    if type(worktree_branch) == "string" and worktree_branch ~= "" then
-      local branch_ok, branch_error = self:delete_git_branch_in_common_dir(git_common_dir, worktree_branch)
-      if not branch_ok then
-        self.notify(
-          (branch_error or ("Failed to delete Git branch " .. tostring(worktree_branch)))
-            .. "; workspace state was removed but branch cleanup is incomplete",
-          vim.log.levels.ERROR
-        )
-        self.render_workspace_manager()
-        return false
-      end
-    end
-
-    self.notify("Deleted Codux workspace " .. tostring(entry.name or entry.safe_name))
-    self.close_workspace_manager()
-    return true
-  end
-
-  local previous_project = vim.deepcopy(project)
-  project.workspaces[entry.safe_name] = nil
-  if next(project.workspaces) == nil and vim.empty_dict then
-    project.workspaces = vim.empty_dict()
-  end
-  project.updated_at = self:timestamp()
-  local write_ok, write_error = self:write_state(state_data)
-  if not write_ok then
-    self.notify(write_error, vim.log.levels.ERROR)
-    return false
-  end
-
-  local delete_instruction_ok, delete_instruction_error = self:delete_instruction_file(root, entry.safe_name)
-  if not delete_instruction_ok then
-    if type(existing) == "table" then
-      state_data.projects[root] = previous_project
-      local restore_ok, restore_error = self:write_state(state_data)
-      if not restore_ok then
-        local message = (delete_instruction_error or "Failed to delete Codux workspace instruction file")
-          .. "; "
-          .. (restore_error or "failed to restore workspace state")
-        self.notify(message, vim.log.levels.ERROR)
-      else
-        self.notify(delete_instruction_error, vim.log.levels.ERROR)
-      end
-    else
-      self.notify(delete_instruction_error, vim.log.levels.ERROR)
-    end
-    self.render_workspace_manager()
-    return false
-  end
-
-  self.notify("Deleted Codux workspace " .. tostring(entry.name or entry.safe_name))
-  self.close_workspace_manager()
-  self:kill_tmux_window_deferred(entry.window_id, entry.window_name)
-  return true
+  return workspace_lifecycle_actions.delete_saved_workspace(self, entry)
 end
 
 function M:close_saved_workspace_window(entry)
-  local root = entry.project_root or self.state.workspace_manager_project_root
-  local state_data, state_error = self:read_state()
-  if state_error then
-    self.notify(state_error, vim.log.levels.ERROR)
-    return false
-  end
-
-  local project = self:project_state(state_data, root)
-  local existing = project.workspaces[entry.safe_name]
-  if type(existing) ~= "table" then
-    self.notify("workspace not found", vim.log.levels.ERROR)
-    self.render_workspace_manager()
-    return false
-  end
-
-  local session = self:current_tmux_session()
-  local window_name = existing.tmux_window or existing.window_name or entry.window_name or entry.safe_name
-  local window_id = entry.window_id or (session and self:tmux_window_id(session, window_name)) or nil
-  if window_id and not self:kill_tmux_window(window_id) then
-    self.notify("Failed to close tmux window " .. tostring(window_name), vim.log.levels.ERROR)
-    return false
-  end
-
-  existing.status = "inactive"
-  existing.codex_status = "idle"
-  existing.codex_mode = nil
-  existing.tmux_window = window_name
-  existing.tmux_target = nil
-  existing.last_reconciled_at = self:timestamp()
-  project.updated_at = existing.last_reconciled_at
-
-  local write_ok, write_error = self:write_state(state_data)
-  if not write_ok then
-    self.notify(write_error, vim.log.levels.ERROR)
-    return false
-  end
-
-  self.notify("Closed Codux workspace " .. tostring(existing.name or entry.name or entry.safe_name))
-  self.render_workspace_manager()
-  return true
+  return workspace_lifecycle_actions.close_saved_workspace_window(self, entry)
 end
 
 function M:close_all_saved_workspace_windows(root)
-  root = root or self.state.workspace_manager_project_root or self:project_root()
-  local state_data, state_error = self:read_state()
-  if state_error then
-    self.notify(state_error, vim.log.levels.ERROR)
-    return false
-  end
-
-  local project = type(state_data.projects) == "table" and state_data.projects[root] or nil
-  local workspaces = type(project) == "table" and project.workspaces or nil
-  if type(workspaces) ~= "table" or next(workspaces) == nil then
-    self.notify("No Codux workspaces to close", vim.log.levels.WARN)
-    return false
-  end
-
-  local session = self:current_tmux_session()
-  local closed = 0
-  local failed = 0
-  local now = self:timestamp()
-  local close_results = {}
-
-  for safe_name, record in pairs(workspaces) do
-    if type(record) == "table" then
-      local entry_safe_name = record.safe_name or safe_name
-      local window_name = record.tmux_window or record.window_name or safe_name
-      local window_id = session and self:tmux_window_id(session, window_name) or nil
-      local close_failed = false
-      if window_id then
-        if self:kill_tmux_window(window_id) then
-          closed = closed + 1
-        else
-          failed = failed + 1
-          close_failed = true
-        end
-      end
-      close_results[entry_safe_name] = not close_failed
-
-      if not close_failed then
-        record.status = "inactive"
-        record.codex_status = "idle"
-        record.codex_mode = nil
-        record.tmux_target = nil
-      end
-      record.tmux_window = window_name
-      record.last_reconciled_at = now
-    end
-  end
-
-  project.updated_at = now
-  local write_ok, write_error = self:write_state(state_data)
-  if not write_ok then
-    self.notify(write_error, vim.log.levels.ERROR)
-    return false
-  end
-
-  if self.state.workspace and self.state.workspace.project_root == root then
-    local current_safe_name = self.state.workspace.safe_name
-    if close_results[current_safe_name] then
-      self.state.workspace.status = "inactive"
-      self.state.workspace.codex_status = "idle"
-      self.state.workspace.codex_mode = nil
-      self.state.workspace.tmux_target = nil
-    end
-  end
-
-  if failed > 0 then
-    self.notify("Closed " .. tostring(closed) .. " Codux workspaces; " .. tostring(failed) .. " failed", vim.log.levels.WARN)
-  else
-    self.notify("Closed " .. tostring(closed) .. " Codux workspaces")
-  end
-  if self.state.workspace_manager_project_root == root then
-    self.render_workspace_manager()
-  end
-
-  return failed == 0
+  return workspace_lifecycle_actions.close_all_saved_workspace_windows(self, root)
 end
 
 function M:mission_dirty_roles(name, opts)
-  opts = type(opts) == "table" and opts or {}
-  local root = opts.project_root or self:project_root()
-  local mission, mission_error = self:mission_for_name(root, name)
-  if not mission then
-    return nil, mission_error or "mission not found"
-  end
-
-  local dirty = {}
-  for _, entry in ipairs(type(mission.roles) == "table" and mission.roles or {}) do
-    local path = entry.worktree_path or entry.project_root
-    local label = entry.name or entry.safe_name or entry.mission_role or "unknown"
-    if type(path) ~= "string" or path == "" then
-      table.insert(dirty, { name = label, reason = "unknown" })
-    else
-      local output, code = self.system({ "git", "-C", path, "status", "--porcelain" })
-      if code ~= 0 then
-        table.insert(dirty, { name = label, reason = "unknown" })
-      elseif trim(output) ~= "" then
-        table.insert(dirty, { name = label, reason = "dirty" })
-      end
-    end
-  end
-
-  return dirty, nil
+  return mission_lifecycle.dirty_roles(self, name, opts)
 end
 
 function M:close_mission(name, opts)
-  opts = type(opts) == "table" and opts or {}
-  local root = opts.project_root or self:project_root()
-  local mission, mission_error = self:mission_for_name(root, name)
-  if not mission then
-    self.notify(mission_error or "mission not found", vim.log.levels.ERROR)
-    return false
-  end
-
-  local state_data, state_error = self:read_state()
-  if state_error then
-    self.notify(state_error, vim.log.levels.ERROR)
-    return false
-  end
-
-  local session = self:current_tmux_session()
-  local now = self:timestamp()
-  local closed = 0
-  local failed = 0
-  local close_results = {}
-
-  for _, entry in ipairs(vim.deepcopy(mission.roles)) do
-    local entry_root = entry.project_root or root
-    local safe_name = entry.safe_name
-    local project = type(state_data.projects) == "table" and state_data.projects[entry_root] or nil
-    local workspaces = type(project) == "table" and project.workspaces or nil
-    local record = type(workspaces) == "table" and type(safe_name) == "string" and workspaces[safe_name] or nil
-    if type(record) ~= "table" then
-      failed = failed + 1
-    else
-      local window_name = record.tmux_window or record.window_name or entry.window_name or safe_name
-      local window_id = entry.window_id or (session and self:tmux_window_id(session, window_name)) or nil
-      local close_failed = false
-      if window_id and not self:kill_tmux_window(window_id) then
-        failed = failed + 1
-        close_failed = true
-      end
-
-      if not close_failed then
-        record.status = "inactive"
-        record.codex_status = "idle"
-        record.codex_mode = nil
-        record.tmux_target = nil
-        closed = closed + 1
-        close_results[tostring(entry_root) .. "\0" .. tostring(safe_name)] = true
-      end
-      record.tmux_window = window_name
-      record.last_reconciled_at = now
-      project.updated_at = now
-    end
-  end
-
-  local write_ok, write_error = self:write_state(state_data)
-  if not write_ok then
-    self.notify(write_error, vim.log.levels.ERROR)
-    return false
-  end
-
-  if self.state.workspace then
-    local key = tostring(self.state.workspace.project_root or "") .. "\0" .. tostring(self.state.workspace.safe_name or "")
-    if close_results[key] then
-      self.state.workspace.status = "inactive"
-      self.state.workspace.codex_status = "idle"
-      self.state.workspace.codex_mode = nil
-      self.state.workspace.tmux_target = nil
-    end
-  end
-
-  if failed > 0 then
-    self.notify(
-      "Closed "
-        .. tostring(closed)
-        .. " roles in Codux mission "
-        .. tostring(mission.name or name)
-        .. "; "
-        .. tostring(failed)
-        .. " failed",
-      vim.log.levels.WARN
-    )
-  else
-    self.notify("Closed Codux mission " .. tostring(mission.name or name) .. " with " .. tostring(closed) .. " roles")
-  end
-
-  if self.state.workspace_manager_project_root then
-    self.render_workspace_manager()
-  end
-
-  return failed == 0
+  return mission_lifecycle.close(self, name, opts)
 end
 
 function M:start_mission(name, opts)
-  opts = type(opts) == "table" and opts or {}
-  local root = opts.project_root or self:project_root()
-  local mission, mission_error = self:mission_for_name(root, name)
-  if not mission then
-    self.notify(mission_error or "mission not found", vim.log.levels.ERROR)
-    return false
-  end
-
-  local started = 0
-  local failed = 0
-  local started_workspaces = {}
-  for _, entry in ipairs(type(mission.roles) == "table" and mission.roles or {}) do
-    local workspace_name = entry.name or entry.safe_name
-    if type(workspace_name) ~= "string" or workspace_name == "" then
-      failed = failed + 1
-    else
-      local workspace, workspace_error = self:prepare_workspace(workspace_name, {
-        allow_existing = true,
-        initial_mode = "plan",
-        permission_profile = entry.permission_profile or "auto",
-        require_existing = true,
-        project_root = entry.project_root or root,
-        restart_inactive = opts.restart_inactive == true,
-      })
-      if workspace then
-        started = started + 1
-        table.insert(started_workspaces, workspace)
-        workspace.initial_mode = "plan"
-        self:ensure_workspace_plan_mode(workspace)
-      else
-        failed = failed + 1
-        local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
-        self.notify(
-          "Failed to start Codux mission role " .. tostring(label) .. ": " .. tostring(workspace_error or "unknown error"),
-          vim.log.levels.WARN
-        )
-      end
-    end
-  end
-
-  if failed > 0 then
-    self.notify(
-      "Started "
-        .. tostring(started)
-        .. " roles in Codux mission "
-        .. tostring(mission.name or name)
-        .. "; "
-        .. tostring(failed)
-        .. " failed",
-      vim.log.levels.WARN
-    )
-  else
-    self.notify("Started Codux mission " .. tostring(mission.name or name) .. " with " .. tostring(started) .. " roles")
-  end
-
-  if self.state.workspace_manager_project_root then
-    self.render_workspace_manager()
-  end
-
-  if opts.focus_first == true and failed == 0 and started_workspaces[1] then
-    local workspace = started_workspaces[1]
-    if not self:switch_tmux_window(workspace.window_id) then
-      self.notify("Failed to switch to Codux mission role " .. tostring(workspace.mission_role or workspace.name), vim.log.levels.ERROR)
-      return false
-    end
-  end
-
-  return failed == 0
+  return mission_lifecycle.start(self, name, opts)
 end
 
 function M:shell_env_assignment(name, value)
@@ -1898,111 +911,27 @@ function M:create_mission(mission_or_name, objective, opts)
 end
 
 function M:open_saved_workspace(name, project_root)
-  local workspace, error_message = self:prepare_workspace(name, {
-    allow_existing = true,
-    initial_mode = "plan",
-    require_existing = true,
-    project_root = project_root,
-  })
-  if not workspace then
-    self.notify(error_message or "Failed to open Codux workspace", vim.log.levels.ERROR)
-    return false
-  end
-
-  if not self:switch_tmux_window(workspace.window_id) then
-    self.notify("Failed to switch to Codux workspace " .. workspace.name, vim.log.levels.ERROR)
-    return false
-  end
-
-  local branch = workspace.git_branch ~= "" and " on " .. workspace.git_branch or ""
-  self.notify("Opened Codux workspace " .. workspace.name .. branch)
-  return true
+  return workspace_lifecycle_actions.open_saved_workspace(self, name, project_root)
 end
 
 function M:select_workspace(name)
-  return self:open_saved_workspace(name, self:project_root())
+  return workspace_lifecycle_actions.select_workspace(self, name)
 end
 
 function M:rename_workspace(old_name, new_name)
-  local root = self:project_root()
-  local entry, error_message = self:entry_for_name(root, old_name)
-  if not entry then
-    self.notify(error_message or "workspace not found", vim.log.levels.ERROR)
-    return false
-  end
-  return self:rename_saved_workspace(entry, new_name)
+  return workspace_lifecycle_actions.rename_workspace(self, old_name, new_name)
 end
 
 function M:delete_workspace(name)
-  local root = self:project_root()
-  local entry, error_message = self:entry_for_name(root, name)
-  if not entry then
-    self.notify(error_message or "workspace not found", vim.log.levels.ERROR)
-    return false
-  end
-  return self:delete_saved_workspace(entry)
+  return workspace_lifecycle_actions.delete_workspace(self, name)
 end
 
 function M:delete_mission(name, opts)
-  opts = type(opts) == "table" and opts or {}
-  local root = opts.project_root or self:project_root()
-  local mission, mission_error = self:mission_for_name(root, name)
-  if not mission then
-    self.notify(mission_error or "mission not found", vim.log.levels.ERROR)
-    return false
-  end
-
-  local deleted = 0
-  for _, entry in ipairs(vim.deepcopy(mission.roles)) do
-    if self:delete_saved_workspace(entry) then
-      deleted = deleted + 1
-    else
-      self.notify(
-        "Stopped deleting Codux mission "
-          .. tostring(mission.name or name)
-          .. " after "
-          .. tostring(deleted)
-          .. " roles",
-        vim.log.levels.ERROR
-      )
-      return false
-    end
-  end
-
-  self.notify("Deleted Codux mission " .. tostring(mission.name or name) .. " with " .. tostring(deleted) .. " roles")
-  return true
+  return mission_lifecycle.delete(self, name, opts)
 end
 
 function M:restore_workspaces(opts)
-  opts = opts or {}
-  local root = opts.project_root or self:project_root()
-  local summary, error_message = self:reconcile_project(root)
-  if error_message then
-    self.notify(error_message, vim.log.levels.WARN)
-    return false
-  end
-
-  if not opts.silent then
-    self.notify(
-      "Restored Codux workspaces: "
-        .. tostring(summary.total)
-        .. " total, "
-        .. tostring(summary.active)
-        .. " active, "
-        .. tostring(summary.question)
-        .. " question, "
-        .. tostring(summary.idle)
-        .. " idle, "
-        .. tostring(summary.inactive)
-        .. " inactive"
-    )
-  end
-
-  if self.state.workspace_manager_project_root == root then
-    self.render_workspace_manager()
-  end
-
-  return true
+  return workspace_lifecycle_actions.restore_workspaces(self, opts)
 end
 
 function M:target_sync_allowed(event, current_filetype)

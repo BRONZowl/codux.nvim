@@ -1,16 +1,10 @@
 local h = require("tests.helpers")
+local fixtures = require("tests.workspace_fixtures")
 local assert_equal = h.assert_equal
 local assert_true = h.assert_true
 
 local workspace_registry = require("codux.workspace_registry")
 local runtime_mod = require("codux.workspace_runtime")
-
-local function project_state(state_data, root)
-  state_data.projects = state_data.projects or {}
-  state_data.projects[root] = state_data.projects[root] or { workspaces = {} }
-  state_data.projects[root].workspaces = state_data.projects[root].workspaces or {}
-  return state_data.projects[root]
-end
 
 local function runtime(opts)
   opts = type(opts) == "table" and opts or {}
@@ -30,7 +24,7 @@ local function runtime(opts)
       return opts.write_ok ~= false, opts.write_error
     end,
     project_state = function(_, next_state, root)
-      return project_state(next_state, root)
+      return fixtures.simple_project_state(next_state, root)
     end,
     timestamp = function()
       return "2026-07-05T12:00:00Z"
