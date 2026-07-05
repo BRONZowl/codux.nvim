@@ -6,14 +6,15 @@ local assert_false = h.assert_false
 local assert_contains = h.assert_contains
 
 local mission_control_mod = require("codux.mission_control")
+local output_fixtures = require("tests.mission_output_fixtures")
 
 if type(vim.api) == "table" then
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  local rendered_lines
+  local bufnr = output_fixtures.output_buffer()
   local preview_entry
   local term_command
   local modified_at_termopen
-  local controller = mission_control_mod.new({
+  local controller, ctx = output_fixtures.controller({
+    bufnr = bufnr,
     namespace = vim.api.nvim_create_namespace("codux.mission_output.test"),
     state = {
       mission_dashboard_buf = 10,
@@ -40,11 +41,6 @@ if type(vim.api) == "table" then
     get_window_height = function()
       return 6
     end,
-    ui = {
-      set_lines = function(_, lines)
-        rendered_lines = lines
-      end,
-    },
     workspace_interactive_preview = function(entry)
       preview_entry = entry
       return {
@@ -65,10 +61,10 @@ if type(vim.api) == "table" then
   assert_equal(table.concat(term_command, " "), "env -u TMUX tmux attach-session -t codux-preview-test")
   assert_false(modified_at_termopen)
   assert_equal(controller.state.mission_dashboard_output_job, 77)
-  assert_contains(table.concat(rendered_lines, "\n"), "Output: Reviewer")
-  assert_equal(table.concat(rendered_lines, "\n"):find("Ctrl-o workspace", 1, true), nil)
-  assert_equal(table.concat(rendered_lines, "\n"):find("Ctrl-q", 1, true), nil)
-  vim.api.nvim_buf_delete(bufnr, { force = true })
+  assert_contains(table.concat(ctx.rendered_lines, "\n"), "Output: Reviewer")
+  assert_equal(table.concat(ctx.rendered_lines, "\n"):find("Ctrl-o workspace", 1, true), nil)
+  assert_equal(table.concat(ctx.rendered_lines, "\n"):find("Ctrl-q", 1, true), nil)
+  output_fixtures.delete_buffer(bufnr)
 end
 
 if type(vim.api) == "table" then

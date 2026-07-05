@@ -6,8 +6,8 @@ local compat_mod = require("codux.compat")
 local context_mod = require("codux.context")
 local health_mod = require("codux.health")
 local keymaps_mod = require("codux.keymaps")
-local mission_control_mod = require("codux.mission_control")
 local mission_mod = require("codux.mission")
+local mission_setup_mod = require("codux.mission_setup")
 local prompt_actions_mod = require("codux.prompt_actions")
 local state_mod = require("codux.state")
 local text_util = require("codux.text")
@@ -828,7 +828,8 @@ function M.open_workspaces()
   return workspace_manager_controller:open()
 end
 
-mission_controller = mission_control_mod.new({
+mission_controller = mission_setup_mod.new({
+  codux = M,
   state = state,
   mission = mission_mod,
   ui = ui,
@@ -841,82 +842,10 @@ mission_controller = mission_control_mod.new({
   token_usage_label = mission_token_usage_label,
   refresh_token_usage = refresh_mission_token_usage,
   token_usage_refresh_ms = token_usage_refresh_ms,
-  create_mission = function(mission)
-    return M.create_mission(mission)
-  end,
-  create_workspace_prompt = function(opts)
-    return M.open_workspace_prompt(opts)
-  end,
-  update_mission_objective = function(name, objective, root)
-    return M.update_mission_objective(name, objective, { project_root = root })
-  end,
-  mission_dirty_roles = function(name, root)
-    return workspace_runtime:mission_dirty_roles(name, { project_root = root })
-  end,
-  workspace_branch_state = function(entry)
-    return workspace_runtime:workspace_branch_state(entry)
-  end,
-  start_mission = function(name, root, opts)
-    opts = type(opts) == "table" and vim.deepcopy(opts) or {}
-    opts.project_root = root
-    return M.start_mission(name, opts)
-  end,
-  close_mission = function(name, root)
-    return M.close_mission(name, { project_root = root })
-  end,
-  delete_mission = function(name, root)
-    return M.delete_mission(name, { project_root = root })
-  end,
-  missions_for_project = function(root)
-    return workspace_runtime:missions_for_project(root)
-  end,
+  workspace_runtime = workspace_runtime,
   workspace_entries_for_project = workspace_entries_for_project,
   edit_saved_workspace_instruction = edit_saved_workspace_instruction,
   delete_saved_workspace = delete_saved_workspace,
-  close_saved_workspace_window = function(entry)
-    return M._v5.close_saved_workspace_window(entry)
-  end,
-  workspace_interactive_preview = function(entry, opts)
-    return workspace_runtime:workspace_interactive_preview(entry, opts)
-  end,
-  close_workspace_interactive_preview = function(preview)
-    return workspace_runtime:close_workspace_interactive_preview(preview)
-  end,
-  send_prompt_to_workspace = function(entry, prompt)
-    local ok, error_message = workspace_runtime:send_prompt_to_workspace(entry, prompt)
-    if not ok and error_message then
-      return false, error_message
-    end
-    return ok
-  end,
-  select_workspace_question_option = function(entry, option, opts)
-    local ok, error_message = workspace_runtime:select_workspace_question_option(entry, option, opts)
-    if not ok and error_message then
-      return false, error_message
-    end
-    return ok
-  end,
-  submit_workspace_question_note = function(entry, note, opts)
-    local ok, error_message = workspace_runtime:submit_workspace_question_note(entry, note, opts)
-    if not ok and error_message then
-      return false, error_message
-    end
-    return ok
-  end,
-  interrupt_workspace = function(entry)
-    local ok, error_message = workspace_runtime:interrupt_workspace(entry)
-    if not ok and error_message then
-      return false, error_message
-    end
-    return ok
-  end,
-  switch_workspace_mode = function(entry)
-    local ok, error_message = workspace_runtime:switch_workspace_mode(entry)
-    if not ok and error_message then
-      return false, error_message
-    end
-    return ok
-  end,
   project_root = workspace_manager_project_root,
   set_buffer_keymap = M._v5.set_buffer_keymap,
   bind_close_keys = M._v5.bind_close_keys,

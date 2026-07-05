@@ -14,6 +14,67 @@ local function next_bordered_float_row(row, content_height)
   return math.max(0, tonumber(row) or 0) + bordered_float_outer_height(content_height)
 end
 
+local function editor_size()
+  return math.max(1, vim.o.columns), math.max(1, vim.o.lines - vim.o.cmdheight)
+end
+
+local function centered_col(total_width, width)
+  return math.max(0, math.floor((total_width - width) / 2))
+end
+
+local function centered_row(total_height, height)
+  return math.max(0, math.floor((total_height - height) / 2))
+end
+
+local function dashboard_window_config(controller)
+  if not controller.is_valid_win(controller.state.mission_dashboard_win) then
+    return {}
+  end
+
+  local ok, config = pcall(controller.get_window_config, controller.state.mission_dashboard_win)
+  return ok and type(config) == "table" and config or {}
+end
+
+local function dashboard_width(controller, dashboard_config)
+  local ok, width = pcall(function()
+    return controller:window_width()
+  end)
+  if ok and type(width) == "number" and width > 0 then
+    return width
+  end
+  if type(dashboard_config) == "table" and type(dashboard_config.width) == "number" then
+    return dashboard_config.width
+  end
+  return controller:dashboard_config(1).width
+end
+
+local function dashboard_height(controller)
+  local ok, height = pcall(function()
+    return controller:window_height()
+  end)
+  if ok and type(height) == "number" and height > 0 then
+    return height
+  end
+  return 8
+end
+
+local function dashboard_frame(controller)
+  local total_width = math.max(1, vim.o.columns)
+  local config = dashboard_window_config(controller)
+  local width = dashboard_width(controller, config)
+  local height = dashboard_height(controller)
+  local col = type(config.col) == "number" and config.col or centered_col(total_width, width)
+  local row = type(config.row) == "number" and config.row or 0
+
+  return {
+    config = config,
+    width = width,
+    height = height,
+    col = col,
+    row = row,
+  }
+end
+
 function M.window_height(controller)
   if not controller.is_valid_win(controller.state.mission_dashboard_win) then
     return nil
@@ -42,8 +103,7 @@ end
 
 function M.objective_editor_config(_, line_count, opts)
   opts = type(opts) == "table" and opts or {}
-  local total_width = math.max(1, vim.o.columns)
-  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local total_width, total_height = editor_size()
   local max_width = available_dimension(total_width, 4)
   local max_height = available_dimension(total_height, 4)
   local width = math.min(max_width, math.min(96, math.max(58, math.floor(total_width * 0.72))))
@@ -59,15 +119,14 @@ function M.objective_editor_config(_, line_count, opts)
     footer_pos = "center",
     width = width,
     height = height,
-    col = math.max(0, math.floor((total_width - width) / 2)),
-    row = math.max(0, math.floor((total_height - height) / 2)),
+    col = centered_col(total_width, width),
+    row = centered_row(total_height, height),
     zindex = MISSION_CREATION_ZINDEX,
   }
 end
 
 function M.preview_config(_, line_count)
-  local total_width = math.max(1, vim.o.columns)
-  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local total_width, total_height = editor_size()
   local max_width = available_dimension(total_width, 4)
   local max_height = available_dimension(total_height, 4)
   local width = math.min(max_width, math.min(92, math.max(56, math.floor(total_width * 0.68))))
@@ -83,8 +142,8 @@ function M.preview_config(_, line_count)
     footer_pos = "center",
     width = width,
     height = height,
-    col = math.max(0, math.floor((total_width - width) / 2)),
-    row = math.max(0, math.floor((total_height - height) / 2)),
+    col = centered_col(total_width, width),
+    row = centered_row(total_height, height),
     focusable = false,
     zindex = MISSION_CREATION_ZINDEX,
   }
@@ -129,8 +188,7 @@ end
 
 function M.dashboard_config(controller, line_count, opts)
   opts = type(opts) == "table" and opts or {}
-  local total_width = math.max(1, vim.o.columns)
-  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local total_width, total_height = editor_size()
   local max_width = available_dimension(total_width, 4)
   local width = math.min(max_width, math.max(80, math.min(160, math.floor(total_width * 0.92))))
   local search_reserve = opts.reserve_search_input and bordered_float_outer_height(1) or 0
@@ -159,24 +217,13 @@ function M.dashboard_config(controller, line_count, opts)
     footer_pos = "center",
     width = width,
     height = height,
-    col = math.max(0, math.floor((total_width - width) / 2)),
+    col = centered_col(total_width, width),
     row = stack_top + search_reserve,
   }
 end
 
 function M.dashboard_search_config(controller)
-  local dashboard_config = {}
-  if controller.is_valid_win(controller.state.mission_dashboard_win) then
-    local ok, config = pcall(controller.get_window_config, controller.state.mission_dashboard_win)
-    dashboard_config = ok and type(config) == "table" and config or {}
-  end
-  local width_ok, window_width = pcall(function()
-    return controller:window_width()
-  end)
-  local dashboard_width = width_ok and window_width or nil
-  dashboard_width = dashboard_width or dashboard_config.width or controller:dashboard_config(1).width
-  local dashboard_col = type(dashboard_config.col) == "number" and dashboard_config.col or 0
-  local dashboard_row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
+  local frame = dashboard_frame(controller)
   local height = 1
 
   return {
@@ -185,24 +232,16 @@ function M.dashboard_search_config(controller)
     border = "rounded",
     title = " Search Codux missions: ",
     title_pos = "center",
-    width = math.max(20, dashboard_width),
+    width = math.max(20, frame.width),
     height = height,
-    col = math.max(0, dashboard_col),
-    row = math.max(0, dashboard_row - bordered_float_outer_height(height)),
+    col = math.max(0, frame.col),
+    row = math.max(0, frame.row - bordered_float_outer_height(height)),
     zindex = 60,
   }
 end
 
 function M.dashboard_command_config(controller, line_count)
-  local dashboard_config = controller.is_valid_win(controller.state.mission_dashboard_win)
-      and controller.get_window_config(controller.state.mission_dashboard_win)
-    or {}
-  local dashboard_width = controller:window_width() or controller:dashboard_config(1).width
-  local dashboard_height = controller:window_height() or 8
-  local dashboard_col = type(dashboard_config.col) == "number"
-      and dashboard_config.col
-    or math.max(0, math.floor((math.max(1, vim.o.columns) - dashboard_width) / 2))
-  local dashboard_row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
+  local frame = dashboard_frame(controller)
 
   return {
     relative = "editor",
@@ -210,10 +249,10 @@ function M.dashboard_command_config(controller, line_count)
     border = "rounded",
     title = " Commands ",
     title_pos = "center",
-    width = dashboard_width,
+    width = frame.width,
     height = math.max(1, tonumber(line_count) or 1),
-    col = math.max(0, dashboard_col),
-    row = next_bordered_float_row(dashboard_row, dashboard_height),
+    col = math.max(0, frame.col),
+    row = next_bordered_float_row(frame.row, frame.height),
     zindex = 54,
     focusable = false,
   }
@@ -222,25 +261,17 @@ end
 function M.dashboard_output_config(controller, line_count, opts)
   opts = type(opts) == "table" and opts or {}
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
-  local dashboard_config = controller.is_valid_win(controller.state.mission_dashboard_win)
-      and controller.get_window_config(controller.state.mission_dashboard_win)
-    or {}
-  local dashboard_width = controller:window_width() or controller:dashboard_config(1).width
-  local dashboard_height = controller:window_height() or 8
-  local dashboard_col = type(dashboard_config.col) == "number"
-      and dashboard_config.col
-    or math.max(0, math.floor((math.max(1, vim.o.columns) - dashboard_width) / 2))
-  local dashboard_row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
+  local frame = dashboard_frame(controller)
   local command_config = controller.is_valid_win(controller.state.mission_dashboard_command_bar_win)
       and controller.get_window_config(controller.state.mission_dashboard_command_bar_win)
     or nil
   local command_height = controller.is_valid_win(controller.state.mission_dashboard_command_bar_win)
       and controller.get_window_height(controller.state.mission_dashboard_command_bar_win)
     or nil
-  command_height = command_height or #controller:dashboard_command_lines(dashboard_width)
+  command_height = command_height or #controller:dashboard_command_lines(frame.width)
   local row = command_config and type(command_config.row) == "number" and command_height
       and next_bordered_float_row(command_config.row, command_height)
-    or next_bordered_float_row(dashboard_row, dashboard_height)
+    or next_bordered_float_row(frame.row, frame.height)
   local available_below = total_height - row - 2
   local preview_mode = opts.preview_mode or controller:dashboard_preview_mode(opts.selected_item)
   local desired_height = controller:dashboard_preview_height(
@@ -257,9 +288,9 @@ function M.dashboard_output_config(controller, line_count, opts)
     border = "rounded",
     title = " Output ",
     title_pos = "center",
-    width = dashboard_width,
+    width = frame.width,
     height = height,
-    col = math.max(0, dashboard_col),
+    col = math.max(0, frame.col),
     row = math.max(0, row),
     zindex = 55,
     focusable = false,
@@ -309,8 +340,7 @@ function M.resize_dashboard_stack(controller, line_count, opts)
 end
 
 function M.objective_preview_config(_, line_count)
-  local total_width = math.max(1, vim.o.columns)
-  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
+  local total_width, total_height = editor_size()
   local max_width = available_dimension(total_width, 4)
   local max_height = available_dimension(total_height, 4)
   local width = math.min(max_width, math.min(92, math.max(56, math.floor(total_width * 0.68))))
@@ -326,8 +356,8 @@ function M.objective_preview_config(_, line_count)
     footer_pos = "center",
     width = width,
     height = height,
-    col = math.max(0, math.floor((total_width - width) / 2)),
-    row = math.max(0, math.floor((total_height - height) / 2)),
+    col = centered_col(total_width, width),
+    row = centered_row(total_height, height),
     zindex = 80,
   }
 end

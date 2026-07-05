@@ -10,6 +10,7 @@ TEST_SPECS := \
 	tests/dashboard_search_spec.lua \
 	tests/filetypes_spec.lua \
 	tests/mission_spec.lua \
+	tests/mission_dashboard_layout_spec.lua \
 	tests/mission_dashboard_spec.lua \
 	tests/mission_dashboard_viewport_spec.lua \
 	tests/mission_control_spec.lua \
@@ -19,6 +20,7 @@ TEST_SPECS := \
 	tests/prompt_actions_spec.lua \
 	tests/workspace_create_spec.lua \
 	tests/workspace_git_spec.lua \
+	tests/workspace_instructions_spec.lua \
 	tests/workspace_lifecycle_actions_spec.lua \
 	tests/workspace_lifecycle_spec.lua \
 	tests/workspace_launch_spec.lua \
