@@ -628,43 +628,43 @@ function M:mission_mode_label(entry)
 end
 
 function M:mission_dashboard_line(mission, counts, status, dashboard_width)
-  return dashboard_render.mission_dashboard_line(self, mission, counts, status, dashboard_width)
+  return mission_dashboard.mission_line(self, mission, counts, status, dashboard_width)
 end
 
 function M:mission_role_header_line(dashboard_width)
-  return dashboard_render.mission_role_header_line(self, dashboard_width)
+  return mission_dashboard.role_header_line(self, dashboard_width)
 end
 
 function M:mission_role_table_width(dashboard_width)
-  return dashboard_render.mission_role_table_width(self, dashboard_width)
+  return mission_dashboard.role_table_width(dashboard_width)
 end
 
 function M:mission_role_column_widths(dashboard_width)
-  return dashboard_render.mission_role_column_widths(self, dashboard_width)
+  return mission_dashboard.role_column_widths(dashboard_width)
 end
 
 function M:mission_role_table_line(columns, values)
-  return dashboard_render.mission_role_table_line(self, columns, values)
+  return mission_dashboard.role_table_line(self.workspace_ui, columns, values)
 end
 
 function M:mission_role_line(entry, dashboard_width, now, dirty_by_role)
-  return dashboard_render.mission_role_line(self, entry, dashboard_width, now, dirty_by_role)
+  return mission_dashboard.role_line(self, entry, dashboard_width, now, dirty_by_role)
 end
 
 function M:dashboard_row_highlight_range(line)
-  return dashboard_render.dashboard_row_highlight_range(self, line)
+  return mission_dashboard.row_highlight_range(line)
 end
 
 function M:dashboard_command_lines(dashboard_width)
-  return dashboard_render.dashboard_command_lines(self, dashboard_width)
+  return mission_dashboard.command_lines(self, dashboard_width)
 end
 
 function M:dashboard_token_usage_line(dashboard_width)
-  return dashboard_render.dashboard_token_usage_line(self, dashboard_width)
+  return mission_dashboard.token_usage_line(self, dashboard_width)
 end
 
 function M:dashboard_min_height_for_lines(lines)
-  return dashboard_render.dashboard_min_height_for_lines(self, lines)
+  return mission_dashboard.min_height_for_lines(lines)
 end
 
 function M:refresh_dashboard_token_usage(force)
@@ -676,7 +676,7 @@ function M:missions_for_root(root)
 end
 
 function M:dashboard_lines(root, opts)
-  return dashboard_render.dashboard_lines(self, root, opts)
+  return mission_dashboard.lines(self, root, opts)
 end
 
 function M:mission_for_name(root, name)

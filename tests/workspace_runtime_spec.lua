@@ -3737,30 +3737,6 @@ end
 
 do
   with_workspace_prepare_env(function()
-    local runtime = workspace_prepare_runtime({})
-    local lua = runtime:bootstrap_lua({
-      name = "mission-builder",
-      safe_name = "mission-builder",
-      project_root = "/codux-worktrees/mission-builder",
-      mission_id = "mission:mission",
-      mission_name = "Mission",
-      mission_role = "Builder",
-      mission_objective = "Build it",
-      nvim_server = "/tmp/codux/mission-builder.sock",
-      initial_mode = "plan",
-    })
-
-    assert_contains(lua, 'mission_id="mission:mission"')
-    assert_contains(lua, 'mission_name="Mission"')
-    assert_contains(lua, 'mission_role="Builder"')
-    assert_contains(lua, 'mission_objective="Build it"')
-    assert_contains(lua, 'nvim_server="/tmp/codux/mission-builder.sock"')
-    assert_contains(lua, 'initial_mode="plan"')
-  end)
-end
-
-do
-  with_workspace_prepare_env(function()
     local written = {}
     local notifications = {}
     local state_data = workspace_state({

@@ -1,5 +1,3 @@
-local mission_dashboard = require("codux.mission_dashboard")
-
 local M = {}
 
 local function entry_key(entry)
@@ -65,7 +63,7 @@ function M.filter_missions(controller, missions, query)
 
   local scored = {}
   for _, mission in ipairs(missions) do
-    local score, match_kind, match_entry = controller:mission_filter_score(mission, query)
+    local score, match_kind, match_entry = M.mission_filter_score(controller, mission, query)
     if score then
       table.insert(scored, {
         mission = mission,
@@ -163,7 +161,7 @@ function M.role_freshness(controller, entry, now)
 end
 
 function M.mission_dirty_status_by_role(controller, root, mission, now)
-  local dirty_roles = controller:cached_mission_dirty_roles(root, mission, now)
+  local dirty_roles = M.cached_mission_dirty_roles(controller, root, mission, now)
   local dirty_by_role = {}
   for _, role in ipairs(dirty_roles) do
     local label = type(role) == "table" and (role.name or role.safe_name or role.label) or role
@@ -181,7 +179,7 @@ function M.mission_workspace_details(controller, entry, dirty_by_role, now)
     or dirty_by_role[tostring(entry.safe_name or "")]
     or dirty_by_role[tostring(entry.mission_role or "")]
     or nil
-  local branch_state = controller:cached_workspace_branch_state(entry, now)
+  local branch_state = M.cached_workspace_branch_state(controller, entry, now)
   local window_status = "not running"
   if status ~= "inactive" then
     window_status = type(entry.window_id) == "string" and entry.window_id ~= "" and "open" or "missing"
@@ -197,7 +195,7 @@ function M.mission_workspace_details(controller, entry, dirty_by_role, now)
     worktree_status = "not a worktree"
   end
 
-  local freshness = controller:role_freshness(entry, now)
+  local freshness = M.role_freshness(controller, entry, now)
   local needs_review = status == "question"
     or dirty_status == "dirty"
     or dirty_status == "unknown"
@@ -247,46 +245,6 @@ function M.mission_mode_label(_, entry)
   return "not set"
 end
 
-function M.mission_dashboard_line(controller, mission, counts, status, dashboard_width)
-  return mission_dashboard.mission_line(controller, mission, counts, status, dashboard_width)
-end
-
-function M.mission_role_header_line(controller, dashboard_width)
-  return mission_dashboard.role_header_line(controller, dashboard_width)
-end
-
-function M.mission_role_table_width(_, dashboard_width)
-  return mission_dashboard.role_table_width(dashboard_width)
-end
-
-function M.mission_role_column_widths(_, dashboard_width)
-  return mission_dashboard.role_column_widths(dashboard_width)
-end
-
-function M.mission_role_table_line(controller, columns, values)
-  return mission_dashboard.role_table_line(controller.workspace_ui, columns, values)
-end
-
-function M.mission_role_line(controller, entry, dashboard_width, now, dirty_by_role)
-  return mission_dashboard.role_line(controller, entry, dashboard_width, now, dirty_by_role)
-end
-
-function M.dashboard_row_highlight_range(_, line)
-  return mission_dashboard.row_highlight_range(line)
-end
-
-function M.dashboard_command_lines(controller, dashboard_width)
-  return mission_dashboard.command_lines(controller, dashboard_width)
-end
-
-function M.dashboard_token_usage_line(controller, dashboard_width)
-  return mission_dashboard.token_usage_line(controller, dashboard_width)
-end
-
-function M.dashboard_min_height_for_lines(_, lines)
-  return mission_dashboard.min_height_for_lines(lines)
-end
-
 function M.refresh_dashboard_token_usage(controller, force)
   local now = tonumber(controller.token_usage_now_ms()) or (os.time() * 1000)
   local refresh_ms = tonumber(controller.token_usage_refresh_ms()) or 60000
@@ -306,10 +264,6 @@ function M.missions_for_root(controller, root)
     return nil, error_message
   end
   return controller.mission.group_entries(entries)
-end
-
-function M.dashboard_lines(controller, root, opts)
-  return mission_dashboard.lines(controller, root, opts)
 end
 
 return M
