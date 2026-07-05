@@ -19,6 +19,8 @@ TEST_SPECS := \
 	tests/workspace_git_spec.lua \
 	tests/workspace_lifecycle_spec.lua \
 	tests/workspace_launch_spec.lua \
+	tests/workspace_prepare_spec.lua \
+	tests/workspace_registry_spec.lua \
 	tests/workspace_remote_spec.lua \
 	tests/workspace_runtime_spec.lua \
 	tests/workspace_store_spec.lua \
