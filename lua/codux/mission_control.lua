@@ -9,6 +9,7 @@ local dashboard_render = require("codux.mission_dashboard_render")
 local dashboard_search_mod = require("codux.dashboard_search")
 local mission_dashboard = require("codux.mission_dashboard")
 local dashboard_selection = require("codux.mission_dashboard_selection")
+local dashboard_viewport = require("codux.mission_dashboard_viewport")
 local dashboard_windows = require("codux.mission_dashboard_windows")
 local mission_objective_editor = require("codux.mission_objective_editor")
 local mission_preview = require("codux.mission_preview")
@@ -69,27 +70,8 @@ function M.new(opts)
     set_window_cursor = type(opts.set_window_cursor) == "function" and opts.set_window_cursor or function(win, cursor)
       return pcall(vim.api.nvim_win_set_cursor, win, cursor)
     end,
-    reveal_window_row = type(opts.reveal_window_row) == "function" and opts.reveal_window_row or function(win, row)
-      row = tonumber(row)
-      if type(win) ~= "number" or type(row) ~= "number" or row < 1 then
-        return false
-      end
-
-      local info = vim.fn.getwininfo(win)[1]
-      if type(info) ~= "table" then
-        return false
-      end
-      local top = tonumber(info.topline) or 1
-      local bottom = tonumber(info.botline) or top
-      if row >= top and row <= bottom then
-        return true
-      end
-
-      local height = tonumber(info.height) or math.max(1, bottom - top + 1)
-      local next_top = row < top and row or math.max(1, row - height + 1)
-      local ok = pcall(vim.fn.win_execute, win, "call winrestview({'topline': " .. tostring(next_top) .. "})")
-      return ok
-    end,
+    reveal_window_row = type(opts.reveal_window_row) == "function" and opts.reveal_window_row
+      or dashboard_viewport.reveal_window_row,
     notify = type(opts.notify) == "function" and opts.notify or noop,
     token_usage_label = type(opts.token_usage_label) == "function" and opts.token_usage_label or function()
       return ""
@@ -731,7 +713,7 @@ function M:move_mission_selection(delta)
 end
 
 function M:reveal_output_preview_row()
-  return dashboard_selection.reveal_output_preview_row(self)
+  return dashboard_viewport.reveal_output_preview_row(self)
 end
 
 function M:open_search_input(opts)

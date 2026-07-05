@@ -104,34 +104,4 @@ function M.move_mission_selection(controller, delta)
   return true
 end
 
-function M.output_preview_row(controller)
-  if not controller:output_preview_running() then
-    return nil
-  end
-
-  local entry = controller.state.mission_dashboard_output_entry
-  local key = controller:output_entry_key(entry)
-  if key == "" then
-    return nil
-  end
-
-  for row, item in pairs(controller.state.mission_dashboard_items or {}) do
-    if type(item) == "table" and item.kind == "role" and controller:output_entry_key(item.entry) == key then
-      return row
-    end
-  end
-  return nil
-end
-
-function M.reveal_output_preview_row(controller)
-  local row = M.output_preview_row(controller)
-  if not row or row ~= controller.state.mission_dashboard_selected_row then
-    return false
-  end
-  if not controller.is_valid_win(controller.state.mission_dashboard_win) then
-    return false
-  end
-  return controller.reveal_window_row(controller.state.mission_dashboard_win, row)
-end
-
 return M

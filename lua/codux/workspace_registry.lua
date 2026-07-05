@@ -10,6 +10,21 @@ end
 
 local inactive_like_status = workspace_git.inactive_like_status
 
+local function entry_key(record_root, safe_name)
+  return tostring(record_root) .. "\0" .. tostring(safe_name)
+end
+
+local function record_root(project_root, record)
+  local explicit_record_root = type(record.project_root) == "string" and record.project_root ~= ""
+  return explicit_record_root and record.project_root or project_root, explicit_record_root
+end
+
+local function sort_entries(entries)
+  table.sort(entries, function(left, right)
+    return tostring(left.name):lower() < tostring(right.name):lower()
+  end)
+end
+
 local function workspace_entry(runtime, session, record, safe_name, record_root)
   local entry_safe_name = record.safe_name or safe_name
   local window_name = record.tmux_window or record.window_name or entry_safe_name
@@ -54,10 +69,11 @@ local function workspace_entry(runtime, session, record, safe_name, record_root)
   }
 end
 
-function M.entries_for_project(runtime, root)
+local function collect_state_entries(runtime, root, include_record, opts)
+  opts = type(opts) == "table" and opts or {}
   local state_data, state_error = runtime:read_state()
   if state_error then
-    return {}, state_error
+    return {}, {}, nil, state_error
   end
 
   local current_common_dir = runtime:git_common_dir(root)
@@ -71,18 +87,18 @@ function M.entries_for_project(runtime, root)
       if type(workspaces) == "table" then
         for safe_name, record in pairs(workspaces) do
           if type(record) == "table" then
-            local explicit_record_root = type(record.project_root) == "string" and record.project_root ~= ""
-            local record_root = explicit_record_root and record.project_root or project_root
-            local include = record_root == root
-              or (
-                not explicit_record_root
-                and current_common_dir ~= nil
-                and record.workspace_kind == "worktree"
-                and record.git_common_dir == current_common_dir
-              )
-            if include then
-              seen[tostring(record_root) .. "\0" .. tostring(record.safe_name or safe_name)] = true
-              table.insert(entries, workspace_entry(runtime, session, record, safe_name, record_root))
+            local resolved_root, explicit_record_root = record_root(project_root, record)
+            local entry_safe_name = record.safe_name or safe_name
+            local key = entry_key(resolved_root, entry_safe_name)
+            local include = include_record(record, {
+              root = root,
+              record_root = resolved_root,
+              explicit_record_root = explicit_record_root,
+              current_common_dir = current_common_dir,
+            })
+            if include and (not opts.dedupe or not seen[key]) then
+              seen[key] = true
+              table.insert(entries, workspace_entry(runtime, session, record, safe_name, resolved_root))
             end
           end
         end
@@ -90,10 +106,42 @@ function M.entries_for_project(runtime, root)
     end
   end
 
+  return entries, seen, session, nil
+end
+
+local function include_workspace_entry(record, context)
+  return context.record_root == context.root
+    or (
+      not context.explicit_record_root
+      and context.current_common_dir ~= nil
+      and record.workspace_kind == "worktree"
+      and record.git_common_dir == context.current_common_dir
+    )
+end
+
+local function include_mission_entry(record, context)
+  return type(record.mission_id) == "string"
+    and record.mission_id ~= ""
+    and (
+      context.record_root == context.root
+      or (
+        context.current_common_dir ~= nil
+        and record.workspace_kind == "worktree"
+        and record.git_common_dir == context.current_common_dir
+      )
+    )
+end
+
+function M.entries_for_project(runtime, root)
+  local entries, seen, session, state_error = collect_state_entries(runtime, root, include_workspace_entry)
+  if state_error then
+    return {}, state_error
+  end
+
   for safe_name, record in pairs(runtime:instruction_file_records(root)) do
     if type(record) == "table" then
       local entry_safe_name = record.safe_name or safe_name
-      if not seen[tostring(root) .. "\0" .. tostring(entry_safe_name)] then
+      if not seen[entry_key(root, entry_safe_name)] then
         local window_name = runtime.workspace_window_name(entry_safe_name)
         local window_id = session and runtime:tmux_window_id(session, window_name) or nil
         local status = runtime:dashboard_workspace_status({ status = "inactive", codex_status = "idle" }, window_id)
@@ -122,52 +170,18 @@ function M.entries_for_project(runtime, root)
     end
   end
 
-  table.sort(entries, function(left, right)
-    return tostring(left.name):lower() < tostring(right.name):lower()
-  end)
+  sort_entries(entries)
 
   return entries, nil
 end
 
 function M.mission_entries_for_project(runtime, root)
-  local state_data, state_error = runtime:read_state()
+  local entries, _, _, state_error = collect_state_entries(runtime, root, include_mission_entry, { dedupe = true })
   if state_error then
     return {}, state_error
   end
 
-  local current_common_dir = runtime:git_common_dir(root)
-  local session = runtime:current_tmux_session()
-  local entries = {}
-  local seen = {}
-
-  if type(state_data.projects) == "table" then
-    for project_root, project in pairs(state_data.projects) do
-      local workspaces = type(project) == "table" and project.workspaces or nil
-      if type(workspaces) == "table" then
-        for safe_name, record in pairs(workspaces) do
-          if type(record) == "table" and type(record.mission_id) == "string" and record.mission_id ~= "" then
-            local record_root = type(record.project_root) == "string" and record.project_root ~= "" and record.project_root
-              or project_root
-            local include = record_root == root
-              or (
-                current_common_dir ~= nil
-                and record.workspace_kind == "worktree"
-                and record.git_common_dir == current_common_dir
-              )
-            local key = tostring(record_root) .. "\0" .. tostring(record.safe_name or safe_name)
-            if include and not seen[key] then
-              seen[key] = true
-              table.insert(entries, workspace_entry(runtime, session, record, safe_name, record_root))
-            end
-          end
-        end
-      end
-    end
-  end
-
-  table.sort(entries, function(left, right)
-    return tostring(left.name):lower() < tostring(right.name):lower()
-  end)
+  sort_entries(entries)
 
   return entries, nil
 end

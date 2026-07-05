@@ -11,6 +11,7 @@ TEST_SPECS := \
 	tests/filetypes_spec.lua \
 	tests/mission_spec.lua \
 	tests/mission_dashboard_spec.lua \
+	tests/mission_dashboard_viewport_spec.lua \
 	tests/mission_control_spec.lua \
 	tests/mission_lifecycle_spec.lua \
 	tests/mission_output_panel_spec.lua \
