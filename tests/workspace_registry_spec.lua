@@ -131,13 +131,10 @@ do
       projects = {
         ["/repo"] = {
           workspaces = {
-            local_role = {
+            local_role = fixtures.project_owned_worktree_record({
               name = "Local Role",
               safe_name = "local_role",
-              project_root = "/repo",
-              workspace_kind = "worktree",
-              git_common_dir = "/repo/.git",
-            },
+            }),
           },
         },
         ["/other"] = {

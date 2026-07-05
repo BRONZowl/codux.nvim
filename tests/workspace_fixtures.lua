@@ -36,6 +36,21 @@ function M.review_workspace_record(fields)
   return record
 end
 
+function M.project_owned_worktree_record(fields)
+  local values = {
+    project_root = "/repo",
+    workspace_kind = "worktree",
+    git_common_dir = "/repo/.git",
+    worktree_path = "/codux-worktrees/review",
+    worktree_branch = "dev/review",
+    worktree_base = "main",
+  }
+  for key, value in pairs(fields or {}) do
+    values[key] = value
+  end
+  return M.review_workspace_record(values)
+end
+
 function M.workspace_state(workspaces, fields)
   local project = {
     workspaces = workspaces or {},

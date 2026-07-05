@@ -2,10 +2,12 @@ local M = {}
 M.__index = M
 
 local command_util = require("codux.command")
+local terminal_job = require("codux.terminal_job")
 local terminal_mode = require("codux.terminal_mode")
 local terminal_prompt = require("codux.terminal_prompt")
 local terminal_question = require("codux.terminal_question")
 local terminal_startup = require("codux.terminal_startup")
+local terminal_window = require("codux.terminal_window")
 local ui = require("codux.ui")
 local working_indicator = require("codux.working_indicator")
 
@@ -30,14 +32,6 @@ local function now_ms()
 end
 
 local function workspace_mode_for(mode)
-  if mode == "execute" or mode == "plan" then
-    return mode
-  end
-
-  return nil
-end
-
-local function normalize_initial_mode(mode)
   if mode == "execute" or mode == "plan" then
     return mode
   end
@@ -259,84 +253,23 @@ function M:terminal_prompt_key(input)
 end
 
 function M:focus_window()
-  if not self:valid_win() then
-    return false
-  end
-
-  local focus_ok = pcall(vim.api.nvim_set_current_win, self.state.win)
-  if not focus_ok then
-    self.state.win = nil
-    return false
-  end
-  if self:terminal_running() then
-    self:focus_terminal_prompt()
-  end
-
-  return true
+  return terminal_window.focus_window(self)
 end
 
 function M:dimension(value, total, fallback)
-  if type(value) == "number" then
-    if value > 0 and value < 1 then
-      return math.max(1, math.floor(total * value))
-    end
-    if value >= 1 then
-      return math.max(1, math.floor(value))
-    end
-  end
-
-  return math.max(1, math.floor(total * fallback))
+  return terminal_window.dimension(self, value, total, fallback)
 end
 
 function M:popup_config()
-  local popup = self:config().popup or {}
-  local total_width = vim.o.columns
-  local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
-  local has_border = popup.border ~= nil and popup.border ~= "none"
-  local available_width = math.max(1, total_width - (has_border and 2 or 0))
-  local available_height = math.max(1, total_height - (has_border and 2 or 0))
-  local width = math.min(available_width, self:dimension(popup.width, available_width, 0.85))
-  local height = math.min(available_height, self:dimension(popup.height, available_height, 0.85))
-  local border_size = has_border and 2 or 0
-
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = popup.border or "rounded",
-    width = width,
-    height = height,
-    col = math.max(0, math.floor((total_width - width - border_size) / 2)),
-    row = math.max(0, math.floor((total_height - height - border_size) / 2) - 1),
-  }
+  return terminal_window.popup_config(self)
 end
 
 function M:popup_focus_lock_enabled()
-  local popup = self:config().popup or {}
-  return popup.lock_focus ~= false
+  return terminal_window.popup_focus_lock_enabled(self)
 end
 
 function M:schedule_popup_focus_lock()
-  if self.state.closing_popup or self.state.focus_lock_pending then
-    return
-  end
-  if not self:popup_focus_lock_enabled() or not self:valid_win() then
-    return
-  end
-
-  self.state.focus_lock_pending = true
-  vim.schedule(function()
-    self.state.focus_lock_pending = false
-    if self.state.closing_popup or not self:popup_focus_lock_enabled() or not self:valid_win() then
-      return
-    end
-
-    local current_ok, current_win = pcall(vim.api.nvim_get_current_win)
-    if current_ok and current_win == self.state.win then
-      return
-    end
-
-    self:focus_window()
-  end)
+  return terminal_window.schedule_popup_focus_lock(self)
 end
 
 function M:stop_working_timer()
@@ -590,463 +523,51 @@ function M:interrupt_codex_session()
 end
 
 function M:ensure_buffer()
-  if self:valid_buf() then
-    return true
-  end
-
-  self:clear_stale_buffer()
-
-  local bufnr = self.ui.create_scratch_buffer({
-    bufhidden = "hide",
-    filetype = "codux",
-  })
-  if not bufnr then
-    self.state.buf = nil
-    self.notify("Failed to create Codux terminal buffer", vim.log.levels.ERROR)
-    return false
-  end
-
-  self.state.buf = bufnr
-  pcall(vim.api.nvim_buf_set_name, bufnr, "codux://codex")
-  self.ui.set_keymap(bufnr, { "n", "t" }, "<C-q>", function()
-    return self:close()
-  end, "Hide Codux Popup")
-  self.ui.set_keymap(bufnr, "t", "<CR>", function()
-    return self:submit_terminal_prompt()
-  end, "Submit Codux Prompt", {
-    nowait = true,
-  })
-  self.ui.set_keymap(bufnr, { "n", "t" }, "<C-c>", function()
-    return self:interrupt_terminal_prompt()
-  end, "Interrupt Codex", {
-    nowait = true,
-  })
-  self.update_terminal_mode_mapping()
-  for _, key in ipairs(self.ui.printable_prompt_keys()) do
-    self.ui.set_keymap(bufnr, "t", key[1], self:terminal_input_key(key[2]), "Type in Codux Prompt", {
-      nowait = true,
-    })
-  end
-  self.ui.set_keymap(bufnr, "t", "<BS>", self:terminal_input_key("\b", { delete_previous = true }), "Delete Codux Prompt Character", {
-    nowait = true,
-  })
-  self.ui.set_keymap(
-    bufnr,
-    "t",
-    "<C-h>",
-    self:terminal_input_key("\b", { delete_previous = true }),
-    "Delete Codux Prompt Character",
-    {
-      nowait = true,
-    }
-  )
-  self.ui.set_keymap(bufnr, { "n", "t" }, "<S-Tab>", function()
-    return self:send_shift_tab_mode_toggle()
-  end, "Switch Codex Mode", {
-    nowait = true,
-  })
-  self.ui.set_keymap(bufnr, "n", "<CR>", function()
-    return self:focus_terminal_prompt()
-  end, "Return to Codux Prompt")
-  for _, key in ipairs(self.ui.printable_prompt_keys()) do
-    local lhs = key[1]
-    local input = key[2]
-    self.ui.set_keymap(bufnr, "n", lhs, self:terminal_prompt_key(input), "Type in Codux Prompt")
-  end
-  self.ui.set_keymap(bufnr, "n", "q", function()
-    return self:close()
-  end, "Hide Codux Popup")
-
-  pcall(vim.api.nvim_create_autocmd, { "BufUnload", "BufDelete", "BufWipeout" }, {
-    group = self.augroup,
-    buffer = bufnr,
-    callback = function()
-      if self.state.buf == bufnr then
-        self.state.buf = nil
-        self.state.job_id = nil
-        self.state.last_prompt_line = nil
-        self:reset_terminal_prompt_input()
-        self:set_codex_working(false, { force_idle = true })
-        self:set_mode("not running")
-      end
-    end,
-  })
-
-  self:attach_terminal_activity(bufnr)
-
-  return true
+  return terminal_window.ensure_buffer(self)
 end
 
 function M:open_window(focus)
-  if not self:ensure_buffer() then
-    return false
-  end
-
-  if self:valid_win() then
-    local config_ok = pcall(vim.api.nvim_win_set_config, self.state.win, self:popup_config())
-    if not config_ok then
-      self.state.win = nil
-      return self:open_window(focus)
-    end
-    self:close_working_indicator()
-    pcall(vim.api.nvim_set_option_value, "wrap", true, { win = self.state.win })
-    if focus then
-      self:focus_window()
-    end
-    return true
-  end
-
-  self.state.win = nil
-
-  local win_ok, win = pcall(vim.api.nvim_open_win, self.state.buf, focus == true, self:popup_config())
-  if not win_ok then
-    self.state.buf = nil
-    if not self:ensure_buffer() then
-      return false
-    end
-    win_ok, win = pcall(vim.api.nvim_open_win, self.state.buf, focus == true, self:popup_config())
-  end
-  if not win_ok then
-    self.notify("Failed to open Codux popup", vim.log.levels.ERROR)
-    return false
-  end
-
-  self.state.win = win
-  self.state.closing_popup = false
-  self:close_working_indicator()
-  pcall(vim.api.nvim_set_option_value, "number", false, { win = self.state.win })
-  pcall(vim.api.nvim_set_option_value, "relativenumber", false, { win = self.state.win })
-  pcall(vim.api.nvim_set_option_value, "signcolumn", "no", { win = self.state.win })
-  pcall(vim.api.nvim_set_option_value, "winfixbuf", true, { win = self.state.win })
-  pcall(vim.api.nvim_set_option_value, "wrap", true, { win = self.state.win })
-
-  local win_id = self.state.win
-  if self.state.focus_lock_autocmd then
-    pcall(vim.api.nvim_del_autocmd, self.state.focus_lock_autocmd)
-    self.state.focus_lock_autocmd = nil
-  end
-  vim.api.nvim_create_autocmd("WinClosed", {
-    group = self.augroup,
-    pattern = tostring(win_id),
-    once = true,
-    callback = function()
-      if self.state.win == win_id then
-        self.state.win = nil
-        if self.state.focus_lock_autocmd then
-          pcall(vim.api.nvim_del_autocmd, self.state.focus_lock_autocmd)
-          self.state.focus_lock_autocmd = nil
-        end
-        self:update_working_indicator()
-      end
-    end,
-  })
-  self.state.focus_lock_autocmd = vim.api.nvim_create_autocmd("WinLeave", {
-    group = self.augroup,
-    callback = function()
-      if self.state.win == win_id then
-        self:schedule_popup_focus_lock()
-      end
-    end,
-  })
-
-  vim.api.nvim_clear_autocmds({ group = self.augroup, event = "VimResized" })
-  vim.api.nvim_create_autocmd("VimResized", {
-    group = self.augroup,
-    callback = function()
-      if self:valid_win() then
-        pcall(vim.api.nvim_win_set_config, self.state.win, self:popup_config())
-      end
-      self:update_working_indicator()
-    end,
-  })
-
-  if focus then
-    self:focus_window()
-  end
-
-  return true
+  return terminal_window.open_window(self, focus)
 end
 
 function M:start_terminal(focus, initial_prompt, command, workspace, permission_profile, opts)
-  opts = opts or {}
-  local hidden = opts.hidden == true
-  local initial_mode = normalize_initial_mode(opts.initial_mode) or normalize_initial_mode(self:config().default_initial_mode)
-  local has_initial_prompt = type(initial_prompt) == "string" and initial_prompt ~= ""
-  local apply_initial_mode = initial_mode == "plan"
-  local prompt_after_mode = apply_initial_mode and has_initial_prompt
-
-  if self:terminal_running() then
-    if focus and not hidden then
-      self:focus_window()
-    end
-    return true
-  end
-
-  command = command or self:config().codex_cmd
-
-  local error_message = self.command_util.error(command)
-  if error_message then
-    self.notify(error_message, vim.log.levels.ERROR)
-    return false
-  end
-
-  local executable = self.command_util.executable(command)
-  if type(executable) == "string" and executable == "codex" and vim.fn.executable(executable) ~= 1 then
-    self.notify("Codex CLI not found on PATH", vim.log.levels.WARN)
-  end
-
-  local previous_win = vim.api.nvim_get_current_win()
-  self:invalidate_terminal_prompt_tracking()
-  if hidden then
-    if not self:ensure_buffer() then
-      return false
-    end
-  else
-    if not self:open_window(true) then
-      return false
-    end
-
-    if not self:valid_win() then
-      self.notify("Codux popup is not attached to a valid buffer", vim.log.levels.ERROR)
-      return false
-    end
-
-    local current_win_ok, current_win = pcall(vim.api.nvim_get_current_win)
-    if not current_win_ok or current_win ~= self.state.win then
-      local set_ok = pcall(vim.api.nvim_set_current_win, self.state.win)
-      if not set_ok then
-        self.state.win = nil
-        return false
-      end
-    end
-
-    if window_buffer(self.state.win) ~= self.state.buf then
-      self.state.win = nil
-      return self:start_terminal(focus, initial_prompt, command, workspace, permission_profile, opts)
-    end
-  end
-
-  local job_id
-  local session_capture_mtime = os.time() - 2
-  local command_prompt = initial_prompt
-  if prompt_after_mode then
-    command_prompt = nil
-  end
-  local term_command = self.command_util.with_prompt(command, command_prompt)
-  local term_options = {
-    on_exit = function(_, code)
-      local expected_exit = self.state.exiting_jobs[job_id] == true
-      local pending_delete_buffer = self.state.pending_delete_buffers[job_id]
-      self.state.exiting_jobs[job_id] = nil
-      self.state.pending_delete_buffers[job_id] = nil
-      if self.state.job_id == job_id then
-        self.state.job_id = nil
-        self.state.permission_profile = "default"
-        self.sync_workspace_activity("idle")
-        self.state.last_prompt_line = nil
-        self:reset_terminal_prompt_input()
-        self.stop_token_monitor_timer()
-        self:set_codex_working(false, { force_idle = true })
-        self:set_mode("not running")
-        self.reset_workspace_runtime()
-      end
-      if not expected_exit and code ~= 0 then
-        self.notify("Codex exited with code " .. tostring(code), vim.log.levels.WARN)
-      end
-      if pending_delete_buffer ~= nil then
-        self:delete_buffer_deferred(pending_delete_buffer)
-      end
-    end,
-  }
-
-  local term_ok
-  if hidden then
-    term_ok, job_id = pcall(vim.api.nvim_buf_call, self.state.buf, function()
-      return vim.fn.termopen(term_command, term_options)
-    end)
-  else
-    term_ok, job_id = pcall(vim.fn.termopen, term_command, term_options)
-  end
-
-  if not term_ok or type(job_id) ~= "number" or job_id <= 0 then
-    self.state.job_id = nil
-    self.notify("Failed to start Codex", vim.log.levels.ERROR)
-    if is_valid_win(previous_win) then
-      pcall(vim.api.nvim_set_current_win, previous_win)
-    end
-    return false
-  end
-
-  self.state.job_id = job_id
-  self.state.last_prompt_line = nil
-  self:invalidate_terminal_prompt_tracking()
-  self.state.permission_profile = permission_profile or "default"
-  self.state.last_permission_profile = self.state.permission_profile
-  if workspace ~= nil then
-    self.state.workspace = workspace
-  end
-  if self:valid_win() then
-    pcall(vim.api.nvim_set_option_value, "wrap", true, { win = self.state.win })
-  end
-  self:set_mode("execute")
-  self.start_token_monitor_timer()
-  self:set_codex_working(has_initial_prompt and not prompt_after_mode)
-  if apply_initial_mode then
-    self:schedule_startup_plan_sequence(initial_prompt, prompt_after_mode, nil, {
-      suppress_warning = opts.suppress_startup_plan_warning == true,
-    })
-  end
-  if opts.capture_workspace_session == true and workspace ~= nil then
-    self.capture_workspace_session(workspace, session_capture_mtime)
-  end
-
-  if hidden then
-    if is_valid_win(previous_win) then
-      pcall(vim.api.nvim_set_current_win, previous_win)
-    end
-  elseif focus then
-    pcall(vim.cmd, "startinsert")
-  elseif is_valid_win(previous_win) then
-    pcall(vim.api.nvim_set_current_win, previous_win)
-  end
-
-  return true
+  return terminal_job.start(self, focus, initial_prompt, command, workspace, permission_profile, opts)
 end
 
 function M:ensure_codex(focus, initial_prompt)
-  if self:terminal_running() then
-    return self:open_window(focus)
-  end
-
-  if not self:config().auto_open then
-    self.notify("Codex popup is not open", vim.log.levels.WARN)
-    return false
-  end
-
-  return self:start_terminal(focus, initial_prompt, nil, nil, "default")
+  return terminal_job.ensure_codex(self, focus, initial_prompt)
 end
 
 function M:open(opts)
-  opts = opts or {}
-  local focus = opts.focus
-  if focus == nil then
-    focus = true
-  end
-
-  if not self:valid_win() then
-    if not self:open_window(focus) then
-      return false
-    end
-  elseif focus then
-    self:focus_window()
-  end
-
-  return self:start_terminal(focus, opts.initial_prompt, nil, nil, "default", {
-    initial_mode = opts.initial_mode,
-  })
+  return terminal_job.open(self, opts)
 end
 
 function M:restart_with_command(command, focus, permission_profile, initial_prompt, opts)
-  opts = type(opts) == "table" and opts or {}
-  self:exit()
-  return self:start_terminal(focus ~= false, initial_prompt, command, nil, permission_profile, {
-    initial_mode = opts.initial_mode,
-  })
+  return terminal_job.restart_with_command(self, command, focus, permission_profile, initial_prompt, opts)
 end
 
 function M:restart_hidden_with_command(command, permission_profile, initial_prompt)
-  self:exit()
-  return self:start_terminal(false, initial_prompt, command, nil, permission_profile, { hidden = true })
+  return terminal_job.restart_hidden_with_command(self, command, permission_profile, initial_prompt)
 end
 
 function M:start_hidden_with_command(command, permission_profile, initial_prompt)
-  return self:start_terminal(false, initial_prompt, command, nil, permission_profile, { hidden = true })
+  return terminal_job.start_hidden_with_command(self, command, permission_profile, initial_prompt)
 end
 
 function M:close()
-  if self:valid_win() then
-    self.state.closing_popup = true
-    self.ui.close_window(self.state.win)
-    self.state.win = nil
-    self.state.closing_popup = false
-    self:update_working_indicator()
-    self.refresh_which_key()
-    return true
-  end
-
-  return false
+  return terminal_window.close(self)
 end
 
 function M:toggle()
-  if self:valid_win() then
-    return self:close()
-  end
-
-  return self:open({ focus = true })
+  return terminal_job.toggle(self)
 end
 
 function M:exit()
-  local job_id = self.state.job_id
-  local bufnr = self.state.buf
-  local running = self:terminal_running()
-
-  if running and job_id ~= nil then
-    self.state.exiting_jobs[job_id] = true
-    if is_valid_buf(bufnr) then
-      self.state.pending_delete_buffers[job_id] = bufnr
-    end
-    pcall(vim.fn.jobstop, job_id)
-  end
-  self.state.job_id = nil
-  self.state.permission_profile = "default"
-  self.sync_workspace_activity("idle")
-  self.state.last_prompt_line = nil
-  self:reset_terminal_prompt_input()
-  self.stop_token_monitor_timer()
-  self:set_codex_working(false, { force_idle = true })
-  self:set_mode("not running")
-  self.reset_workspace_runtime()
-
-  if self:valid_win() then
-    self.ui.close_window(self.state.win)
-  end
-  self.state.win = nil
-
-  self.state.buf = nil
-  if not running and is_valid_buf(bufnr) then
-    self:delete_buffer_deferred(bufnr)
-  end
-  self:set_codex_working(false, { force_idle = true })
-
-  return true
+  return terminal_job.exit(self)
 end
 
 function M:send_to_codex(message)
-  local running = self:terminal_running()
-  if not self:ensure_codex(self:config().auto_focus, running and nil or message) then
-    return false
-  end
-
-  if not running then
-    return true
-  end
-
-  if not self:terminal_running() then
-    self.notify("Codex terminal is not running", vim.log.levels.WARN)
-    return false
-  end
-
-  local paste = "\27[200~" .. message .. "\27[201~\r"
-  local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, paste)
-  if not send_ok or sent == 0 then
-    self.notify("Failed to send prompt to Codex", vim.log.levels.ERROR)
-    return false
-  end
-
-  self:mark_terminal_prompt_submission()
-  self:invalidate_terminal_prompt_tracking()
-  self:set_codex_working(true)
-  return true
+  return terminal_job.send_to_codex(self, message)
 end
 
 function M:select_codex_question_option(option, with_note)

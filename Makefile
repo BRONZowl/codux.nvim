@@ -30,8 +30,10 @@ TEST_SPECS := \
 	tests/workspace_store_spec.lua \
 	tests/workspace_sync_spec.lua \
 	tests/workspace_manager_spec.lua \
+	tests/workspace_manager_selection_spec.lua \
 	tests/workspace_ui_spec.lua \
 	tests/terminal_spec.lua \
+	tests/terminal_window_spec.lua \
 	tests/text_spec.lua \
 	tests/ui_spec.lua \
 	tests/token_monitor_spec.lua

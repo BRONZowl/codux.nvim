@@ -1,0 +1,194 @@
+local M = {}
+
+function M.selected_or_notify(controller)
+  local item = controller:selected_item()
+  if not item then
+    controller.notify("No Codux workspace selected", vim.log.levels.WARN)
+    return nil
+  end
+  return item
+end
+
+function M.close_action_palette(controller)
+  return controller:action_palette_controller():close()
+end
+
+function M.action_palette_width(controller)
+  local dashboard_width = controller:window_width() or 58
+  return math.min(math.max(32, dashboard_width - 8), 48)
+end
+
+function M.action_palette_config(controller, item, item_count)
+  local dashboard_config = controller.is_valid_win(controller.state.workspace_manager_win)
+      and vim.api.nvim_win_get_config(controller.state.workspace_manager_win)
+    or {}
+  local dashboard_width = controller:window_width() or 58
+  local dashboard_height = controller:window_height() or math.max(1, item_count or 1)
+  local width = controller:action_palette_width()
+  local height = math.max(1, item_count or 1)
+  local col = type(dashboard_config.col) == "number" and dashboard_config.col or math.floor((vim.o.columns - dashboard_width) / 2)
+  local row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
+
+  return {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = " Codux actions: "
+      .. controller.workspace_ui.truncate_display_tail(item and item.name or "workspace", width - 16)
+      .. " ",
+    title_pos = "center",
+    width = width,
+    height = height,
+    col = math.max(0, col + math.floor((dashboard_width - width) / 2)),
+    row = math.max(0, row + math.floor((dashboard_height - height) / 2)),
+    zindex = 70,
+  }
+end
+
+function M.render_action_palette(controller)
+  return controller:action_palette_controller():render()
+end
+
+function M.run_action(controller, action, item)
+  item = item or controller.state.workspace_manager_action_workspace or controller:selected_or_notify()
+  if not item then
+    return false
+  end
+
+  if action == "rename" then
+    controller:close_action_palette()
+    return controller:rename_selected_workspace(item)
+  end
+  if action == "edit_instructions" then
+    controller:close_action_palette()
+    return controller.edit_saved_workspace_instruction(item)
+  end
+  if action == "close_window" then
+    controller:close_action_palette()
+    return controller.close_saved_workspace_window(item)
+  end
+  if action == "close_all_windows" then
+    controller:close_action_palette()
+    return controller:close_all_workspace_windows()
+  end
+  if action == "delete" then
+    controller:close_action_palette()
+    return controller:delete_selected_workspace(item)
+  end
+  return false
+end
+
+function M.run_highlighted_action(controller)
+  return controller:action_palette_controller():run_highlighted()
+end
+
+function M.move_action_cursor(controller, delta)
+  return controller:action_palette_controller():move_cursor(delta)
+end
+
+function M.open_action_palette(controller)
+  local item = controller:selected_or_notify()
+  if not item then
+    return false
+  end
+
+  return controller:action_palette_controller():open(item)
+end
+
+function M.open_selected_workspace(controller, item)
+  item = item or controller:selected_or_notify()
+  if not item then
+    return false
+  end
+  local root = item.project_root or controller.state.workspace_manager_project_root
+  controller:close()
+  return controller.open_saved_workspace(item.name, root)
+end
+
+function M.rename_selected_workspace(controller, item)
+  item = item or controller:selected_or_notify()
+  if not item then
+    return false
+  end
+  controller.single_line_prompt({ prompt = "Rename Codux workspace: ", default = item.name }, function(input)
+    local new_name = controller.trim(input)
+    if new_name == "" then
+      return
+    end
+    controller.rename_saved_workspace(item, new_name)
+  end)
+end
+
+function M.delete_selected_workspace(controller, item)
+  item = item or controller:selected_or_notify()
+  if not item then
+    return false
+  end
+  if controller.workspace_ui.confirm_delete_workspace(item) then
+    return controller.delete_saved_workspace(item)
+  end
+  return false
+end
+
+function M.close_selected_workspace_window(controller, item)
+  item = item or controller:selected_or_notify()
+  if not item then
+    return false
+  end
+  return controller.close_saved_workspace_window(item)
+end
+
+function M.close_all_workspace_windows(controller)
+  local root = controller.state.workspace_manager_project_root or controller.project_root()
+  local choice = vim.fn.confirm("Close all Codux workspaces for this project?", "&Yes\n&No", 2)
+  if choice ~= 1 then
+    return false
+  end
+  return controller.close_all_saved_workspace_windows(root)
+end
+
+function M.open_codux_menu(controller)
+  controller:close()
+  vim.schedule(function()
+    local leader = tostring(vim.g.mapleader or "\\")
+    local keys = vim.api.nvim_replace_termcodes(leader .. "z", true, false, true)
+    vim.api.nvim_feedkeys(keys, "m", false)
+  end)
+end
+
+function M.bind_commands(controller, target_bufnr)
+  controller.bind_close_keys(target_bufnr, function()
+    return controller:close()
+  end, "Close Codux Workspaces", "n", { escape = true, q = true })
+  controller.set_buffer_keymap(target_bufnr, "n", "<leader>z", function()
+    return controller:open_codux_menu()
+  end, "Open Codux Menu", {
+    nowait = true,
+  })
+  controller.set_buffer_keymap(target_bufnr, "n", "<Tab>", function()
+    return controller:toggle_search_list_focus()
+  end, "Search/List Codux Workspaces", {
+    nowait = true,
+  })
+  controller.set_buffer_keymap(target_bufnr, "n", "m", function()
+    return controller:open_action_palette()
+  end, "Open Codux Workspace Menu")
+  controller.set_buffer_keymap(target_bufnr, "n", "h", function()
+    return controller.doctor()
+  end, "Run Codux Doctor")
+  controller.set_buffer_keymap(target_bufnr, "n", "j", function()
+    return controller:move_workspace_selection(1)
+  end, "Next Codux Workspace", {
+    nowait = true,
+  })
+  controller.set_buffer_keymap(target_bufnr, "n", "k", function()
+    return controller:move_workspace_selection(-1)
+  end, "Previous Codux Workspace", {
+    nowait = true,
+  })
+  controller.set_buffer_keymap(target_bufnr, "n", "<CR>", function()
+    return controller:open_selected_workspace()
+  end, "Open Codux Workspace")
+end
+
+return M
