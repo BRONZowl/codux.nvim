@@ -1,5 +1,19 @@
 # Release Notes
 
+## v0.8.1
+
+Mission Control polish and internal cleanup.
+
+codux.nvim v0.8.1 tightens Mission Control interactions after the v0.8.0 release, with focused fixes for dashboard creation, prompt handling, output preview focus, and workspace recency state.
+
+- Fixed `<leader>zM` / mission dashboard startup so the create-mission prompt is only shown when there are no existing missions to open.
+- Made mission discovery include role workspaces stored under their Git worktree roots, so the mission dashboard sees mission roles created outside the base checkout state bucket.
+- Kept the mission dashboard output preview aligned with the active workspace highlight while preserving the existing dashboard selection and scrolling behavior.
+- Guarded single-line prompt popups so leader mappings do not run while the user is typing prompt input.
+- Preserved workspace recency metadata when workspace state is refreshed, keeping dashboard ordering stable across runtime updates.
+- Aligned the mission-create confirmation controls with the workspace-create confirmation flow, including the edit-mission command label.
+- Split large Mission Control, workspace runtime, terminal, compatibility, and store modules into focused helpers with expanded regression coverage.
+
 ## v0.8.0
 
 Mission Control release.
