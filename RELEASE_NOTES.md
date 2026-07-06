@@ -1,5 +1,17 @@
 # Release Notes
 
+## v0.8.2
+
+Mission dashboard stale-residue cleanup.
+
+codux.nvim v0.8.2 fixes Mission Control dashboard behavior when deleted missions leave empty worktree residue behind, and tightens cleanup reporting around those paths.
+
+- Fixed the mission dashboard empty state so stale Mission Control residue opens a cleanup-capable dashboard instead of immediately prompting to create a new mission.
+- Added conservative residue detection for empty workspace-state buckets, empty directory shells under the configured worktree directory, and orphaned Git worktrees.
+- Added dashboard cleanup for empty residue while preserving non-empty directories and orphaned Git worktrees.
+- Hardened mission/workspace delete and rollback cleanup so failed Git worktree or branch cleanup is reported instead of silently leaving confusing residue.
+- Expanded regression coverage for residue detection, dashboard empty states, mission lifecycle cleanup, and rollback failure handling.
+
 ## v0.8.1
 
 Mission Control polish and internal cleanup.
