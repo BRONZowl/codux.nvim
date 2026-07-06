@@ -17,7 +17,10 @@ TEST_SPECS := \
 	tests/mission_dashboard_windows_spec.lua \
 	tests/mission_dashboard_actions_spec.lua \
 	tests/mission_dashboard_workspace_actions_spec.lua \
-	tests/mission_control_spec.lua \
+	tests/mission_control_dashboard_lines_spec.lua \
+	tests/mission_control_dashboard_windows_spec.lua \
+	tests/mission_control_preview_actions_spec.lua \
+	tests/mission_control_resize_setup_spec.lua \
 	tests/mission_lifecycle_spec.lua \
 	tests/mission_output_buffer_spec.lua \
 	tests/mission_output_preview_spec.lua \

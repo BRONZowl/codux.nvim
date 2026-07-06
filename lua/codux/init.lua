@@ -6,6 +6,7 @@ local compat_mod = require("codux.compat")
 local config_defaults = require("codux.config_defaults")
 local context_mod = require("codux.context")
 local health_mod = require("codux.health")
+local json = require("codux.json")
 local keymaps_mod = require("codux.keymaps")
 local mission_mod = require("codux.mission")
 local mission_setup_mod = require("codux.mission_setup")
@@ -13,7 +14,7 @@ local prompt_actions_setup_mod = require("codux.prompt_actions_setup")
 local state_mod = require("codux.state")
 local text_util = require("codux.text")
 local terminal_mod = require("codux.terminal")
-local token_monitor_mod = require("codux.token_monitor")
+local token_monitor_setup_mod = require("codux.token_monitor_setup")
 local ui = require("codux.ui")
 local which_key_setup_mod = require("codux.which_key_setup")
 local workspace_create_mod = require("codux.workspace_create")
@@ -33,7 +34,6 @@ local refresh_which_key_header
 local refresh_token_usage
 local start_token_monitor_timer
 local stop_token_monitor_timer
-local token_monitor
 local terminal
 local context_util
 local which_key_controller
@@ -236,30 +236,7 @@ compat_mod.install_terminal(M._v5, {
   command_util = command_util,
 })
 
-local function json_encode(value)
-  if vim.json and type(vim.json.encode) == "function" then
-    return vim.json.encode(value)
-  end
-
-  return vim.fn.json_encode(value)
-end
-
-local function json_decode(value)
-  local ok, decoded
-  if vim.json and type(vim.json.decode) == "function" then
-    ok, decoded = pcall(vim.json.decode, value)
-  else
-    ok, decoded = pcall(vim.fn.json_decode, value)
-  end
-
-  if ok then
-    return decoded
-  end
-
-  return nil
-end
-
-token_monitor = token_monitor_mod.new({
+local token_monitor_setup = token_monitor_setup_mod.new({
   get_config = function()
     return config
   end,
@@ -272,8 +249,6 @@ token_monitor = token_monitor_mod.new({
     return state.mode
   end,
   command_util = command_util,
-  json_encode = json_encode,
-  json_decode = json_decode,
   on_update = function()
     if type(refresh_which_key_header) == "function" then
       refresh_which_key_header()
@@ -282,38 +257,31 @@ token_monitor = token_monitor_mod.new({
 })
 
 local function token_usage_label()
-  return token_monitor:label({
-    running = state.job_id ~= nil,
-    mode = state.mode,
-  })
+  return token_monitor_setup.token_usage_label()
 end
 
 local function mission_token_usage_label()
-  return token_monitor:label({
-    show_when_not_running = true,
-  })
+  return token_monitor_setup.mission_token_usage_label()
 end
 
 refresh_token_usage = function(force)
-  return token_monitor:refresh(force)
+  return token_monitor_setup.refresh_token_usage(force)
 end
 
 local function refresh_mission_token_usage(force)
-  return token_monitor:refresh(force, {
-    require_running = false,
-  })
+  return token_monitor_setup.refresh_mission_token_usage(force)
 end
 
 local function token_usage_refresh_ms()
-  return token_monitor:refresh_ms()
+  return token_monitor_setup.token_usage_refresh_ms()
 end
 
 start_token_monitor_timer = function()
-  return token_monitor:start()
+  return token_monitor_setup.start()
 end
 
 stop_token_monitor_timer = function()
-  return token_monitor:stop()
+  return token_monitor_setup.stop()
 end
 
 local function workspace_config()
@@ -345,8 +313,8 @@ compat_mod.install_workspace_static(M._v5)
 local workspace_store = workspace_store_mod.new({
   get_workspace_config = workspace_config,
   default_instruction_files = defaults.workspaces.instruction_files,
-  json_encode = json_encode,
-  json_decode = json_decode,
+  json_encode = json.encode,
+  json_decode = json.decode,
   sanitize_workspace_name = sanitize_workspace_name,
   workspace_window_name = M._v5.workspace_window_name,
 })
