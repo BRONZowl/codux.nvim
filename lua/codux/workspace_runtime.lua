@@ -850,6 +850,14 @@ function M:bootstrap_lua(workspace)
   return workspace_launch.bootstrap_lua(workspace)
 end
 
+function M:write_launch_script(workspace)
+  return workspace_launch.write_launch_script(self, workspace)
+end
+
+function M:delete_launch_script(path)
+  return workspace_launch.delete_launch_script(path)
+end
+
 function M:nvim_command(workspace)
   return workspace_launch.nvim_command(self, workspace)
 end
@@ -879,9 +887,9 @@ function M:ensure_tmux_window(session, root, window_name, command, opts)
     table.insert(args, command)
   end
 
-  local _, code = self:tmux_system(args)
+  local output, code = self:tmux_system(args)
   if code ~= 0 then
-    return nil, false
+    return nil, false, trim(output)
   end
 
   return self:tmux_window_id(session, window_name), true

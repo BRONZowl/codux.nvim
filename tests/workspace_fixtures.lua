@@ -272,6 +272,8 @@ function M.prepare_harness(opts)
   local harness = {
     commands = commands,
     store = store,
+    launch_scripts = {},
+    deleted_launch_scripts = {},
   }
   function harness.command_text()
     return M.command_text(commands)
@@ -291,6 +293,17 @@ function M.prepare_harness(opts)
     return "", 1
   end
   harness.runtime = M.workspace_prepare_runtime(runtime_opts)
+  harness.runtime.write_launch_script = opts.write_launch_script or function(runtime, workspace)
+    local path = "/tmp/codux/" .. tostring(workspace.safe_name or workspace.window_name or "workspace") .. ".lua"
+    harness.launch_scripts[path] = runtime:bootstrap_lua(workspace)
+    return path, nil
+  end
+  harness.runtime.delete_launch_script = opts.delete_launch_script or function(_, path)
+    if type(path) == "string" and path ~= "" then
+      harness.deleted_launch_scripts[path] = true
+    end
+    return true
+  end
   return harness
 end
 

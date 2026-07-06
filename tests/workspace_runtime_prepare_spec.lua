@@ -123,7 +123,9 @@ do
     assert_equal(workspace.permission_profile, "auto")
     assert_equal(workspace.status, "active")
     assert_equal(workspace.codex_status, "working")
-    assert_contains(harness.command_text(), "start building")
+    assert_equal(harness.command_text():find("start building", 1, true), nil)
+    assert_contains(harness.command_text(), "-c 'luafile /tmp/codux/mission-builder.lua'")
+    assert_contains(harness.launch_scripts["/tmp/codux/mission-builder.lua"], "start building")
     local record = store.state_data().projects["/codux-worktrees/mission-builder"].workspaces["mission-builder"]
     assert_equal(record.permission_profile, "auto")
     assert_equal(record.mission_id, "mission:mission")
@@ -406,7 +408,63 @@ do
     assert_equal(#missions[1].roles, 2)
     assert_contains(harness.command_text(), "git -C /repo status --porcelain")
     assert_contains(harness.command_text(), "--listen")
-    assert_contains(harness.command_text(), "Start your Mission Control role now.")
+    assert_equal(harness.command_text():find("Start your Mission Control role now.", 1, true), nil)
+    assert_contains(harness.launch_scripts["/tmp/codux/mission-architect.lua"], "Start your Mission Control role now.")
+    assert_contains(harness.launch_scripts["/tmp/codux/mission-builder.lua"], "Start your Mission Control role now.")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local windows = {}
+    local harness = prepare_harness({
+      system = function(_, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          local lines = {}
+          for name, id in pairs(windows) do
+            table.insert(lines, id .. "\t" .. name)
+          end
+          return table.concat(lines, "\n") .. (#lines > 0 and "\n" or ""), 0
+        end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/long-builder" then
+          return "", 1
+        end
+        if command == "git -C /repo worktree add -b dev/long-builder /codux-worktrees/long-builder main" then
+          return "", 0
+        end
+        if command:find("tmux new%-window", 1, false) == 1 then
+          windows["long-builder"] = "@1"
+          if #command > 5000 then
+            return "command too long\n", 1
+          end
+          return "", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        if command:find("remote_workspace_status", 1, true) then
+          return "ready\n", 0
+        end
+        return "", 1
+      end,
+    })
+    local runtime = harness.runtime
+    local objective = string.rep("ship this mission ", 1000)
+    local normalized_objective = objective:gsub("%s+$", "")
+    local mission, error_message = mission_mod.plan("Long", objective, {
+      roles = {
+        { name = "Builder", safe_name = "builder", focus = "Build it" },
+      },
+    })
+    assert_nil(error_message)
+
+    assert_true(runtime:create_mission(mission))
+    assert_contains(harness.command_text(), "-c 'luafile /tmp/codux/long-builder.lua'")
+    assert_equal(harness.command_text():find(normalized_objective, 1, true), nil)
+    assert_contains(harness.launch_scripts["/tmp/codux/long-builder.lua"], normalized_objective)
   end)
 end
 
@@ -573,6 +631,56 @@ end
 
 do
   with_workspace_prepare_env(function()
+    local created_window = false
+    local removed_worktree = false
+    local deleted_branch = false
+    local harness = prepare_harness({
+      write_launch_script = function()
+        return nil, "launch script failed"
+      end,
+      system = function(_, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "", 0
+        end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/review" then
+          return "", 1
+        end
+        if command == "git -C /repo worktree add -b dev/review /codux-worktrees/review main" then
+          return "", 0
+        end
+        if command == "git -C /repo worktree remove --force /codux-worktrees/review" then
+          removed_worktree = true
+          return "", 0
+        end
+        if command == "git -C /repo branch -D dev/review" then
+          deleted_branch = true
+          return "", 0
+        end
+        if command:find("tmux new%-window", 1, false) == 1 then
+          created_window = true
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+    local runtime = harness.runtime
+
+    local workspace, error_message = runtime:prepare_workspace("review", {
+      resolved_instruction = "review the backend",
+    })
+    assert_nil(workspace)
+    assert_equal(error_message, "launch script failed")
+    assert_false(created_window, "tmux window should not be created when launch script write fails")
+    assert_true(removed_worktree, "git worktree should be removed when launch script write fails")
+    assert_true(deleted_branch, "git branch should be deleted when launch script write fails")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
     local wrote_instruction = false
     local store = workspace_store({
       read_instruction_file = function()
@@ -594,7 +702,7 @@ do
           return "", 0
         end
         if command:find("tmux new%-window", 1, false) == 1 then
-          return "", 1
+          return "command too long\n", 1
         end
         return "", 1
       end,
@@ -605,6 +713,7 @@ do
     })
     assert_nil(workspace)
     assert_contains(error_message, "Failed to create tmux window")
+    assert_contains(error_message, "command too long")
     assert_false(wrote_instruction, "instruction file should not be written when tmux creation fails")
   end)
 end
@@ -881,6 +990,7 @@ do
   with_workspace_prepare_env(function()
     local created = false
     local new_window_command
+    local launch_script
     local store = workspace_store({
       state_data = workspace_state({
         review = review_workspace_record({
@@ -918,6 +1028,10 @@ do
         return "", 1
       end,
     })
+    runtime.write_launch_script = function(rt, workspace)
+      launch_script = rt:bootstrap_lua(workspace)
+      return "/tmp/codux/review.lua", nil
+    end
 
     local workspace, error_message = runtime:prepare_workspace("review", {
       allow_existing = true,
@@ -930,7 +1044,8 @@ do
     assert_equal(workspace.target_path, "/repo")
     assert_equal(workspace.target_type, "directory")
     assert_contains(new_window_command, "'nvim' --listen")
-    assert_contains(new_window_command, 'initial_mode="plan"')
+    assert_contains(new_window_command, "-c 'luafile /tmp/codux/review.lua'")
+    assert_contains(launch_script, 'initial_mode="plan"')
     assert_contains(new_window_command, "/codux/ws-review-repo-")
     assert_contains(new_window_command, "' '.'")
     assert_equal(store.state_data().projects["/repo"].workspaces.review.initial_mode, "plan")

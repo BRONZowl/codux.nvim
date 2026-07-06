@@ -11,6 +11,15 @@ end
 local normalize_codex_mode = workspace_git.normalize_codex_mode
 local inactive_like_status = workspace_git.inactive_like_status
 
+local function tmux_window_error(window_name, detail)
+  local message = "Failed to create tmux window " .. tostring(window_name)
+  detail = trim(detail)
+  if detail ~= "" then
+    message = message .. ": " .. detail
+  end
+  return message
+end
+
 function M.prepare(runtime, name, opts)
   opts = opts or {}
   if not runtime:workspaces_enabled() then
@@ -211,18 +220,37 @@ function M.prepare(runtime, name, opts)
     workspace.nvim_server = runtime:workspace_launch_server_path(workspace.project_root, workspace.safe_name)
   end
 
-  local window_id, created =
+  local should_create_window = not existing_window_id or restarting_inactive
+  local launch_script = nil
+  if should_create_window then
+    local launch_error = nil
+    launch_script, launch_error = runtime:write_launch_script(workspace)
+    if not launch_script then
+      if creating_worktree then
+        local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+        if cleanup_ok == false then
+          return nil, tostring(launch_error) .. "; cleanup failed: " .. tostring(cleanup_error)
+        end
+      end
+      return nil, launch_error
+    end
+    workspace.launch_script = launch_script
+  end
+
+  local window_id, created, tmux_error =
     runtime:ensure_tmux_window(session, workspace.project_root, workspace.window_name, runtime:nvim_command(workspace), {
       restart_inactive = opts.restart_inactive == true,
     })
   if not window_id then
+    runtime:delete_launch_script(launch_script)
+    local create_error = tmux_window_error(workspace.window_name, tmux_error)
     if creating_worktree then
       local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
       if cleanup_ok == false then
-        return nil, "Failed to create tmux window " .. workspace.window_name .. "; cleanup failed: " .. tostring(cleanup_error)
+        return nil, create_error .. "; cleanup failed: " .. tostring(cleanup_error)
       end
     end
-    return nil, "Failed to create tmux window " .. workspace.window_name
+    return nil, create_error
   end
 
   local wrote_new_instruction_file = file_instruction == nil
@@ -234,6 +262,7 @@ function M.prepare(runtime, name, opts)
     if created then
       runtime:kill_tmux_window(window_id)
     end
+    runtime:delete_launch_script(launch_script)
     if creating_worktree then
       local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
       if cleanup_ok == false then
@@ -274,6 +303,7 @@ function M.prepare(runtime, name, opts)
     if created then
       runtime:kill_tmux_window(window_id)
     end
+    runtime:delete_launch_script(launch_script)
     if wrote_new_instruction_file then
       runtime:delete_instruction_file(workspace.project_root, workspace.safe_name)
     end
@@ -299,6 +329,7 @@ function M.prepare(runtime, name, opts)
         state_data.projects[root] = previous_project
         runtime:write_state(state_data)
         runtime:kill_tmux_window(window_id)
+        runtime:delete_launch_script(launch_script)
         if wrote_new_instruction_file then
           runtime:delete_instruction_file(workspace.project_root, workspace.safe_name)
         end
@@ -321,6 +352,7 @@ function M.prepare(runtime, name, opts)
         if created then
           runtime:kill_tmux_window(window_id)
         end
+        runtime:delete_launch_script(launch_script)
       end
       return nil, verify_error or "workspace did not become ready"
     end

@@ -5,6 +5,7 @@ local assert_contains = h.assert_contains
 local workspace_launch = require("codux.workspace_launch")
 
 assert_equal(workspace_launch.lua_string('hello "codux"'), '"hello \\"codux\\""')
+assert_equal(workspace_launch.lua_string("hello\ncodux"), '"hello\\ncodux"')
 assert_equal(workspace_launch.shell_env_assignment("CODEX_CMD", "codex -s workspace-write"), "CODEX_CMD='codex -s workspace-write'")
 
 do
@@ -61,6 +62,42 @@ do
   assert_contains(command, "CODEX_CMD='codex -s workspace-write'")
   assert_contains(command, "'nvim' --listen '/tmp/codux/review.sock' '/repo/file.lua'")
   assert_contains(command, "-c 'lua local root=")
+end
+
+do
+  local runtime = {
+    command_util = {
+      shell = function(value)
+        return value
+      end,
+    },
+    get_config = function()
+      return {
+        codex_cmd = "codex",
+        workspace_auto_cmd = "codex-auto",
+        danger_full_access_cmd = "codex-danger",
+      }
+    end,
+    nvim_cmd = function()
+      return "nvim"
+    end,
+    workspace_server_path = function()
+      return "/tmp/codux/review.sock"
+    end,
+  }
+
+  local command = workspace_launch.nvim_command(runtime, {
+    project_root = "/repo",
+    safe_name = "review",
+    target_path = "/repo",
+    target_type = "directory",
+    launch_script = "/tmp/codux/review.lua",
+    initial_prompt = string.rep("x", 1000),
+  })
+
+  assert_contains(command, "'nvim' --listen '/tmp/codux/review.sock' '.'")
+  assert_contains(command, "-c 'luafile /tmp/codux/review.lua'")
+  assert_equal(command:find(string.rep("x", 1000), 1, true), nil)
 end
 
 print("workspace_launch_spec.lua: ok")

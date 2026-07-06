@@ -1,11 +1,31 @@
 local M = {}
 
+local function fnameescape(value)
+  if type(vim.fn.fnameescape) == "function" then
+    return vim.fn.fnameescape(value)
+  end
+  return tostring(value or ""):gsub("([ \\])", "\\%1")
+end
+
 function M.shell_env_assignment(name, value)
   return name .. "=" .. vim.fn.shellescape(tostring(value or ""))
 end
 
 function M.lua_string(value)
-  return string.format("%q", tostring(value or ""))
+  local escaped = tostring(value or ""):gsub("\\", "\\\\"):gsub('"', '\\"')
+  escaped = escaped:gsub("[%z\1-\31\127]", function(char)
+    if char == "\n" then
+      return "\\n"
+    end
+    if char == "\r" then
+      return "\\r"
+    end
+    if char == "\t" then
+      return "\\t"
+    end
+    return string.format("\\%03d", string.byte(char))
+  end)
+  return '"' .. escaped .. '"'
 end
 
 function M.bootstrap_lua(workspace)
@@ -69,6 +89,48 @@ function M.bootstrap_lua(workspace)
   }, " ")
 end
 
+function M.launch_script_path(runtime, workspace)
+  workspace = type(workspace) == "table" and workspace or {}
+  local server_dir = runtime:workspace_server_dir()
+  local server = workspace.nvim_server or runtime:workspace_server_path(workspace.project_root, workspace.safe_name)
+  local name = tostring(server or workspace.safe_name or workspace.window_name or "workspace")
+  name = vim.fn.fnamemodify(name, ":t"):gsub("%.sock$", "")
+  if name == "" then
+    name = "workspace"
+  end
+  return server_dir .. "/" .. name .. ".lua"
+end
+
+function M.write_launch_script(runtime, workspace)
+  local path = M.launch_script_path(runtime, workspace)
+  local directory = vim.fn.fnamemodify(path, ":h")
+  if directory ~= "" then
+    local mkdir_ok, mkdir_result = pcall(vim.fn.mkdir, directory, "p")
+    if not mkdir_ok or mkdir_result ~= 1 then
+      return nil, "Failed to create Codux workspace launch directory"
+    end
+  end
+
+  local ok, result = pcall(vim.fn.writefile, { M.bootstrap_lua(workspace) }, path)
+  if not ok or result ~= 0 then
+    return nil, "Failed to write Codux workspace launch script"
+  end
+
+  return path, nil
+end
+
+function M.delete_launch_script(path)
+  if type(path) ~= "string" or path == "" then
+    return true
+  end
+  if type(vim.fn.delete) ~= "function" then
+    return true
+  end
+
+  local ok = pcall(vim.fn.delete, path)
+  return ok
+end
+
 function M.nvim_command(runtime, workspace)
   workspace = type(workspace) == "table" and workspace or {}
   local config = runtime.get_config()
@@ -82,6 +144,11 @@ function M.nvim_command(runtime, workspace)
     nvim_target = workspace.target_path
   end
 
+  local bootstrap_command = "lua " .. M.bootstrap_lua(workspace)
+  if type(workspace.launch_script) == "string" and workspace.launch_script ~= "" then
+    bootstrap_command = "luafile " .. fnameescape(workspace.launch_script)
+  end
+
   local parts = {
     "cd",
     vim.fn.shellescape(workspace.project_root or "."),
@@ -93,7 +160,7 @@ function M.nvim_command(runtime, workspace)
     vim.fn.shellescape(workspace.nvim_server or runtime:workspace_server_path(workspace.project_root, workspace.safe_name)),
     vim.fn.shellescape(nvim_target),
     "-c",
-    vim.fn.shellescape("lua " .. M.bootstrap_lua(workspace)),
+    vim.fn.shellescape(bootstrap_command),
   }
 
   return table.concat(parts, " ")
