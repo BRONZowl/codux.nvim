@@ -253,7 +253,6 @@ function M.mission_action_items()
     { key = "e", action = "edit_objective", label = "Edit Objective" },
     { key = "x", action = "close_mission", label = "Close Mission" },
     { key = "d", action = "delete_mission", label = "Delete Mission" },
-    { key = "n", action = "create_mission", label = "Create Mission" },
   }
 end
 

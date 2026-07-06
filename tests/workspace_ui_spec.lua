@@ -106,7 +106,7 @@ do
   assert_equal(by_key.v, "view_objective")
   assert_equal(by_key.x, "close_mission")
   assert_equal(by_key.d, "delete_mission")
-  assert_equal(by_key.n, "create_mission")
+  assert_nil(by_key.n)
   assert_nil(by_key.r)
   assert_contains(workspace_ui.mission_action_line(actions[1], 40), "Start Mission")
   assert_contains(workspace_ui.mission_action_line(actions[2], 40), "View Objective")
@@ -114,7 +114,7 @@ do
   assert_equal(labels_by_key.s, "Start Mission")
   assert_equal(labels_by_key.v, "View Objective")
   assert_equal(labels_by_key.x, "Close Mission")
-  assert_equal(labels_by_key.n, "Create Mission")
+  assert_nil(labels_by_key.n)
 end
 
 do
