@@ -139,4 +139,56 @@ do
   assert_equal(normalized.nvim_server, "/run/user/1000/codux/ws-review.sock")
 end
 
+do
+  local workspace = workspace_store_mod.new({}).workspace_from_state({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    last_activity_at = "2026-07-05T10:00:00Z",
+    last_target_at = "2026-07-05T09:00:00Z",
+  }, {
+    last_activity_at = "2026-07-04T10:00:00Z",
+    last_target_at = "2026-07-04T09:00:00Z",
+  })
+
+  assert_equal(workspace.last_activity_at, "2026-07-05T10:00:00Z")
+  assert_equal(workspace.last_target_at, "2026-07-05T09:00:00Z")
+end
+
+do
+  local store = workspace_store_mod.new({})
+  local record = store:state_record({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    window_name = "review",
+    status = "idle",
+  }, {
+    last_activity_at = "2026-07-05T10:00:00Z",
+    last_target_at = "2026-07-05T09:00:00Z",
+  })
+
+  assert_equal(record.last_activity_at, "2026-07-05T10:00:00Z")
+  assert_equal(record.last_target_at, "2026-07-05T09:00:00Z")
+end
+
+do
+  local store = workspace_store_mod.new({})
+  local record = store:state_record({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    window_name = "review",
+    status = "idle",
+    last_activity_at = "2026-07-05T12:00:00Z",
+    last_target_at = "2026-07-05T11:00:00Z",
+  }, {
+    last_activity_at = "2026-07-05T10:00:00Z",
+    last_target_at = "2026-07-05T09:00:00Z",
+  })
+
+  assert_equal(record.last_activity_at, "2026-07-05T12:00:00Z")
+  assert_equal(record.last_target_at, "2026-07-05T11:00:00Z")
+end
+
 print("workspace_store_spec.lua: ok")

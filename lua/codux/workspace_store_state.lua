@@ -196,6 +196,8 @@ function M.workspace_from_state(record, fallback)
     status = status,
     codex_mode = codex_mode,
     created_at = record.created_at or fallback.created_at,
+    last_activity_at = record.last_activity_at or fallback.last_activity_at,
+    last_target_at = record.last_target_at or fallback.last_target_at,
   }
 end
 
@@ -244,6 +246,8 @@ function M.state_record(_, workspace, existing)
     codex_mode = codex_mode,
     created_at = existing.created_at or workspace.created_at or now,
     last_opened_at = now,
+    last_activity_at = workspace.last_activity_at or existing.last_activity_at,
+    last_target_at = workspace.last_target_at or existing.last_target_at,
     last_reconciled_at = existing.last_reconciled_at,
   }
 end
