@@ -304,11 +304,20 @@ do
   vim.api = vim.api or {}
   local old_open_win = vim.api.nvim_open_win
   local old_win_set_cursor = vim.api.nvim_win_set_cursor
+  local old_nvim_paste = vim.api.nvim_paste
+  local old_nvim_put = vim.api.nvim_put
   local old_cmd = vim.cmd
+  local inserted_text
   vim.api.nvim_open_win = function()
     return 202
   end
   vim.api.nvim_win_set_cursor = function() end
+  vim.api.nvim_paste = function(text)
+    inserted_text = text
+  end
+  vim.api.nvim_put = function(lines)
+    inserted_text = type(lines) == "table" and lines[1] or nil
+  end
   vim.cmd = function(command)
     table.insert(commands, command)
   end
@@ -395,6 +404,30 @@ do
   assert_equal(submitted, "s  h")
 
   keymaps = {}
+  rendered = nil
+  submitted = nil
+  vim.g.mapleader = ","
+  assert_true(ui.single_line_prompt({
+    prompt = "Note Builder: ",
+  }, function(value)
+    submitted = value
+  end, {
+    bind_close_keys = function() end,
+    set_buffer_keymap = function(_, _, lhs, rhs, _, opts)
+      keymaps[lhs] = { rhs = rhs, opts = opts }
+    end,
+  }))
+
+  assert_true(keymaps["<Leader>"].opts.nowait)
+  assert_true(keymaps["<Leader>"].rhs())
+  assert_equal(rendered, ", ")
+  assert_true(keymaps.z.rhs())
+  assert_equal(rendered, ",z ")
+  assert_true(keymaps["<CR>"].rhs())
+  assert_equal(submitted, ",z")
+
+  keymaps = {}
+  vim.g.mapleader = " "
   direct_line = nil
   submitted = nil
   assert_true(ui.single_line_prompt({
@@ -428,13 +461,21 @@ do
   end, {
     bind_close_keys = function() end,
     set_buffer_keymap = function(_, modes, lhs, rhs, _, opts)
-      keymaps[lhs] = { modes = modes, rhs = rhs, opts = opts }
+      local key = lhs
+      if tostring(lhs):find("^<Leader>") then
+        key = lhs .. ":" .. tostring(modes)
+      end
+      keymaps[key] = { modes = modes, rhs = rhs, opts = opts }
     end,
   }))
 
   assert_true(created_options.modifiable)
   assert_nil(keymaps["<Space>"])
-  assert_nil(keymaps["<Leader>"])
+  assert_true(keymaps["<Leader>:n"].opts.nowait)
+  assert_true(keymaps["<Leader>:i"].opts.nowait)
+  assert_true(keymaps["<Leader>:n"].rhs())
+  assert_true(keymaps["<Leader>:i"].rhs())
+  assert_equal(inserted_text, " ")
   assert_equal(keymaps["<CR>"].modes[1], "n")
   assert_equal(keymaps["<CR>"].modes[2], "i")
   assert_equal(commands[1], "startinsert")
@@ -447,6 +488,8 @@ do
 
   vim.api.nvim_open_win = old_open_win
   vim.api.nvim_win_set_cursor = old_win_set_cursor
+  vim.api.nvim_paste = old_nvim_paste
+  vim.api.nvim_put = old_nvim_put
   vim.api = old_api
   vim.cmd = old_cmd
   if old_g == nil then
@@ -463,6 +506,59 @@ do
   ui.set_window_options = old_set_window_options
   ui.close_window = old_close_window
   ui.delete_buffer = old_delete_buffer
+end
+
+if type(vim.api) == "table" then
+  local old_mapleader = vim.g.mapleader
+  local normal_leader_called = false
+  local insert_leader_called = false
+  local normal_submitted
+  local insert_submitted
+  vim.g.mapleader = " "
+
+  pcall(vim.keymap.del, "n", "<leader>zc")
+  pcall(vim.keymap.del, "i", "<leader>zc")
+  vim.keymap.set("n", "<leader>zc", function()
+    normal_leader_called = true
+  end)
+  vim.keymap.set("i", "<leader>zc", function()
+    insert_leader_called = true
+  end)
+
+  local ok, err = pcall(function()
+    assert_true(ui.single_line_prompt({
+      prompt = "Codux prompt: ",
+    }, function(value)
+      normal_submitted = value
+    end))
+
+    local normal_keys = vim.api.nvim_replace_termcodes("<Space>zc<CR>", true, false, true)
+    vim.api.nvim_feedkeys(normal_keys, "xt", false)
+
+    assert_false(normal_leader_called)
+    assert_equal(normal_submitted, " zc")
+
+    assert_true(ui.single_line_prompt({
+      prompt = "Codux prompt: ",
+      insert_input = true,
+    }, function(value)
+      insert_submitted = value
+    end))
+
+    local insert_keys = vim.api.nvim_replace_termcodes("i<Space>zc<CR>", true, false, true)
+    vim.api.nvim_feedkeys(insert_keys, "xt", false)
+
+    assert_false(insert_leader_called)
+    assert_equal(insert_submitted, " zc")
+  end)
+
+  pcall(vim.cmd, "stopinsert")
+  pcall(vim.keymap.del, "n", "<leader>zc")
+  pcall(vim.keymap.del, "i", "<leader>zc")
+  vim.g.mapleader = old_mapleader
+  if not ok then
+    error(err, 0)
+  end
 end
 
 do

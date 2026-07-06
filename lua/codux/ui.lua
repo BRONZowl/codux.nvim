@@ -502,6 +502,17 @@ function M.printable_prompt_keys()
   return keys
 end
 
+local function prompt_leader_text()
+  local leader = type(vim.g) == "table" and vim.g.mapleader or nil
+  if type(leader) ~= "string" or leader == "" then
+    return "\\"
+  end
+  if leader == "<Space>" or leader == "<space>" then
+    return " "
+  end
+  return leader
+end
+
 function M.single_line_prompt(opts, callback, deps)
   opts = type(opts) == "table" and opts or {}
   deps = type(deps) == "table" and deps or {}
@@ -514,6 +525,7 @@ function M.single_line_prompt(opts, callback, deps)
   local prompt = tostring(opts.prompt or "")
   local value = tostring(opts.default or "")
   local insert_input = opts.insert_input == true
+  local leader_text = prompt_leader_text()
   local allowed_chars
   if type(opts.allowed_chars) == "string" then
     allowed_chars = {}
@@ -584,6 +596,42 @@ function M.single_line_prompt(opts, callback, deps)
     return true
   end
 
+  local function insert_prompt_text(input)
+    input = tostring(input or "")
+    if input == "" then
+      return true
+    end
+    if vim.api and type(vim.api.nvim_paste) == "function" then
+      pcall(vim.api.nvim_paste, input, false, -1)
+      return true
+    end
+    if vim.api and type(vim.api.nvim_put) == "function" then
+      pcall(vim.api.nvim_put, { input }, "c", true, true)
+    end
+    return true
+  end
+
+  local function bind_prompt_leader_inputs(mode, append_fn)
+    local prompt_keys = M.printable_prompt_keys()
+    set_keymap(bufnr, mode, "<Leader>", function()
+      return append_fn(leader_text)
+    end, "Type in Codux Prompt", { nowait = true })
+    for _, key in ipairs(prompt_keys) do
+      local lhs = key[1]
+      local input = key[2]
+      set_keymap(bufnr, mode, "<Leader>" .. lhs, function()
+        return append_fn(leader_text .. input)
+      end, "Type in Codux Prompt", { nowait = true })
+      for _, next_key in ipairs(prompt_keys) do
+        local next_lhs = next_key[1]
+        local next_input = next_key[2]
+        set_keymap(bufnr, mode, "<Leader>" .. lhs .. next_lhs, function()
+          return append_fn(leader_text .. input .. next_input)
+        end, "Type in Codux Prompt", { nowait = true })
+      end
+    end
+  end
+
   bufnr = M.create_scratch_buffer({
     bufhidden = "wipe",
     buftype = "nofile",
@@ -632,7 +680,24 @@ function M.single_line_prompt(opts, callback, deps)
   set_keymap(bufnr, insert_input and { "n", "i" } or "n", "<CR>", function()
     return close_prompt(submitted_value())
   end, "Submit Codux Prompt")
-  if not insert_input then
+  if insert_input then
+    set_keymap(bufnr, "n", "<Leader>", function()
+      return true
+    end, "Type in Codux Prompt", { nowait = true })
+    local prompt_keys = M.printable_prompt_keys()
+    for _, key in ipairs(prompt_keys) do
+      local lhs = key[1]
+      set_keymap(bufnr, "n", "<Leader>" .. lhs, function()
+        return true
+      end, "Type in Codux Prompt", { nowait = true })
+      for _, next_key in ipairs(prompt_keys) do
+        set_keymap(bufnr, "n", "<Leader>" .. lhs .. next_key[1], function()
+          return true
+        end, "Type in Codux Prompt", { nowait = true })
+      end
+    end
+    bind_prompt_leader_inputs("i", insert_prompt_text)
+  else
     set_keymap(bufnr, "n", "<BS>", function()
       local length = vim.fn.strchars(value)
       if length > 0 then
@@ -667,11 +732,7 @@ function M.single_line_prompt(opts, callback, deps)
         return append_prompt_input(input)
       end, "Type in Codux Prompt", { nowait = true })
     end
-    if type(vim.g) == "table" and vim.g.mapleader == " " then
-      set_keymap(bufnr, "n", "<Leader>", function()
-        return append_prompt_input(" ")
-      end, "Type in Codux Prompt", { nowait = true })
-    end
+    bind_prompt_leader_inputs("n", append_prompt_input)
   end
 
   render()
