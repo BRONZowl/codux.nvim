@@ -3,6 +3,7 @@ local autocmds_mod = require("codux.autocmds")
 local command_util = require("codux.command")
 local commands_mod = require("codux.commands")
 local compat_mod = require("codux.compat")
+local config_defaults = require("codux.config_defaults")
 local context_mod = require("codux.context")
 local health_mod = require("codux.health")
 local keymaps_mod = require("codux.keymaps")
@@ -14,72 +15,14 @@ local text_util = require("codux.text")
 local terminal_mod = require("codux.terminal")
 local token_monitor_mod = require("codux.token_monitor")
 local ui = require("codux.ui")
-local which_key_mod = require("codux.which_key")
+local which_key_setup_mod = require("codux.which_key_setup")
 local workspace_create_mod = require("codux.workspace_create")
 local workspace_manager_setup_mod = require("codux.workspace_manager_setup")
 local workspace_runtime_mod = require("codux.workspace_runtime")
 local workspace_store_mod = require("codux.workspace_store")
 local workspace_ui = require("codux.workspace_ui")
 
-local defaults = {
-  codex_cmd = vim.env.CODEX_CMD or 'codex -s workspace-write -a on-request -c approvals_reviewer="user"',
-  workspace_auto_cmd = vim.env.CODEX_WORKSPACE_AUTO_CMD
-    or 'codex -s workspace-write -a on-request -c approvals_reviewer="auto_review"',
-  danger_full_access_cmd = vim.env.CODEX_DANGER_FULL_ACCESS_CMD or "codex -s danger-full-access -a never",
-  default_initial_mode = "plan",
-  auto_open = true,
-  auto_focus = true,
-  popup = {
-    width = 0.85,
-    height = 0.85,
-    border = "rounded",
-    lock_focus = true,
-  },
-  working_idle_ms = 3000,
-  health_timeout_ms = 10000,
-  token_monitor = {
-    enabled = true,
-    refresh_ms = 60000,
-    timeout_ms = 5000,
-  },
-  workspaces = {
-    enabled = true,
-    tmux_cmd = vim.env.TMUX_CMD or "tmux",
-    state_file = nil,
-    worktree = {
-      directory = "../codux-worktrees",
-      branch_prefix = "dev/",
-    },
-    instruction_files = {
-      enabled = true,
-      directory = ".agents/codux",
-    },
-  },
-  mappings = {
-    open = "<leader>zc",
-    review_file = "<leader>zf",
-    review_selection = "<leader>zs",
-    diagnostics = "<leader>zd",
-    diff = "<leader>zg",
-    mission = "",
-    missions = "<leader>zM",
-    mode = "<leader>zp",
-  },
-  prompts = {
-    file = "Review this %{target_type}, identify issues, and suggest or make fixes where appropriate: %{path}",
-    review_selection = "Review this selected code from %{relative_path}%{line_range} (%{filetype}):\n\n%{selection}",
-    diagnostics = "Explain these %{diagnostics_source} issues for %{relative_path}, identify the likely causes, and suggest fixes:\n\n%{diagnostics}",
-    git_diff = "Review these Git changes on branch %{git_branch} in %{relative_path}. Identify issues, risks, and concrete improvements:\n\n%{git_diff}",
-  },
-  explorers = {
-    neo_tree = true,
-    oil = true,
-    nvim_tree = true,
-    mini_files = true,
-  },
-  target_providers = {},
-}
-
+local defaults = config_defaults.defaults()
 local config = vim.deepcopy(defaults)
 local state = state_mod.initial()
 
@@ -1024,7 +967,7 @@ local function set_mapping(mode, lhs, rhs, desc)
   return keymaps_mod.set(state, mode, lhs, rhs, desc)
 end
 
-which_key_controller = which_key_mod.new({
+which_key_controller = which_key_setup_mod.new({
   get_mode = function()
     return state.mode
   end,

@@ -6,6 +6,7 @@ NVIM_BIN ?= nvim
 NVIM_HEADLESS ?= $(NVIM_BIN) --headless -u NONE -i NONE --cmd 'set shadafile=NONE'
 TEST_SPECS := \
 	tests/action_palette_spec.lua \
+	tests/compat_spec.lua \
 	tests/commands_spec.lua \
 	tests/dashboard_search_spec.lua \
 	tests/filetypes_spec.lua \
@@ -13,8 +14,13 @@ TEST_SPECS := \
 	tests/mission_dashboard_layout_spec.lua \
 	tests/mission_dashboard_spec.lua \
 	tests/mission_dashboard_viewport_spec.lua \
+	tests/mission_dashboard_windows_spec.lua \
+	tests/mission_dashboard_actions_spec.lua \
+	tests/mission_dashboard_workspace_actions_spec.lua \
 	tests/mission_control_spec.lua \
 	tests/mission_lifecycle_spec.lua \
+	tests/mission_output_buffer_spec.lua \
+	tests/mission_output_preview_spec.lua \
 	tests/mission_output_panel_spec.lua \
 	tests/open_profile_spec.lua \
 	tests/prompt_actions_spec.lua \
@@ -29,6 +35,9 @@ TEST_SPECS := \
 	tests/workspace_registry_spec.lua \
 	tests/workspace_remote_actions_spec.lua \
 	tests/workspace_remote_spec.lua \
+	tests/workspace_runtime_worktree_spec.lua \
+	tests/workspace_runtime_lifecycle_spec.lua \
+	tests/workspace_runtime_prepare_spec.lua \
 	tests/workspace_runtime_remote_spec.lua \
 	tests/workspace_runtime_spec.lua \
 	tests/workspace_store_spec.lua \

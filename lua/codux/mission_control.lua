@@ -524,100 +524,35 @@ function M:update_dashboard_after_mission_delete(root)
   return self:refresh_loaded_dashboard(root)
 end
 
-function M:edit_selected_mission(mission)
-  return dashboard_actions.edit_selected_mission(self, mission)
-end
-
-function M:delete_selected_mission(mission)
-  return dashboard_actions.delete_selected_mission(self, mission)
-end
-
-function M:close_selected_mission(mission)
-  return dashboard_actions.close_selected_mission(self, mission)
-end
-
-function M:start_selected_mission(mission)
-  return dashboard_actions.start_selected_mission(self, mission)
-end
-
-function M:action_palette_target()
-  return dashboard_actions.action_palette_target(self)
-end
-
-function M:run_workspace_action(action, target)
-  return dashboard_actions.run_workspace_action(self, action, target)
-end
-
-function M:run_mission_action(action, target)
-  return dashboard_actions.run_mission_action(self, action, target)
-end
-
-function M:run_action(action, target)
-  return dashboard_actions.run_action(self, action, target)
-end
-
-function M:run_highlighted_action()
-  return dashboard_actions.run_highlighted_action(self)
-end
-
-function M:move_action_cursor(delta)
-  return dashboard_actions.move_action_cursor(self, delta)
-end
-
-function M:open_action_palette_for(target, kind)
-  return dashboard_actions.open_action_palette_for(self, target, kind)
-end
-
-function M:selected_role_workspace_or_notify()
-  return dashboard_actions.selected_role_workspace_or_notify(self)
-end
-
-function M:mission_context_for_workspace(entry)
-  return dashboard_actions.mission_context_for_workspace(self, entry)
-end
-
-function M:open_workspace_prompt(entry)
-  return dashboard_actions.open_workspace_prompt(self, entry)
-end
-
-function M:workspace_question_pending(entry)
-  return dashboard_actions.workspace_question_pending(self, entry)
-end
-
-function M:open_workspace_question_answer(entry)
-  return dashboard_actions.open_workspace_question_answer(self, entry)
-end
-
-function M:open_question_option_input(entry, label, with_note)
-  return dashboard_actions.open_question_option_input(self, entry, label, with_note)
-end
-
-function M:open_question_note_input(entry, label)
-  return dashboard_actions.open_question_note_input(self, entry, label)
-end
-
-function M:open_workspace_prompt_input(entry, label, submit_fn, success_prefix)
-  return dashboard_actions.open_workspace_prompt_input(self, entry, label, submit_fn, success_prefix)
-end
-
-function M:interrupt_workspace_action(entry)
-  return dashboard_actions.interrupt_workspace_action(self, entry)
-end
-
-function M:interrupt_selected_workspace(entry)
-  return dashboard_actions.interrupt_selected_workspace(self, entry)
-end
-
-function M:switch_selected_workspace_mode(entry)
-  return dashboard_actions.switch_selected_workspace_mode(self, entry)
-end
-
-function M:delete_role_workspace(entry)
-  return dashboard_actions.delete_role_workspace(self, entry)
-end
-
-function M:open_action_palette()
-  return dashboard_actions.open_action_palette(self)
+for _, method in ipairs({
+  "edit_selected_mission",
+  "delete_selected_mission",
+  "close_selected_mission",
+  "start_selected_mission",
+  "action_palette_target",
+  "run_workspace_action",
+  "run_mission_action",
+  "run_action",
+  "run_highlighted_action",
+  "move_action_cursor",
+  "open_action_palette_for",
+  "selected_role_workspace_or_notify",
+  "mission_context_for_workspace",
+  "open_workspace_prompt",
+  "workspace_question_pending",
+  "open_workspace_question_answer",
+  "open_question_option_input",
+  "open_question_note_input",
+  "open_workspace_prompt_input",
+  "interrupt_workspace_action",
+  "interrupt_selected_workspace",
+  "switch_selected_workspace_mode",
+  "delete_role_workspace",
+  "open_action_palette",
+}) do
+  M[method] = function(self, ...)
+    return dashboard_actions[method](self, ...)
+  end
 end
 
 function M:refresh_dashboard()
