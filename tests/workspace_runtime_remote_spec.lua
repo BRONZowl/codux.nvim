@@ -368,13 +368,17 @@ do
       preview_session = "codux-preview-test",
     })
     assert_nil(error_message)
-    assert_equal(table.concat(preview.command, " "), "env -u TMUX tmux attach-session -t codux-preview-test")
+    local preview_command = table.concat(preview.command, " ")
+    assert_equal(preview_command, "env -u TMUX tmux attach-session -f read-only -t codux-preview-test")
+    assert_equal(preview_command:find(" -r ", 1, true), nil)
+    assert_equal(preview_command:find("ignore-size", 1, true), nil)
     assert_equal(preview.preview_session, "codux-preview-test")
     local command_text = harness.command_text()
     assert_contains(command_text, "remote_show_existing_codex_terminal")
     assert_contains(command_text, expected_server)
     assert_contains(command_text, "tmux new-session -d -t session -s codux-preview-test")
     assert_contains(command_text, "tmux select-window -t codux-preview-test:review")
+    assert_equal(command_text:find("tmux capture-pane", 1, true), nil)
     assert_equal(command_text:find(runtime:workspace_server_path("/repo", "review"), 1, true), nil)
     assert_equal(command_text:find(" codex ", 1, true), nil)
   end)
@@ -421,7 +425,7 @@ do
       project_root = "/repo",
     }, { attempts = 1, preview_session = "codux-preview-test" })
     assert_nil(error_message)
-    assert_equal(table.concat(preview.command, " "), "env -u TMUX /usr/bin/tmux attach-session -t codux-preview-test")
+    assert_equal(table.concat(preview.command, " "), "env -u TMUX /usr/bin/tmux attach-session -f read-only -t codux-preview-test")
   end)
 end
 

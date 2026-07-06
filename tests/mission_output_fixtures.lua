@@ -20,7 +20,7 @@ end
 
 function M.preview()
   return {
-    command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
+    command = { "env", "-u", "TMUX", "tmux", "attach-session", "-f", "read-only", "-t", "codux-preview-test" },
     preview_session = "codux-preview-test",
   }
 end

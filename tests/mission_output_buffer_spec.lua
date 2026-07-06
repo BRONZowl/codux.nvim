@@ -31,7 +31,7 @@ if type(vim.api) == "table" then
     },
     workspace_interactive_preview = function()
       return {
-        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
+        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-f", "read-only", "-t", "codux-preview-test" },
         preview_session = "codux-preview-test",
       }, nil
     end,

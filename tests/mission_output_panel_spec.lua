@@ -44,7 +44,7 @@ if type(vim.api) == "table" then
     workspace_interactive_preview = function(entry)
       preview_entry = entry
       return {
-        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
+        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-f", "read-only", "-t", "codux-preview-test" },
         preview_session = "codux-preview-test",
       }, nil
     end,
@@ -58,7 +58,10 @@ if type(vim.api) == "table" then
   assert_equal(controller:selected_output_entry().safe_name, "alpha-reviewer")
   assert_true(controller:render_output_panel())
   assert_equal(preview_entry.safe_name, "alpha-reviewer")
-  assert_equal(table.concat(term_command, " "), "env -u TMUX tmux attach-session -t codux-preview-test")
+  local command_text = table.concat(term_command, " ")
+  assert_equal(command_text, "env -u TMUX tmux attach-session -f read-only -t codux-preview-test")
+  assert_equal(command_text:find(" -r ", 1, true), nil)
+  assert_equal(command_text:find("ignore-size", 1, true), nil)
   assert_false(modified_at_termopen)
   assert_equal(controller.state.mission_dashboard_output_job, 77)
   assert_contains(table.concat(ctx.rendered_lines, "\n"), "Output: Reviewer")

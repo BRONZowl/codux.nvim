@@ -51,7 +51,7 @@ function M.workspace_interactive_preview(runtime, entry, opts)
   end
 
   return {
-    command = { "env", "-u", "TMUX", runtime:tmux_cmd(), "attach-session", "-t", preview_session },
+    command = { "env", "-u", "TMUX", runtime:tmux_cmd(), "attach-session", "-f", "read-only", "-t", preview_session },
     preview_session = preview_session,
     workspace = workspace,
     window_name = window_name,
