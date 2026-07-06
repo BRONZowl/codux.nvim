@@ -15,10 +15,11 @@ local mission_role_entry = fixtures.mission_role_entry
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
   local old_schedule = vim.schedule
-  local yes_callback
+  local create_callback
   local scheduled = {}
   local calls = {}
   local opened = {}
+  local buffer_lines = {}
   local window_options = {}
   local created = 0
   vim.api.nvim_open_win = function(bufnr, enter, config)
@@ -40,7 +41,9 @@ if type(vim.api) == "table" then
         created = created + 1
         return created == 1 and 43 or 44
       end,
-      set_lines = function() end,
+      set_lines = function(bufnr, lines)
+        buffer_lines[bufnr] = lines
+      end,
       set_window_options = function(win, opts)
         window_options[win] = opts
       end,
@@ -51,9 +54,17 @@ if type(vim.api) == "table" then
         table.insert(calls, "delete_buffer:" .. tostring(bufnr))
       end,
     },
+    is_valid_win = function()
+      return true
+    end,
+    is_loaded_buf = function()
+      return true
+    end,
     set_buffer_keymap = function(_, _, lhs, rhs)
-      if lhs == "y" then
-        yes_callback = rhs
+      if lhs == "<CR>" then
+        create_callback = rhs
+      elseif lhs == "y" or lhs == "n" then
+        error("mission preview should use workspace create confirmation keys")
       end
     end,
     bind_close_keys = function() end,
@@ -69,30 +80,33 @@ if type(vim.api) == "table" then
 
   assert_true(controller:open_preview({ name = "Alpha" }))
   assert_equal(opened[1].bufnr, 43)
-  assert_false(opened[1].enter)
-  assert_false(opened[1].config.focusable)
-  assert_contains(opened[1].config.footer, "y yes")
-  assert_contains(opened[1].config.footer, "n no")
-  assert_contains(opened[1].config.footer, "e edit instruction")
+  assert_true(opened[1].enter)
+  assert_true(opened[1].config.focusable)
+  assert_nil(opened[1].config.footer)
   assert_equal(opened[1].config.zindex, 80)
   assert_equal(opened[2].bufnr, 44)
-  assert_true(opened[2].enter)
-  assert_true(opened[2].config.focusable)
+  assert_false(opened[2].enter)
+  assert_equal(opened[2].config.relative, "win")
+  assert_equal(opened[2].config.win, 143)
+  assert_equal(opened[2].config.zindex, 81)
+  assert_contains(buffer_lines[44][1], "enter create")
+  assert_contains(buffer_lines[44][1], "e edit instruction")
+  assert_contains(buffer_lines[44][1], "<c-q> cancel")
   assert_false(window_options[143].wrap)
   assert_false(window_options[143].linebreak)
   assert_false(window_options[143].cursorline)
   assert_contains(window_options[143].winhighlight, "Cursor:CoduxMissionPreviewCursor")
-  assert_true(type(yes_callback) == "function")
-  assert_true(yes_callback())
-  assert_true(yes_callback())
+  assert_true(type(create_callback) == "function")
+  assert_true(create_callback())
+  assert_true(create_callback())
   assert_equal(#calls, 0)
   assert_equal(#scheduled, 2)
   scheduled[1]()
   scheduled[2]()
-  assert_equal(calls[1], "close_window:143")
-  assert_equal(calls[2], "close_window:144")
-  assert_equal(calls[3], "delete_buffer:43")
-  assert_equal(calls[4], "delete_buffer:44")
+  assert_equal(calls[1], "close_window:144")
+  assert_equal(calls[2], "delete_buffer:44")
+  assert_equal(calls[3], "close_window:143")
+  assert_equal(calls[4], "delete_buffer:43")
   assert_equal(calls[5], "create_mission")
   assert_equal(calls[6], "refresh_dashboard")
   assert_equal(calls[7], nil)
@@ -134,6 +148,12 @@ if type(vim.api) == "table" then
       close_window = function() end,
       delete_buffer = function() end,
     },
+    is_valid_win = function()
+      return true
+    end,
+    is_loaded_buf = function()
+      return true
+    end,
     set_buffer_keymap = function() end,
     bind_close_keys = function() end,
   })
@@ -149,8 +169,8 @@ if type(vim.api) == "table" then
     },
   }))
   assert_equal(opened[1].bufnr, 55)
-  assert_false(opened[1].enter)
-  assert_false(opened[1].config.focusable)
+  assert_true(opened[1].enter)
+  assert_true(opened[1].config.focusable)
   assert_equal(opened[1].config.zindex, 80)
   assert_true(#buffer_lines[55] <= opened[1].config.height)
   for _, line in ipairs(buffer_lines[55]) do
@@ -160,8 +180,10 @@ if type(vim.api) == "table" then
   assert_false(window_options[155].wrap)
   assert_false(window_options[155].linebreak)
   assert_equal(opened[2].bufnr, 56)
-  assert_true(opened[2].enter)
-  assert_true(opened[2].config.focusable)
+  assert_false(opened[2].enter)
+  assert_equal(opened[2].config.relative, "win")
+  assert_equal(opened[2].config.win, 155)
+  assert_contains(buffer_lines[56][1], "enter create")
 
   vim.api.nvim_open_win = old_open_win
   vim.o.columns = old_columns
@@ -172,7 +194,7 @@ end
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
   local old_schedule = vim.schedule
-  local yes_callback
+  local create_callback
   local scheduled
   local dashboard_refreshed = false
   local created = 0
@@ -199,9 +221,15 @@ if type(vim.api) == "table" then
       close_window = function() end,
       delete_buffer = function() end,
     },
+    is_valid_win = function()
+      return true
+    end,
+    is_loaded_buf = function()
+      return true
+    end,
     set_buffer_keymap = function(_, _, lhs, rhs)
-      if lhs == "y" then
-        yes_callback = rhs
+      if lhs == "<CR>" then
+        create_callback = rhs
       end
     end,
     bind_close_keys = function() end,
@@ -215,8 +243,8 @@ if type(vim.api) == "table" then
   end
 
   assert_true(controller:open_preview({ name = "Alpha" }))
-  assert_true(type(yes_callback) == "function")
-  assert_true(yes_callback())
+  assert_true(type(create_callback) == "function")
+  assert_true(create_callback())
   assert_false(dashboard_refreshed)
   assert_true(type(scheduled) == "function")
   scheduled()
@@ -229,7 +257,7 @@ end
 if type(vim.api) == "table" then
   local old_open_win = vim.api.nvim_open_win
   local old_schedule = vim.schedule
-  local no_callback
+  local cancel_callback
   local edit_callback
   local scheduled
   local calls = {}
@@ -261,16 +289,20 @@ if type(vim.api) == "table" then
         table.insert(calls, "delete_buffer:" .. tostring(bufnr))
       end,
     },
+    is_valid_win = function()
+      return true
+    end,
+    is_loaded_buf = function()
+      return true
+    end,
     set_buffer_keymap = function(_, _, lhs, rhs)
-      if lhs == "n" then
-        no_callback = rhs
-      elseif lhs == "e" then
+      if lhs == "e" then
         edit_callback = rhs
-      elseif lhs == "<CR>" then
-        error("mission preview should not bind Enter")
       end
     end,
-    bind_close_keys = function() end,
+    bind_close_keys = function(_, close_fn)
+      cancel_callback = close_fn
+    end,
     create_mission = function()
       error("no/edit preview actions should not create a mission")
     end,
@@ -281,15 +313,15 @@ if type(vim.api) == "table" then
   end
 
   assert_true(controller:open_preview({ name = "Alpha", objective = "Build it" }))
-  assert_true(type(no_callback) == "function")
-  assert_true(no_callback())
+  assert_true(type(cancel_callback) == "function")
+  assert_true(cancel_callback())
   assert_equal(#calls, 0)
   assert_true(type(scheduled) == "function")
   scheduled()
-  assert_equal(calls[1], "close_window:147")
-  assert_equal(calls[2], "close_window:148")
-  assert_equal(calls[3], "delete_buffer:47")
-  assert_equal(calls[4], "delete_buffer:48")
+  assert_equal(calls[1], "close_window:148")
+  assert_equal(calls[2], "delete_buffer:48")
+  assert_equal(calls[3], "close_window:147")
+  assert_equal(calls[4], "delete_buffer:47")
 
   calls = {}
   scheduled = nil
@@ -300,10 +332,10 @@ if type(vim.api) == "table" then
   assert_equal(#calls, 0)
   assert_true(type(scheduled) == "function")
   scheduled()
-  assert_equal(calls[1], "close_window:147")
-  assert_equal(calls[2], "close_window:148")
-  assert_equal(calls[3], "delete_buffer:47")
-  assert_equal(calls[4], "delete_buffer:48")
+  assert_equal(calls[1], "close_window:148")
+  assert_equal(calls[2], "delete_buffer:48")
+  assert_equal(calls[3], "close_window:147")
+  assert_equal(calls[4], "delete_buffer:47")
   assert_equal(calls[5], "edit:Alpha:Build it")
 
   vim.api.nvim_open_win = old_open_win

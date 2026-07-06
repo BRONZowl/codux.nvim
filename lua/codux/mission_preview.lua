@@ -2,6 +2,82 @@ local ui = require("codux.ui")
 
 local M = {}
 
+local function create_footer_segments(controller)
+  return controller.workspace_ui.create_footer_segments()
+end
+
+local function create_footer_line(controller)
+  return controller.workspace_ui.footer_line(create_footer_segments(controller))
+end
+
+local function render_footer(controller, bufnr, width)
+  if not controller.is_loaded_buf(bufnr) then
+    return false
+  end
+
+  width = type(width) == "number" and width > 0 and width or 1
+  local line = create_footer_line(controller)
+  local padding = math.max(0, math.floor((width - #line) / 2))
+  local text = string.rep(" ", padding) .. line
+
+  controller.ui.set_lines(bufnr, { text }, { modifiable = true })
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, controller.namespace, 0, -1)
+
+  local col = padding
+  local segments = create_footer_segments(controller)
+  for index, segment in ipairs(segments) do
+    local key_end = col + #segment.key
+    pcall(vim.api.nvim_buf_add_highlight, bufnr, controller.namespace, "WhichKey", 0, col, key_end)
+    local desc_end = key_end + 1 + #segment.desc
+    pcall(vim.api.nvim_buf_add_highlight, bufnr, controller.namespace, "WhichKeySeparator", 0, key_end, desc_end)
+    col = desc_end
+    if index < #segments then
+      col = col + 2
+    end
+  end
+
+  return true
+end
+
+local function open_footer(controller, win)
+  if not controller.is_valid_win(win) then
+    return nil, nil
+  end
+
+  local bufnr = controller.ui.create_scratch_buffer({
+    bufhidden = "wipe",
+    filetype = "codux-mission-preview-footer",
+    modifiable = false,
+  })
+  if not bufnr then
+    return nil, nil
+  end
+
+  local height_ok, height = pcall(vim.api.nvim_win_get_height, win)
+  local width_ok, width = pcall(vim.api.nvim_win_get_width, win)
+  height = height_ok and type(height) == "number" and height > 0 and height or 1
+  width = width_ok and type(width) == "number" and width > 0 and width or 1
+
+  local win_ok, footer_win = pcall(vim.api.nvim_open_win, bufnr, false, {
+    relative = "win",
+    win = win,
+    col = 0,
+    row = height - 1,
+    width = width,
+    height = 1,
+    border = "none",
+    style = "minimal",
+    zindex = 81,
+  })
+  if not win_ok then
+    controller.ui.delete_buffer(bufnr)
+    return nil, nil
+  end
+
+  render_footer(controller, bufnr, width)
+  return bufnr, footer_win
+end
+
 function M.open(controller, mission)
   local initial_preview_lines = controller.mission.preview_lines(mission)
   local initial_config = controller:preview_config(#initial_preview_lines)
@@ -23,7 +99,7 @@ function M.open(controller, mission)
   controller.ui.set_lines(bufnr, preview_lines)
   pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
 
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, preview_config)
+  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, preview_config)
   if not win_ok then
     controller.ui.delete_buffer(bufnr)
     controller.notify("Failed to open Codux mission preview", vim.log.levels.ERROR)
@@ -38,8 +114,7 @@ function M.open(controller, mission)
     cursorline = false,
     winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey,Cursor:CoduxMissionPreviewCursor,CursorIM:CoduxMissionPreviewCursor",
   })
-  local sink_bufnr
-  local sink_win
+  local footer_bufnr, footer_win = open_footer(controller, win)
   local closed = false
 
   local function close_preview()
@@ -47,10 +122,10 @@ function M.open(controller, mission)
       return false
     end
     closed = true
+    controller.ui.close_window(footer_win)
+    controller.ui.delete_buffer(footer_bufnr)
     controller.ui.close_window(win)
-    controller.ui.close_window(sink_win)
     controller.ui.delete_buffer(bufnr)
-    controller.ui.delete_buffer(sink_bufnr)
     return true
   end
 
@@ -88,28 +163,9 @@ function M.open(controller, mission)
     end)
   end
 
-  local sink_error
-  sink_bufnr, sink_win, sink_error = ui.open_hidden_command_sink({
-    ui = controller.ui,
-    filetype = "codux-mission-preview-sink",
-    enter = true,
-    focusable = true,
-    bind = function(target_bufnr)
-      controller.set_buffer_keymap(target_bufnr, "n", "y", launch_mission, "Launch Codux Mission", { nowait = true })
-      controller.set_buffer_keymap(target_bufnr, "n", "n", defer_preview_action, "Cancel Codux Mission", { nowait = true })
-      controller.set_buffer_keymap(target_bufnr, "n", "e", edit_mission, "Edit Codux Mission Instruction", { nowait = true })
-      controller.bind_close_keys(target_bufnr, defer_preview_action, "Cancel Codux Mission", "n", { escape = true, q = true })
-    end,
-  })
-  if not sink_bufnr then
-    controller.ui.close_window(win)
-    controller.ui.delete_buffer(bufnr)
-    controller.notify(
-      sink_error == "open" and "Failed to open Codux mission preview" or "Failed to create Codux mission preview",
-      vim.log.levels.ERROR
-    )
-    return false
-  end
+  controller.set_buffer_keymap(bufnr, "n", "<CR>", launch_mission, "Create Codux Mission", { nowait = true })
+  controller.set_buffer_keymap(bufnr, "n", "e", edit_mission, "Edit Codux Mission Instruction", { nowait = true })
+  controller.bind_close_keys(bufnr, defer_preview_action, "Cancel Codux Mission", "n", { escape = true, q = true })
   return true
 end
 

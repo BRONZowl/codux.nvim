@@ -138,13 +138,11 @@ function M.preview_config(_, line_count)
     border = "rounded",
     title = " Codux Mission Control ",
     title_pos = "center",
-    footer = " y yes | n no | e edit instruction ",
-    footer_pos = "center",
     width = width,
     height = height,
     col = centered_col(total_width, width),
     row = centered_row(total_height, height),
-    focusable = false,
+    focusable = true,
     zindex = MISSION_CREATION_ZINDEX,
   }
 end

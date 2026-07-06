@@ -36,10 +36,8 @@ do
 
     assert_equal(objective_config.title, " Codux Mission Objective ")
     assert_equal(preview_config.title, " Codux Mission Control ")
-    assert_contains(preview_config.footer, "y yes")
-    assert_contains(preview_config.footer, "n no")
-    assert_contains(preview_config.footer, "e edit instruction")
-    assert_false(preview_config.focusable)
+    assert_nil(preview_config.footer)
+    assert_true(preview_config.focusable)
     assert_equal(objective_config.zindex, 80)
     assert_equal(preview_config.zindex, 80)
     assert_equal(dashboard_config.title, " Mission Control ")
