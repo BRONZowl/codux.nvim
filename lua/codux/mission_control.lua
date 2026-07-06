@@ -355,7 +355,8 @@ function M:close_command_bar()
   return dashboard_command_bar.close(self)
 end
 
-function M:render_dashboard()
+function M:render_dashboard(opts)
+  opts = type(opts) == "table" and opts or {}
   if not self.is_loaded_buf(self.state.mission_dashboard_buf) then
     return false
   end
@@ -374,12 +375,18 @@ function M:render_dashboard()
 
   local selected_item = self:selected_item()
   local dashboard_min_height = self:dashboard_min_height_for_lines(lines)
+  local preview_anchor = self:capture_output_preview_anchor()
   self:resize_dashboard_stack(#lines, { selected_item = selected_item, dashboard_min_height = dashboard_min_height })
   self.ui.set_lines(self.state.mission_dashboard_buf, lines, { modifiable = true })
   self:highlight_dashboard(self.state.mission_dashboard_buf, lines, items)
   self:render_command_bar()
   self:render_output_panel(self:dashboard_output_entry(selected_item))
-  self:reveal_output_preview_row()
+  if
+    not self:restore_stationary_output_preview_anchor(opts.stationary_preview_anchor)
+    and not self:restore_output_preview_anchor(preview_anchor)
+  then
+    self:reveal_output_preview_row()
+  end
   self.state.mission_dashboard_focus_match = false
 
   return true
@@ -435,6 +442,22 @@ end
 
 function M:move_mission_selection(delta)
   return dashboard_selection.move_mission_selection(self, delta)
+end
+
+function M:capture_stationary_output_preview_anchor()
+  return dashboard_viewport.capture_stationary_output_preview_anchor(self)
+end
+
+function M:capture_output_preview_anchor()
+  return dashboard_viewport.capture_output_preview_anchor(self)
+end
+
+function M:restore_stationary_output_preview_anchor(anchor)
+  return dashboard_viewport.restore_stationary_output_preview_anchor(self, anchor)
+end
+
+function M:restore_output_preview_anchor(anchor)
+  return dashboard_viewport.restore_output_preview_anchor(self, anchor)
 end
 
 function M:reveal_output_preview_row()

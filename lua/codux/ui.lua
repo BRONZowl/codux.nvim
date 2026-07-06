@@ -513,6 +513,28 @@ local function prompt_leader_text()
   return leader
 end
 
+local function bind_prompt_leader_sequences(bufnr, mode, prompt_keys, leader_text, set_keymap, handler)
+  set_keymap(bufnr, mode, "<Leader>", function()
+    return handler(leader_text)
+  end, "Type in Codux Prompt", { nowait = true })
+
+  for _, key in ipairs(prompt_keys) do
+    local lhs = key[1]
+    local input = key[2]
+    set_keymap(bufnr, mode, "<Leader>" .. lhs, function()
+      return handler(leader_text .. input)
+    end, "Type in Codux Prompt", { nowait = true })
+
+    for _, next_key in ipairs(prompt_keys) do
+      local next_lhs = next_key[1]
+      local next_input = next_key[2]
+      set_keymap(bufnr, mode, "<Leader>" .. lhs .. next_lhs, function()
+        return handler(leader_text .. input .. next_input)
+      end, "Type in Codux Prompt", { nowait = true })
+    end
+  end
+end
+
 function M.single_line_prompt(opts, callback, deps)
   opts = type(opts) == "table" and opts or {}
   deps = type(deps) == "table" and deps or {}
@@ -526,6 +548,7 @@ function M.single_line_prompt(opts, callback, deps)
   local value = tostring(opts.default or "")
   local insert_input = opts.insert_input == true
   local leader_text = prompt_leader_text()
+  local prompt_keys = M.printable_prompt_keys()
   local allowed_chars
   if type(opts.allowed_chars) == "string" then
     allowed_chars = {}
@@ -611,27 +634,6 @@ function M.single_line_prompt(opts, callback, deps)
     return true
   end
 
-  local function bind_prompt_leader_inputs(mode, append_fn)
-    local prompt_keys = M.printable_prompt_keys()
-    set_keymap(bufnr, mode, "<Leader>", function()
-      return append_fn(leader_text)
-    end, "Type in Codux Prompt", { nowait = true })
-    for _, key in ipairs(prompt_keys) do
-      local lhs = key[1]
-      local input = key[2]
-      set_keymap(bufnr, mode, "<Leader>" .. lhs, function()
-        return append_fn(leader_text .. input)
-      end, "Type in Codux Prompt", { nowait = true })
-      for _, next_key in ipairs(prompt_keys) do
-        local next_lhs = next_key[1]
-        local next_input = next_key[2]
-        set_keymap(bufnr, mode, "<Leader>" .. lhs .. next_lhs, function()
-          return append_fn(leader_text .. input .. next_input)
-        end, "Type in Codux Prompt", { nowait = true })
-      end
-    end
-  end
-
   bufnr = M.create_scratch_buffer({
     bufhidden = "wipe",
     buftype = "nofile",
@@ -681,22 +683,10 @@ function M.single_line_prompt(opts, callback, deps)
     return close_prompt(submitted_value())
   end, "Submit Codux Prompt")
   if insert_input then
-    set_keymap(bufnr, "n", "<Leader>", function()
+    bind_prompt_leader_sequences(bufnr, "n", prompt_keys, leader_text, set_keymap, function()
       return true
-    end, "Type in Codux Prompt", { nowait = true })
-    local prompt_keys = M.printable_prompt_keys()
-    for _, key in ipairs(prompt_keys) do
-      local lhs = key[1]
-      set_keymap(bufnr, "n", "<Leader>" .. lhs, function()
-        return true
-      end, "Type in Codux Prompt", { nowait = true })
-      for _, next_key in ipairs(prompt_keys) do
-        set_keymap(bufnr, "n", "<Leader>" .. lhs .. next_key[1], function()
-          return true
-        end, "Type in Codux Prompt", { nowait = true })
-      end
-    end
-    bind_prompt_leader_inputs("i", insert_prompt_text)
+    end)
+    bind_prompt_leader_sequences(bufnr, "i", prompt_keys, leader_text, set_keymap, insert_prompt_text)
   else
     set_keymap(bufnr, "n", "<BS>", function()
       local length = vim.fn.strchars(value)
@@ -725,14 +715,14 @@ function M.single_line_prompt(opts, callback, deps)
       value = value .. input
       return render()
     end
-    for _, key in ipairs(M.printable_prompt_keys()) do
+    for _, key in ipairs(prompt_keys) do
       local lhs = key[1]
       local input = key[2]
       set_keymap(bufnr, "n", lhs, function()
         return append_prompt_input(input)
       end, "Type in Codux Prompt", { nowait = true })
     end
-    bind_prompt_leader_inputs("n", append_prompt_input)
+    bind_prompt_leader_sequences(bufnr, "n", prompt_keys, leader_text, set_keymap, append_prompt_input)
   end
 
   render()

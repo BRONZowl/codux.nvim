@@ -97,10 +97,11 @@ function M.move_mission_selection(controller, delta)
 
   local next_index = math.max(1, math.min(#rows, current_index + (tonumber(delta) or 0)))
   local next_row = rows[next_index]
+  local preview_anchor = controller:capture_stationary_output_preview_anchor()
   controller.state.mission_dashboard_selected_row = next_row
   controller.state.mission_dashboard_search_confirmed = true
   controller.state.mission_dashboard_focus_match = false
-  controller:render_dashboard()
+  controller:render_dashboard({ stationary_preview_anchor = preview_anchor })
   return true
 end
 
