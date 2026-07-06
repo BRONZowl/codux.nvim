@@ -1,81 +1,14 @@
+local confirmation_footer = require("codux.confirmation_footer")
 local ui = require("codux.ui")
 
 local M = {}
 
-local function create_footer_segments(controller)
-  return controller.workspace_ui.create_footer_segments()
-end
-
-local function create_footer_line(controller)
-  return controller.workspace_ui.footer_line(create_footer_segments(controller))
-end
-
-local function render_footer(controller, bufnr, width)
-  if not controller.is_loaded_buf(bufnr) then
-    return false
-  end
-
-  width = type(width) == "number" and width > 0 and width or 1
-  local line = create_footer_line(controller)
-  local padding = math.max(0, math.floor((width - #line) / 2))
-  local text = string.rep(" ", padding) .. line
-
-  controller.ui.set_lines(bufnr, { text }, { modifiable = true })
-  pcall(vim.api.nvim_buf_clear_namespace, bufnr, controller.namespace, 0, -1)
-
-  local col = padding
-  local segments = create_footer_segments(controller)
-  for index, segment in ipairs(segments) do
-    local key_end = col + #segment.key
-    pcall(vim.api.nvim_buf_add_highlight, bufnr, controller.namespace, "WhichKey", 0, col, key_end)
-    local desc_end = key_end + 1 + #segment.desc
-    pcall(vim.api.nvim_buf_add_highlight, bufnr, controller.namespace, "WhichKeySeparator", 0, key_end, desc_end)
-    col = desc_end
-    if index < #segments then
-      col = col + 2
-    end
-  end
-
-  return true
-end
-
-local function open_footer(controller, win)
-  if not controller.is_valid_win(win) then
-    return nil, nil
-  end
-
-  local bufnr = controller.ui.create_scratch_buffer({
-    bufhidden = "wipe",
-    filetype = "codux-mission-preview-footer",
-    modifiable = false,
-  })
-  if not bufnr then
-    return nil, nil
-  end
-
-  local height_ok, height = pcall(vim.api.nvim_win_get_height, win)
-  local width_ok, width = pcall(vim.api.nvim_win_get_width, win)
-  height = height_ok and type(height) == "number" and height > 0 and height or 1
-  width = width_ok and type(width) == "number" and width > 0 and width or 1
-
-  local win_ok, footer_win = pcall(vim.api.nvim_open_win, bufnr, false, {
-    relative = "win",
-    win = win,
-    col = 0,
-    row = height - 1,
-    width = width,
-    height = 1,
-    border = "none",
-    style = "minimal",
-    zindex = 81,
-  })
-  if not win_ok then
-    controller.ui.delete_buffer(bufnr)
-    return nil, nil
-  end
-
-  render_footer(controller, bufnr, width)
-  return bufnr, footer_win
+local function footer_segments()
+  return {
+    { key = "enter", desc = "create" },
+    { key = "e", desc = "edit mission" },
+    { key = "<c-q>", desc = "cancel" },
+  }
 end
 
 function M.open(controller, mission)
@@ -114,7 +47,11 @@ function M.open(controller, mission)
     cursorline = false,
     winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey,Cursor:CoduxMissionPreviewCursor,CursorIM:CoduxMissionPreviewCursor",
   })
-  local footer_bufnr, footer_win = open_footer(controller, win)
+  local footer_bufnr, footer_win = confirmation_footer.open(controller, win, {
+    filetype = "codux-mission-preview-footer",
+    zindex = 81,
+    segments = footer_segments(),
+  })
   local closed = false
 
   local function close_preview()
@@ -164,7 +101,7 @@ function M.open(controller, mission)
   end
 
   controller.set_buffer_keymap(bufnr, "n", "<CR>", launch_mission, "Create Codux Mission", { nowait = true })
-  controller.set_buffer_keymap(bufnr, "n", "e", edit_mission, "Edit Codux Mission Instruction", { nowait = true })
+  controller.set_buffer_keymap(bufnr, "n", "e", edit_mission, "Edit Codux Mission", { nowait = true })
   controller.bind_close_keys(bufnr, defer_preview_action, "Cancel Codux Mission", "n", { escape = true, q = true })
   return true
 end

@@ -6,7 +6,6 @@ local filetypes = require("codux.filetypes")
 
 assert_true(filetypes.is_mission_control("codux-missions"))
 assert_true(filetypes.is_mission_control("codux-mission-preview-footer"))
-assert_true(filetypes.is_mission_control("codux-mission-preview-sink"))
 assert_true(filetypes.is_workspace("codux-workspace-instruction"))
 assert_true(filetypes.is_internal("codux"))
 assert_true(filetypes.is_internal("codux-mission-question-answer-sink"))

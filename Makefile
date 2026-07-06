@@ -7,6 +7,7 @@ NVIM_HEADLESS ?= $(NVIM_BIN) --headless -u NONE -i NONE --cmd 'set shadafile=NON
 TEST_SPECS := \
 	tests/action_palette_spec.lua \
 	tests/compat_spec.lua \
+	tests/confirmation_footer_spec.lua \
 	tests/commands_spec.lua \
 	tests/dashboard_search_spec.lua \
 	tests/filetypes_spec.lua \
@@ -16,6 +17,7 @@ TEST_SPECS := \
 	tests/mission_dashboard_viewport_spec.lua \
 	tests/mission_dashboard_windows_spec.lua \
 	tests/mission_dashboard_actions_spec.lua \
+	tests/mission_dashboard_action_palette_spec.lua \
 	tests/mission_dashboard_workspace_actions_spec.lua \
 	tests/mission_control_dashboard_lines_spec.lua \
 	tests/mission_control_dashboard_windows_spec.lua \

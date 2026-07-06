@@ -1,6 +1,7 @@
 local M = {}
 M.__index = M
 
+local confirmation_footer = require("codux.confirmation_footer")
 local mission_mod = require("codux.mission")
 local text_util = require("codux.text")
 
@@ -99,75 +100,24 @@ function M:create_footer_segments()
 end
 
 function M:create_footer_line()
-  return self.workspace_ui.footer_line(self:create_footer_segments())
+  return confirmation_footer.line(self, {
+    segments = self:create_footer_segments(),
+  })
 end
 
 function M:render_create_footer(bufnr, width)
-  if not self.is_loaded_buf(bufnr) then
-    return false
-  end
-
-  width = type(width) == "number" and width > 0 and width or 1
-  local line = self:create_footer_line()
-  local padding = math.max(0, math.floor((width - #line) / 2))
-  local text = string.rep(" ", padding) .. line
-
-  self.ui.set_lines(bufnr, { text }, { modifiable = true })
-  pcall(vim.api.nvim_buf_clear_namespace, bufnr, self.namespace, 0, -1)
-
-  local col = padding
-  local segments = self:create_footer_segments()
-  for index, segment in ipairs(segments) do
-    local key_end = col + #segment.key
-    pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKey", 0, col, key_end)
-    local desc_end = key_end + 1 + #segment.desc
-    pcall(vim.api.nvim_buf_add_highlight, bufnr, self.namespace, "WhichKeySeparator", 0, key_end, desc_end)
-    col = desc_end
-    if index < #segments then
-      col = col + 2
-    end
-  end
-
-  return true
+  return confirmation_footer.render(self, bufnr, {
+    width = width,
+    segments = self:create_footer_segments(),
+  })
 end
 
 function M:open_create_footer(win)
-  if not self.is_valid_win(win) then
-    return nil, nil
-  end
-
-  local bufnr = self.ui.create_scratch_buffer({
-    bufhidden = "wipe",
+  return confirmation_footer.open(self, win, {
     filetype = "codux-workspace-create-footer",
-    modifiable = false,
-  })
-  if not bufnr then
-    return nil, nil
-  end
-
-  local height_ok, height = pcall(vim.api.nvim_win_get_height, win)
-  local width_ok, width = pcall(vim.api.nvim_win_get_width, win)
-  height = height_ok and type(height) == "number" and height > 0 and height or 1
-  width = width_ok and type(width) == "number" and width > 0 and width or 1
-
-  local win_ok, footer_win = pcall(vim.api.nvim_open_win, bufnr, false, {
-    relative = "win",
-    win = win,
-    col = 0,
-    row = height - 1,
-    width = width,
-    height = 1,
-    border = "none",
-    style = "minimal",
     zindex = 51,
+    segments = self:create_footer_segments(),
   })
-  if not win_ok then
-    self.ui.delete_buffer(bufnr)
-    return nil, nil
-  end
-
-  self:render_create_footer(bufnr, width)
-  return bufnr, footer_win
 end
 
 function M:instruction_editor_config(line_count)

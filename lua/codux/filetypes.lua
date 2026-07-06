@@ -9,7 +9,6 @@ M.mission_control = {
   ["codux-missions-output"] = true,
   ["codux-mission-preview"] = true,
   ["codux-mission-preview-footer"] = true,
-  ["codux-mission-preview-sink"] = true,
   ["codux-mission-question-answer"] = true,
   ["codux-mission-question-answer-sink"] = true,
   ["codux-mission-question-note"] = true,
