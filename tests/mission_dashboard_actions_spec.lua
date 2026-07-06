@@ -11,12 +11,14 @@ local ui_mod = require("codux.ui")
 local workspace_ui = require("codux.workspace_ui")
 
 local mission_role_entry = fixtures.mission_role_entry
+local dashboard_controller = fixtures.dashboard_controller
+local notifications_fixture = fixtures.notifications
 
 do
   local opened_kind
   local opened_target
-  local notifications = {}
-  local controller = mission_control_mod.new({
+  local notifications, notify = notifications_fixture()
+  local controller = dashboard_controller({
     state = {
       mission_dashboard_items = {
         [4] = { kind = "mission", mission = { name = "Alpha" } },
@@ -27,9 +29,7 @@ do
       mission_dashboard_search_confirmed = true,
       mission_dashboard_selected_row = 4,
     },
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
   })
   function controller:open_action_palette_for(target, kind)
     opened_target = target
@@ -159,7 +159,7 @@ do
 end
 
 do
-  local notifications = {}
+  local notifications, notify = notifications_fixture()
   local closed = false
   local prompted = false
   local controller = mission_control_mod.new({
@@ -169,9 +169,7 @@ do
         safe_name = "plain",
       },
     },
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
     create_workspace_prompt = function()
       prompted = true
       return true

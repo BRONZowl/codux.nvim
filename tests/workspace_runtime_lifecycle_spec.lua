@@ -22,249 +22,122 @@ local with_workspace_prepare_env = fixtures.with_workspace_prepare_env
 local workspace_prepare_runtime = fixtures.workspace_prepare_runtime
 local workspace_store = fixtures.workspace_store
 local workspace_delete_runtime = fixtures.workspace_delete_runtime
+local lifecycle_runtime = fixtures.lifecycle_runtime
+local worktree_delete_state = fixtures.worktree_delete_state
+local with_tmux_env = fixtures.with_tmux_env
 do
-  local state_data = {
-    projects = {
-      ["/repo"] = {
-        workspaces = {
-          review = {
-            name = "review",
-            safe_name = "review",
-            project_root = "/repo",
-            tmux_window = "review",
-            status = "idle",
-            codex_status = "idle",
-            codex_mode = "plan",
-          },
-          debug = {
-            name = "debug",
-            safe_name = "debug",
-            project_root = "/repo",
-            tmux_window = "debug",
-            status = "active",
-            codex_status = "working",
-            codex_mode = "execute",
-          },
-        },
-      },
-    },
-  }
-  local messages = {}
-  local old_tmux = vim.env.TMUX
-  vim.env.TMUX = "/tmp/tmux,1,0"
-  local runtime = runtime_mod.new({
-    state = {
-      workspace_manager_project_root = "/repo",
-    },
-    notify = function(message)
-      table.insert(messages, message)
-    end,
-    get_config = function()
-      return { tmux_cmd = "tmux" }
-    end,
-    system = function(args)
-      local command = table.concat(args, " ")
-      if command == "tmux display-message -p #S" then
-        return "session\n", 0
-      end
-      if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
-        return "@1\treview\n@2\tdebug\n", 0
-      end
-      if command == "tmux kill-window -t @1" or command == "tmux kill-window -t @2" then
-        return "", 0
-      end
-      return "", 1
-    end,
-    store = {
-      read_state = function()
-        return state_data, nil
+  with_tmux_env("/tmp/tmux,1,0", function()
+    local harness = lifecycle_runtime({
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n@2\tdebug\n", 0
+        end
+        if command == "tmux kill-window -t @1" or command == "tmux kill-window -t @2" then
+          return "", 0
+        end
+        return "", 1
       end,
-      write_state = function(_, next_state)
-        state_data = next_state
-        return true, nil
-      end,
-      timestamp = function()
-        return "2026-06-30T00:00:00Z"
-      end,
-    },
-  })
+    })
+    local runtime = harness.runtime
 
-  assert_true(runtime:close_all_saved_workspace_windows("/repo"))
-  assert_equal(state_data.projects["/repo"].workspaces.review.status, "inactive")
-  assert_equal(state_data.projects["/repo"].workspaces.debug.status, "inactive")
-  assert_nil(state_data.projects["/repo"].workspaces.debug.codex_mode)
-  assert_contains(messages[#messages], "Closed 2 Codux workspaces")
-  vim.env.TMUX = old_tmux
+    assert_true(runtime:close_all_saved_workspace_windows("/repo"))
+    assert_equal(harness.state_data().projects["/repo"].workspaces.review.status, "inactive")
+    assert_equal(harness.state_data().projects["/repo"].workspaces.debug.status, "inactive")
+    assert_nil(harness.state_data().projects["/repo"].workspaces.debug.codex_mode)
+    assert_contains(harness.messages[#harness.messages], "Closed 2 Codux workspaces")
+  end)
 end
 
 do
-  local state_data = {
-    projects = {
-      ["/repo"] = {
-        workspaces = {
-          review = {
-            name = "review",
-            safe_name = "review",
-            project_root = "/repo",
-            tmux_window = "review",
-            status = "idle",
-            codex_status = "idle",
-            codex_mode = "plan",
-          },
-          debug = {
-            name = "debug",
-            safe_name = "debug",
-            project_root = "/repo",
-            tmux_window = "debug",
-            status = "active",
-            codex_status = "working",
-            codex_mode = "execute",
-          },
+  with_tmux_env("/tmp/tmux,1,0", function()
+    local harness = lifecycle_runtime({
+      state = {
+        workspace = {
+          project_root = "/repo",
+          safe_name = "debug",
+          status = "active",
+          codex_status = "working",
+          codex_mode = "execute",
+          tmux_target = "session:debug",
         },
       },
-    },
-  }
-  local old_tmux = vim.env.TMUX
-  vim.env.TMUX = "/tmp/tmux,1,0"
-  local runtime = runtime_mod.new({
-    state = {
-      workspace = {
-        project_root = "/repo",
-        safe_name = "debug",
-        status = "active",
-        codex_status = "working",
-        codex_mode = "execute",
-        tmux_target = "session:debug",
-      },
-    },
-    notify = function() end,
-    get_config = function()
-      return { tmux_cmd = "tmux" }
-    end,
-    system = function(args)
-      local command = table.concat(args, " ")
-      if command == "tmux display-message -p #S" then
-        return "session\n", 0
-      end
-      if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
-        return "@1\treview\n@2\tdebug\n", 0
-      end
-      if command == "tmux kill-window -t @1" then
-        return "", 0
-      end
-      if command == "tmux kill-window -t @2" then
+      notify = function() end,
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n@2\tdebug\n", 0
+        end
+        if command == "tmux kill-window -t @1" then
+          return "", 0
+        end
+        if command == "tmux kill-window -t @2" then
+          return "", 1
+        end
         return "", 1
-      end
-      return "", 1
-    end,
-    store = {
-      read_state = function()
-        return state_data, nil
       end,
-      write_state = function(_, next_state)
-        state_data = next_state
-        return true, nil
-      end,
-      timestamp = function()
-        return "2026-06-30T00:00:00Z"
-      end,
-    },
-  })
+    })
+    local runtime = harness.runtime
 
-  assert_false(runtime:close_all_saved_workspace_windows("/repo"))
-  assert_equal(state_data.projects["/repo"].workspaces.review.status, "inactive")
-  assert_equal(state_data.projects["/repo"].workspaces.debug.status, "active")
-  assert_equal(state_data.projects["/repo"].workspaces.debug.codex_status, "working")
-  assert_equal(state_data.projects["/repo"].workspaces.debug.codex_mode, "execute")
-  assert_equal(runtime.state.workspace.status, "active")
-  assert_equal(runtime.state.workspace.codex_status, "working")
-  assert_equal(runtime.state.workspace.codex_mode, "execute")
-  assert_equal(runtime.state.workspace.tmux_target, "session:debug")
-  vim.env.TMUX = old_tmux
+    assert_false(runtime:close_all_saved_workspace_windows("/repo"))
+    assert_equal(harness.state_data().projects["/repo"].workspaces.review.status, "inactive")
+    assert_equal(harness.state_data().projects["/repo"].workspaces.debug.status, "active")
+    assert_equal(harness.state_data().projects["/repo"].workspaces.debug.codex_status, "working")
+    assert_equal(harness.state_data().projects["/repo"].workspaces.debug.codex_mode, "execute")
+    assert_equal(runtime.state.workspace.status, "active")
+    assert_equal(runtime.state.workspace.codex_status, "working")
+    assert_equal(runtime.state.workspace.codex_mode, "execute")
+    assert_equal(runtime.state.workspace.tmux_target, "session:debug")
+  end)
 end
 
 do
-  local state_data = {
-    projects = {
-      ["/repo"] = {
-        workspaces = {
-          review = {
-            name = "review",
-            safe_name = "review",
-            project_root = "/repo",
-            tmux_window = "review",
-            status = "idle",
-            codex_status = "idle",
-            codex_mode = "plan",
-          },
-          debug = {
-            name = "debug",
-            safe_name = "debug",
-            project_root = "/repo",
-            tmux_window = "debug",
-            status = "active",
-            codex_status = "working",
-            codex_mode = "execute",
-          },
+  with_tmux_env("/tmp/tmux,1,0", function()
+    local harness = lifecycle_runtime({
+      state = {
+        workspace = {
+          project_root = "/repo",
+          safe_name = "review",
+          status = "idle",
+          codex_status = "idle",
+          codex_mode = "plan",
+          tmux_target = "session:review",
         },
       },
-    },
-  }
-  local old_tmux = vim.env.TMUX
-  vim.env.TMUX = "/tmp/tmux,1,0"
-  local runtime = runtime_mod.new({
-    state = {
-      workspace = {
-        project_root = "/repo",
-        safe_name = "review",
-        status = "idle",
-        codex_status = "idle",
-        codex_mode = "plan",
-        tmux_target = "session:review",
-      },
-    },
-    notify = function() end,
-    get_config = function()
-      return { tmux_cmd = "tmux" }
-    end,
-    system = function(args)
-      local command = table.concat(args, " ")
-      if command == "tmux display-message -p #S" then
-        return "session\n", 0
-      end
-      if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
-        return "@1\treview\n@2\tdebug\n", 0
-      end
-      if command == "tmux kill-window -t @1" then
-        return "", 0
-      end
-      if command == "tmux kill-window -t @2" then
+      notify = function() end,
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\treview\n@2\tdebug\n", 0
+        end
+        if command == "tmux kill-window -t @1" then
+          return "", 0
+        end
+        if command == "tmux kill-window -t @2" then
+          return "", 1
+        end
         return "", 1
-      end
-      return "", 1
-    end,
-    store = {
-      read_state = function()
-        return state_data, nil
       end,
-      write_state = function(_, next_state)
-        state_data = next_state
-        return true, nil
-      end,
-      timestamp = function()
-        return "2026-06-30T00:00:00Z"
-      end,
-    },
-  })
+    })
+    local runtime = harness.runtime
 
-  assert_false(runtime:close_all_saved_workspace_windows("/repo"))
-  assert_equal(state_data.projects["/repo"].workspaces.review.status, "inactive")
-  assert_equal(state_data.projects["/repo"].workspaces.debug.status, "active")
-  assert_equal(runtime.state.workspace.status, "inactive")
-  assert_equal(runtime.state.workspace.codex_status, "idle")
-  assert_nil(runtime.state.workspace.codex_mode)
-  assert_nil(runtime.state.workspace.tmux_target)
-  vim.env.TMUX = old_tmux
+    assert_false(runtime:close_all_saved_workspace_windows("/repo"))
+    assert_equal(harness.state_data().projects["/repo"].workspaces.review.status, "inactive")
+    assert_equal(harness.state_data().projects["/repo"].workspaces.debug.status, "active")
+    assert_equal(runtime.state.workspace.status, "inactive")
+    assert_equal(runtime.state.workspace.codex_status, "idle")
+    assert_nil(runtime.state.workspace.codex_mode)
+    assert_nil(runtime.state.workspace.tmux_target)
+  end)
 end
 
 do
@@ -807,22 +680,7 @@ do
     local removed_worktree = false
     local deleted_branch = false
     local closed = false
-    local state_data = {
-      projects = {
-        ["/repo"] = {
-          workspaces = {
-            review = review_workspace_record({
-              project_root = "/repo",
-              workspace_kind = "worktree",
-              git_common_dir = "/repo/.git",
-              worktree_path = "/codux-worktrees/review",
-              worktree_branch = "dev/review",
-              worktree_base = "main",
-            }),
-          },
-        },
-      },
-    }
+    local state_data = worktree_delete_state()
     local store = workspace_store({
       state_data = state_data,
       write_state = function(_, next_state)
@@ -873,22 +731,7 @@ do
   with_filereadable(1, function()
     local deleted_instruction = false
     local removed_worktree = false
-    local state_data = {
-      projects = {
-        ["/repo"] = {
-          workspaces = {
-            review = review_workspace_record({
-              project_root = "/repo",
-              workspace_kind = "worktree",
-              git_common_dir = "/repo/.git",
-              worktree_path = "/codux-worktrees/review",
-              worktree_branch = "dev/review",
-              worktree_base = "main",
-            }),
-          },
-        },
-      },
-    }
+    local state_data = worktree_delete_state()
     local store = workspace_store({
       state_data = state_data,
       write_state = function()
@@ -931,22 +774,7 @@ do
     local rendered = false
     local closed = false
     local attempted_branch_delete = false
-    local state_data = {
-      projects = {
-        ["/repo"] = {
-          workspaces = {
-            review = review_workspace_record({
-              project_root = "/repo",
-              workspace_kind = "worktree",
-              git_common_dir = "/repo/.git",
-              worktree_path = "/codux-worktrees/review",
-              worktree_branch = "dev/review",
-              worktree_base = "main",
-            }),
-          },
-        },
-      },
-    }
+    local state_data = worktree_delete_state()
     local store = workspace_store({
       state_data = state_data,
       write_state = function(_, next_state)
@@ -1004,22 +832,7 @@ do
     local rendered = false
     local closed = false
     local removed_worktree = false
-    local state_data = {
-      projects = {
-        ["/repo"] = {
-          workspaces = {
-            review = review_workspace_record({
-              project_root = "/repo",
-              workspace_kind = "worktree",
-              git_common_dir = "/repo/.git",
-              worktree_path = "/codux-worktrees/review",
-              worktree_branch = "dev/review",
-              worktree_base = "main",
-            }),
-          },
-        },
-      },
-    }
+    local state_data = worktree_delete_state()
     local store = workspace_store({
       state_data = state_data,
       write_state = function(_, next_state)
@@ -1074,22 +887,7 @@ end
 do
   with_filereadable(1, function()
     local deleted_branch = false
-    local state_data = {
-      projects = {
-        ["/repo"] = {
-          workspaces = {
-            review = review_workspace_record({
-              project_root = "/repo",
-              workspace_kind = "worktree",
-              git_common_dir = "/repo/.git",
-              worktree_path = "/codux-worktrees/review",
-              worktree_branch = "dev/review",
-              worktree_base = "main",
-            }),
-          },
-        },
-      },
-    }
+    local state_data = worktree_delete_state()
     local store = workspace_store({
       state_data = state_data,
       write_state = function(_, next_state)

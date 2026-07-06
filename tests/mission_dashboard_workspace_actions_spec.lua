@@ -11,15 +11,14 @@ local ui_mod = require("codux.ui")
 local workspace_ui = require("codux.workspace_ui")
 
 local mission_role_entry = fixtures.mission_role_entry
+local notifications_fixture = fixtures.notifications
 
 do
   local sent_prompt
-  local notifications = {}
+  local notifications, notify = notifications_fixture()
   local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "idle" }
   local controller = mission_control_mod.new({
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
     ui = {
       single_line_prompt = function(opts, callback)
         assert_contains(opts.prompt, "Builder")
@@ -42,7 +41,7 @@ end
 do
   local old_key_choice_menu = ui_mod.key_choice_menu
   local selected
-  local notifications = {}
+  local notifications, notify = notifications_fixture()
   local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "question" }
   ui_mod.key_choice_menu = function(opts, callback)
     assert_contains(opts.title, "Builder")
@@ -52,9 +51,7 @@ do
     return true
   end
   local controller = mission_control_mod.new({
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
     ui = {
       single_line_prompt = function(opts, callback)
         assert_contains(opts.prompt, "Plan option Builder")
@@ -159,7 +156,7 @@ end
 
 do
   local old_key_choice_menu = ui_mod.key_choice_menu
-  local notifications = {}
+  local notifications, notify = notifications_fixture()
   local opened_picker = false
   local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "inactive" }
   ui_mod.key_choice_menu = function()
@@ -167,9 +164,7 @@ do
     return true
   end
   local controller = mission_control_mod.new({
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
   })
 
   assert_false(controller:open_workspace_question_answer(entry))
@@ -180,7 +175,7 @@ end
 
 do
   local calls = {}
-  local notifications = {}
+  local notifications, notify = notifications_fixture()
   local focused_win
   local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "question" }
   local controller = mission_control_mod.new({
@@ -188,9 +183,7 @@ do
       mission_dashboard_win = 10,
       mission_dashboard_command_win = 30,
     },
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
     is_valid_win = function(win)
       return win == 10 or win == 30
     end,
@@ -239,7 +232,7 @@ do
 end
 
 do
-  local notifications = {}
+  local notifications, notify = notifications_fixture()
   local focused_win
   local rendered = false
   local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "question" }
@@ -248,9 +241,7 @@ do
       mission_dashboard_win = 10,
       mission_dashboard_command_win = 30,
     },
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
     is_valid_win = function(win)
       return win == 10 or win == 30
     end,
@@ -282,7 +273,7 @@ end
 
 do
   local calls = {}
-  local notifications = {}
+  local notifications, notify = notifications_fixture()
   local rendered = false
   local entry = {
     name = "alpha-builder",
@@ -292,9 +283,7 @@ do
     codex_status = "working",
   }
   local controller = mission_control_mod.new({
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
     ui = {
       close_window = function() end,
       delete_buffer = function() end,
@@ -359,7 +348,7 @@ end
 
 do
   local prompted = false
-  local notifications = {}
+  local notifications, notify = notifications_fixture()
   local entry = {
     name = "alpha-builder",
     safe_name = "alpha-builder",
@@ -368,9 +357,7 @@ do
     codex_status = "working",
   }
   local controller = mission_control_mod.new({
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
     ui = {
       close_window = function() end,
       delete_buffer = function() end,
@@ -391,7 +378,7 @@ end
 
 do
   local calls = {}
-  local notifications = {}
+  local notifications, notify = notifications_fixture()
   local rendered = false
   local entry = {
     name = "alpha-builder",
@@ -401,9 +388,7 @@ do
     codex_mode = "plan",
   }
   local controller = mission_control_mod.new({
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
     ui = {
       close_window = function() end,
       delete_buffer = function() end,
@@ -424,7 +409,7 @@ do
 end
 
 do
-  local notifications = {}
+  local notifications, notify = notifications_fixture()
   local rendered = false
   local entry = {
     name = "alpha-builder",
@@ -434,9 +419,7 @@ do
     codex_mode = "plan",
   }
   local controller = mission_control_mod.new({
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
     ui = {
       close_window = function() end,
       delete_buffer = function() end,
@@ -455,13 +438,11 @@ do
 end
 
 do
-  local notifications = {}
+  local notifications, notify = notifications_fixture()
   local prompted = false
   local sent = false
   local controller = mission_control_mod.new({
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
+    notify = notify,
     ui = {
       single_line_prompt = function()
         prompted = true

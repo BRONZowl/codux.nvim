@@ -21,16 +21,12 @@ local with_filereadable = fixtures.with_filereadable
 local with_workspace_prepare_env = fixtures.with_workspace_prepare_env
 local workspace_prepare_runtime = fixtures.workspace_prepare_runtime
 local workspace_store = fixtures.workspace_store
+local prepare_harness = fixtures.prepare_harness
 do
   with_workspace_prepare_env(function()
-    local commands = {}
     local created = false
-    local store = workspace_store()
-    local runtime = workspace_prepare_runtime({
-      store = store.store,
-      system = function(args)
-        local command = table.concat(args, " ")
-        table.insert(commands, command)
+    local harness = prepare_harness({
+      system = function(_, command)
         if command == "tmux display-message -p #S" then
           return "session\n", 0
         end
@@ -53,6 +49,8 @@ do
         return "", 1
       end,
     })
+    local runtime = harness.runtime
+    local store = harness.store
 
     local workspace, error_message = runtime:prepare_workspace("review", {
       resolved_instruction = "review the backend",
@@ -65,8 +63,8 @@ do
     assert_equal(workspace.worktree_base_commit, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
     assert_equal(workspace.git_common_dir, "/repo/.git")
     assert_equal(workspace.target_path, "/codux-worktrees/review/file.lua")
-    assert_contains(table.concat(commands, "\n"), "git -C /repo status --porcelain")
-    assert_contains(table.concat(commands, "\n"), "git -C /repo worktree add -b dev/review /codux-worktrees/review main")
+    assert_contains(harness.command_text(), "git -C /repo status --porcelain")
+    assert_contains(harness.command_text(), "git -C /repo worktree add -b dev/review /codux-worktrees/review main")
     assert_equal(store.state_data().projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev/review")
     assert_equal(
       store.state_data().projects["/codux-worktrees/review"].workspaces.review.worktree_base_commit,
@@ -77,14 +75,9 @@ end
 
 do
   with_workspace_prepare_env(function()
-    local commands = {}
     local created = false
-    local store = workspace_store()
-    local runtime = workspace_prepare_runtime({
-      store = store.store,
-      system = function(args)
-        local command = table.concat(args, " ")
-        table.insert(commands, command)
+    local harness = prepare_harness({
+      system = function(_, command)
         if command == "tmux display-message -p #S" then
           return "session\n", 0
         end
@@ -113,6 +106,8 @@ do
         return "", 1
       end,
     })
+    local runtime = harness.runtime
+    local store = harness.store
 
     local workspace, error_message = runtime:prepare_workspace("mission-builder", {
       resolved_instruction = "builder instructions",
@@ -128,7 +123,7 @@ do
     assert_equal(workspace.permission_profile, "auto")
     assert_equal(workspace.status, "active")
     assert_equal(workspace.codex_status, "working")
-    assert_contains(table.concat(commands, "\n"), "start building")
+    assert_contains(harness.command_text(), "start building")
     local record = store.state_data().projects["/codux-worktrees/mission-builder"].workspaces["mission-builder"]
     assert_equal(record.permission_profile, "auto")
     assert_equal(record.mission_id, "mission:mission")
@@ -141,11 +136,8 @@ do
   with_workspace_prepare_env(function()
     local created = false
     local killed = false
-    local store = workspace_store()
-    local runtime = workspace_prepare_runtime({
-      store = store.store,
-      system = function(args)
-        local command = table.concat(args, " ")
+    local harness = prepare_harness({
+      system = function(_, command)
         if command == "tmux display-message -p #S" then
           return "session\n", 0
         end
@@ -186,6 +178,8 @@ do
         return "", 1
       end,
     })
+    local runtime = harness.runtime
+    local store = harness.store
 
     local workspace, error_message = runtime:prepare_workspace("mission-builder", {
       resolved_instruction = "builder instructions",
@@ -286,7 +280,6 @@ end
 
 do
   with_workspace_prepare_env(function()
-    local commands = {}
     local state_data = {
       projects = {
         ["/codux-worktrees/mission-builder"] = {
@@ -301,19 +294,18 @@ do
         },
       },
     }
-    local runtime = workspace_prepare_runtime({
-      store = workspace_store({
+    local harness = prepare_harness({
+      store = {
         state_data = state_data,
-      }).store,
-      system = function(args)
-        local command = table.concat(args, " ")
-        table.insert(commands, command)
+      },
+      system = function(_, command)
         if command == "tmux display-message -p #S" then
           return "session\n", 0
         end
         return "", 1
       end,
     })
+    local runtime = harness.runtime
     local mission = assert(mission_mod.plan("Mission", "Build it", {
       roles = {
         { name = "Builder" },
@@ -323,25 +315,21 @@ do
     local ok, error_message = runtime:preflight_mission(mission)
     assert_false(ok)
     assert_equal(error_message, "workspace already exists: mission-builder")
-    assert_equal(table.concat(commands, "\n"):find("worktree add", 1, true), nil)
+    assert_equal(harness.command_text():find("worktree add", 1, true), nil)
   end)
 end
 
 do
   with_workspace_prepare_env(function()
-    local commands = {}
     local windows = {}
     local next_window_id = 1
-    local store = workspace_store({
-      instruction_file_path = function(_, root, safe_name)
-        return root .. "/.agents/codux/" .. safe_name .. ".md"
-      end,
-    })
-    local runtime = workspace_prepare_runtime({
-      store = store.store,
-      system = function(args)
-        local command = table.concat(args, " ")
-        table.insert(commands, command)
+    local harness = prepare_harness({
+      store = {
+        instruction_file_path = function(_, root, safe_name)
+          return root .. "/.agents/codux/" .. safe_name .. ".md"
+        end,
+      },
+      system = function(_, command)
         if command == "tmux display-message -p #S" then
           return "session\n", 0
         end
@@ -383,6 +371,8 @@ do
         return "", 1
       end,
     })
+    local runtime = harness.runtime
+    local store = harness.store
 
     local mission, error_message = mission_mod.plan("Mission", "Build it", {
       roles = {
@@ -414,9 +404,9 @@ do
     assert_equal(#missions, 1)
     assert_equal(missions[1].name, "Mission")
     assert_equal(#missions[1].roles, 2)
-    assert_contains(table.concat(commands, "\n"), "git -C /repo status --porcelain")
-    assert_contains(table.concat(commands, "\n"), "--listen")
-    assert_contains(table.concat(commands, "\n"), "Start your Mission Control role now.")
+    assert_contains(harness.command_text(), "git -C /repo status --porcelain")
+    assert_contains(harness.command_text(), "--listen")
+    assert_contains(harness.command_text(), "Start your Mission Control role now.")
   end)
 end
 
@@ -510,14 +500,9 @@ end
 
 do
   with_workspace_prepare_env(function()
-    local commands = {}
     local created = false
-    local store = workspace_store()
-    local runtime = workspace_prepare_runtime({
-      store = store.store,
-      system = function(args)
-        local command = table.concat(args, " ")
-        table.insert(commands, command)
+    local harness = prepare_harness({
+      system = function(_, command)
         if command == "tmux display-message -p #S" then
           return "session\n", 0
         end
@@ -549,25 +534,23 @@ do
         return "", 1
       end,
     })
+    local runtime = harness.runtime
+    local store = harness.store
 
     local workspace, error_message = runtime:prepare_workspace("review", {
       resolved_instruction = "review the backend",
     })
     assert_nil(error_message)
     assert_equal(workspace.worktree_branch, "dev1/review")
-    assert_contains(table.concat(commands, "\n"), "git -C /repo worktree add -b dev1/review /codux-worktrees/review main")
+    assert_contains(harness.command_text(), "git -C /repo worktree add -b dev1/review /codux-worktrees/review main")
     assert_equal(store.state_data().projects["/codux-worktrees/review"].workspaces.review.worktree_branch, "dev1/review")
   end)
 end
 
 do
   with_workspace_prepare_env(function()
-    local commands = {}
-    local runtime = workspace_prepare_runtime({
-      store = workspace_store().store,
-      system = function(args)
-        local command = table.concat(args, " ")
-        table.insert(commands, command)
+    local harness = prepare_harness({
+      system = function(_, command)
         if command == "tmux display-message -p #S" then
           return "session\n", 0
         end
@@ -577,13 +560,14 @@ do
         return "", 1
       end,
     })
+    local runtime = harness.runtime
 
     local workspace, error_message = runtime:prepare_workspace("review", {
       resolved_instruction = "review the backend",
     })
     assert_nil(workspace)
     assert_equal(error_message, "current branch must be clean before creating a Codux workspace")
-    assert_equal(table.concat(commands, "\n"):find("worktree add", 1, true), nil)
+    assert_equal(harness.command_text():find("worktree add", 1, true), nil)
   end)
 end
 
@@ -790,34 +774,20 @@ end
 
 do
   with_workspace_prepare_env(function()
-    local commands = {}
     local killed = false
     local created = false
-    local store = workspace_store({
-      state_data = {
-        projects = {
-          ["/repo"] = {
-            workspaces = {
-              review = review_workspace_record({
-                name = "review",
-                safe_name = "review",
-                project_root = "/repo",
-                tmux_window = "review",
-                nvim_server = "/tmp/stale-review.sock",
-              }),
-            },
-          },
-        },
+    local harness = prepare_harness({
+      store = {
+        state_data = workspace_state({
+          review = review_workspace_record({
+            nvim_server = "/tmp/stale-review.sock",
+          }),
+        }),
+        read_instruction_file = function()
+          return "existing instructions"
+        end,
       },
-      read_instruction_file = function()
-        return "existing instructions"
-      end,
-    })
-    local runtime = workspace_prepare_runtime({
-      store = store.store,
-      system = function(args)
-        local command = table.concat(args, " ")
-        table.insert(commands, command)
+      system = function(_, command)
         if command == "tmux display-message -p #S" then
           return "session\n", 0
         end
@@ -847,6 +817,7 @@ do
         return "", 1
       end,
     })
+    local runtime = harness.runtime
 
     local workspace, error_message = runtime:prepare_workspace("review", {
       allow_existing = true,
@@ -859,7 +830,7 @@ do
     assert_contains(workspace.nvim_server, "/codux/ws-review-repo-")
     assert_true(killed)
     assert_true(created)
-    local command_text = table.concat(commands, "\n")
+    local command_text = harness.command_text()
     assert_contains(command_text, "tmux kill-window -t @1")
     assert_contains(command_text, "--listen")
     assert_contains(command_text, workspace.nvim_server)

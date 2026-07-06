@@ -4,6 +4,14 @@ local M = {}
 
 local runtime_mod = require("codux.workspace_runtime")
 
+local function copy_fields(fields)
+  local copy = {}
+  for key, value in pairs(fields or {}) do
+    copy[key] = value
+  end
+  return copy
+end
+
 function M.runtime_with_tmux(responses, state)
   return runtime_mod.new({
     state = state or {},
@@ -253,6 +261,39 @@ function M.workspace_prepare_runtime(opts)
   })
 end
 
+function M.command_text(commands)
+  return table.concat(commands or {}, "\n")
+end
+
+function M.prepare_harness(opts)
+  opts = opts or {}
+  local commands = opts.commands or {}
+  local store = opts.store_instance or M.workspace_store(opts.store)
+  local harness = {
+    commands = commands,
+    store = store,
+  }
+  function harness.command_text()
+    return M.command_text(commands)
+  end
+
+  local runtime_opts = copy_fields(opts.runtime)
+  runtime_opts.store = runtime_opts.store or store.store
+  runtime_opts.system = function(args)
+    local command = table.concat(args, " ")
+    table.insert(commands, command)
+    if opts.system then
+      local output, code = opts.system(args, command, harness)
+      if output ~= nil or code ~= nil then
+        return output or "", code or 0
+      end
+    end
+    return "", 1
+  end
+  harness.runtime = M.workspace_prepare_runtime(runtime_opts)
+  return harness
+end
+
 function M.workspace_store(opts)
   opts = opts or {}
   local state_data = opts.state_data or { projects = {} }
@@ -306,6 +347,101 @@ function M.workspace_delete_runtime(store, opts)
     system = opts.system,
     store = store,
   })
+end
+
+function M.review_debug_workspace_state(opts)
+  opts = opts or {}
+  local review = M.review_workspace_record({
+    status = "idle",
+    codex_status = "idle",
+    codex_mode = "plan",
+  })
+  local debug = M.review_workspace_record({
+    name = "debug",
+    safe_name = "debug",
+    tmux_window = "debug",
+    status = "active",
+    codex_status = "working",
+    codex_mode = "execute",
+  })
+  for key, value in pairs(opts.review or {}) do
+    review[key] = value
+  end
+  for key, value in pairs(opts.debug or {}) do
+    debug[key] = value
+  end
+  return M.workspace_state({
+    review = review,
+    debug = debug,
+  }, opts.project)
+end
+
+function M.worktree_delete_state(fields)
+  local record = {
+    project_root = "/repo",
+    workspace_kind = "worktree",
+    git_common_dir = "/repo/.git",
+    worktree_path = "/codux-worktrees/review",
+    worktree_branch = "dev/review",
+    worktree_base = "main",
+  }
+  for key, value in pairs(fields or {}) do
+    record[key] = value
+  end
+  return M.workspace_state({
+    review = M.review_workspace_record(record),
+  })
+end
+
+function M.with_tmux_env(value, callback)
+  local old_tmux = vim.env.TMUX
+  vim.env.TMUX = value
+  local ok, result = pcall(callback)
+  vim.env.TMUX = old_tmux
+  if not ok then
+    error(result, 0)
+  end
+  return result
+end
+
+function M.lifecycle_runtime(opts)
+  opts = opts or {}
+  local state_data = opts.state_data or M.review_debug_workspace_state()
+  local messages = opts.messages or {}
+  local runtime = runtime_mod.new({
+    state = opts.state or {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = opts.notify or function(message)
+      table.insert(messages, message)
+    end,
+    get_config = opts.get_config or function()
+      return { tmux_cmd = "tmux" }
+    end,
+    system = opts.system,
+    close_workspace_manager = opts.close_workspace_manager,
+    store = opts.store or {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-06-30T00:00:00Z"
+      end,
+      project_state = opts.project_state,
+      instruction_file_path = opts.instruction_file_path,
+    },
+  })
+  return {
+    runtime = runtime,
+    state_data = function()
+      return state_data
+    end,
+    messages = messages,
+  }
 end
 
 function M.with_tmux(callback)
