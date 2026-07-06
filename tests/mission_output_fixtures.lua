@@ -18,6 +18,52 @@ function M.output_buffer(lines)
   return bufnr
 end
 
+function M.preview()
+  return {
+    command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
+    preview_session = "codux-preview-test",
+  }
+end
+
+function M.role(safe_name, mission_role, status)
+  return {
+    safe_name = safe_name,
+    mission_role = mission_role,
+    status = status,
+  }
+end
+
+function M.dashboard_state_for_roles(roles, opts)
+  opts = type(opts) == "table" and opts or {}
+  return extend({
+    mission_dashboard_buf = 10,
+    mission_dashboard_win = 11,
+    mission_dashboard_items = {
+      [3] = {
+        kind = "mission",
+        mission = {
+          roles = roles,
+        },
+      },
+    },
+    mission_dashboard_selectable_rows = { 3 },
+    mission_dashboard_search_confirmed = true,
+    mission_dashboard_selected_row = 3,
+  }, opts)
+end
+
+function M.set_lines_to_buffer(target, lines, opts)
+  opts = type(opts) == "table" and opts or {}
+  if opts.modifiable then
+    vim.api.nvim_set_option_value("modifiable", true, { buf = target })
+  end
+  vim.api.nvim_buf_set_lines(target, 0, -1, false, lines)
+  if opts.modifiable then
+    vim.api.nvim_set_option_value("modifiable", false, { buf = target })
+  end
+  return true
+end
+
 function M.controller(opts)
   opts = type(opts) == "table" and opts or {}
   local ctx = {
@@ -25,14 +71,19 @@ function M.controller(opts)
     rendered_lines = nil,
   }
 
+  local controller_state = extend({
+    mission_dashboard_output_buf = ctx.bufnr,
+    mission_dashboard_output_win = opts.output_win or 13,
+  }, opts.state)
+
   local controller_opts = extend({
     namespace = opts.namespace,
-    state = extend({
-      mission_dashboard_output_buf = ctx.bufnr,
-      mission_dashboard_output_win = opts.output_win or 13,
-    }, opts.state),
+    state = controller_state,
     is_loaded_buf = function(target)
-      return target == ctx.bufnr and vim.api.nvim_buf_is_loaded(target)
+      return (target == ctx.bufnr and vim.api.nvim_buf_is_loaded(target)) or target == controller_state.mission_dashboard_buf
+    end,
+    is_valid_win = function(win)
+      return win == controller_state.mission_dashboard_win or win == controller_state.mission_dashboard_output_win
     end,
     ui = {
       set_lines = function(_, lines)

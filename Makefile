@@ -29,6 +29,7 @@ TEST_SPECS := \
 	tests/workspace_registry_spec.lua \
 	tests/workspace_remote_actions_spec.lua \
 	tests/workspace_remote_spec.lua \
+	tests/workspace_runtime_remote_spec.lua \
 	tests/workspace_runtime_spec.lua \
 	tests/workspace_store_spec.lua \
 	tests/workspace_sync_spec.lua \

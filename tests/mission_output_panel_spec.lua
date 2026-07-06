@@ -236,10 +236,7 @@ if type(vim.api) == "table" then
       end,
     },
     workspace_interactive_preview = function()
-      return {
-        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
-        preview_session = "codux-preview-test",
-      }, nil
+      return output_fixtures.preview(), nil
     end,
     termopen = function()
       modified_at_termopen = vim.api.nvim_get_option_value("modified", { buf = bufnr })
@@ -258,48 +255,16 @@ if type(vim.api) == "table" then
 end
 
 if type(vim.api) == "table" then
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  local rendered_lines
   local preview_called = false
-  local controller = mission_control_mod.new({
-    state = {
-      mission_dashboard_buf = 10,
-      mission_dashboard_win = 11,
-      mission_dashboard_output_buf = bufnr,
-      mission_dashboard_output_win = 13,
-      mission_dashboard_items = {
-        [3] = {
-          kind = "mission",
-          mission = {
-            roles = {
-              { safe_name = "alpha-builder", mission_role = "Builder", status = "inactive" },
-              { safe_name = "alpha-reviewer", mission_role = "Reviewer", status = "idle" },
-            },
-          },
-        },
-      },
-      mission_dashboard_selectable_rows = { 3 },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 3,
-    },
-    is_loaded_buf = function(target)
-      return target == 10 or (target == bufnr and vim.api.nvim_buf_is_loaded(target))
-    end,
-    is_valid_win = function(win)
-      return win == 11 or win == 13
-    end,
-    ui = {
-      set_lines = function(_, lines)
-        rendered_lines = lines
-      end,
-    },
+  local controller, ctx = output_fixtures.controller({
+    state = output_fixtures.dashboard_state_for_roles({
+      output_fixtures.role("alpha-builder", "Builder", "inactive"),
+      output_fixtures.role("alpha-reviewer", "Reviewer", "idle"),
+    }),
     workspace_interactive_preview = function(entry)
       preview_called = true
       assert_equal(entry.safe_name, "alpha-reviewer")
-      return {
-        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
-        preview_session = "codux-preview-test",
-      }, nil
+      return output_fixtures.preview(), nil
     end,
     termopen = function()
       return 77
@@ -309,55 +274,22 @@ if type(vim.api) == "table" then
   assert_nil(controller:selected_output_entry())
   assert_true(controller:render_output_panel())
   assert_false(preview_called)
-  assert_equal(table.concat(rendered_lines, "\n"), "Output: select a workspace row to preview its Codux session")
+  assert_equal(table.concat(ctx.rendered_lines, "\n"), "Output: select a workspace row to preview its Codux session")
   assert_nil(controller.state.mission_dashboard_output_entry)
   assert_nil(controller.state.mission_dashboard_output_job)
-  vim.api.nvim_buf_delete(bufnr, { force = true })
+  output_fixtures.delete_buffer(ctx.bufnr)
 end
 
 if type(vim.api) == "table" then
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  local rendered_lines
   local preview_entry
-  local controller = mission_control_mod.new({
-    state = {
-      mission_dashboard_buf = 10,
-      mission_dashboard_win = 11,
-      mission_dashboard_output_buf = bufnr,
-      mission_dashboard_output_win = 13,
-      mission_dashboard_items = {
-        [3] = {
-          kind = "mission",
-          mission = {
-            roles = {
-              { safe_name = "alpha-architect", mission_role = "Architect", status = "active" },
-              { safe_name = "alpha-reviewer", mission_role = "Reviewer", status = "question" },
-            },
-          },
-        },
-      },
-      mission_dashboard_selectable_rows = { 3 },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 3,
-    },
-    is_loaded_buf = function(target)
-      return target == 10 or (target == bufnr and vim.api.nvim_buf_is_loaded(target))
-    end,
-    is_valid_win = function(win)
-      return win == 11 or win == 13
-    end,
-    ui = {
-      set_lines = function(_, lines)
-        rendered_lines = lines
-        return true
-      end,
-    },
+  local controller, ctx = output_fixtures.controller({
+    state = output_fixtures.dashboard_state_for_roles({
+      output_fixtures.role("alpha-architect", "Architect", "active"),
+      output_fixtures.role("alpha-reviewer", "Reviewer", "question"),
+    }),
     workspace_interactive_preview = function(entry)
       preview_entry = entry
-      return {
-        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
-        preview_session = "codux-preview-test",
-      }, nil
+      return output_fixtures.preview(), nil
     end,
     termopen = function()
       return 77
@@ -367,47 +299,18 @@ if type(vim.api) == "table" then
   assert_nil(controller:selected_output_entry())
   assert_true(controller:render_output_panel())
   assert_nil(preview_entry)
-  assert_equal(table.concat(rendered_lines, "\n"), "Output: select a workspace row to preview its Codux session")
+  assert_equal(table.concat(ctx.rendered_lines, "\n"), "Output: select a workspace row to preview its Codux session")
   assert_nil(controller.state.mission_dashboard_output_entry)
-  vim.api.nvim_buf_delete(bufnr, { force = true })
+  output_fixtures.delete_buffer(ctx.bufnr)
 end
 
 if type(vim.api) == "table" then
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  local rendered_lines
   local preview_called = false
-  local controller = mission_control_mod.new({
-    state = {
-      mission_dashboard_buf = 10,
-      mission_dashboard_win = 11,
-      mission_dashboard_output_buf = bufnr,
-      mission_dashboard_output_win = 13,
-      mission_dashboard_items = {
-        [3] = {
-          kind = "mission",
-          mission = {
-            roles = {
-              { safe_name = "alpha-builder", mission_role = "Builder", status = "inactive" },
-              { safe_name = "alpha-reviewer", mission_role = "Reviewer", status = "inactive" },
-            },
-          },
-        },
-      },
-      mission_dashboard_selectable_rows = { 3 },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 3,
-    },
-    is_loaded_buf = function(target)
-      return target == 10 or (target == bufnr and vim.api.nvim_buf_is_loaded(target))
-    end,
-    is_valid_win = function(win)
-      return win == 11 or win == 13
-    end,
-    ui = {
-      set_lines = function(_, lines)
-        rendered_lines = lines
-      end,
-    },
+  local controller, ctx = output_fixtures.controller({
+    state = output_fixtures.dashboard_state_for_roles({
+      output_fixtures.role("alpha-builder", "Builder", "inactive"),
+      output_fixtures.role("alpha-reviewer", "Reviewer", "inactive"),
+    }),
     workspace_interactive_preview = function()
       preview_called = true
       return nil, "should not be called"
@@ -417,35 +320,18 @@ if type(vim.api) == "table" then
   assert_nil(controller:selected_output_entry())
   assert_true(controller:render_output_panel())
   assert_false(preview_called)
-  assert_equal(table.concat(rendered_lines, "\n"), "Output: select a workspace row to preview its Codux session")
+  assert_equal(table.concat(ctx.rendered_lines, "\n"), "Output: select a workspace row to preview its Codux session")
   assert_nil(controller.state.mission_dashboard_output_entry)
   assert_nil(controller.state.mission_dashboard_output_job)
-  vim.api.nvim_buf_delete(bufnr, { force = true })
+  output_fixtures.delete_buffer(ctx.bufnr)
 end
 
 if type(vim.api) == "table" then
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  local rendered_lines
   local closed_preview
   local termopen_calls = 0
-  local controller = mission_control_mod.new({
-    state = {
-      mission_dashboard_output_buf = bufnr,
-      mission_dashboard_output_win = 13,
-    },
-    is_loaded_buf = function(target)
-      return target == bufnr and vim.api.nvim_buf_is_loaded(target)
-    end,
-    ui = {
-      set_lines = function(_, lines)
-        rendered_lines = lines
-      end,
-    },
+  local controller, ctx = output_fixtures.controller({
     workspace_interactive_preview = function()
-      return {
-        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
-        preview_session = "codux-preview-test",
-      }, nil
+      return output_fixtures.preview(), nil
     end,
     close_workspace_interactive_preview = function(preview)
       closed_preview = preview
@@ -462,7 +348,7 @@ if type(vim.api) == "table" then
     mission_role = "Reviewer",
     status = "idle",
   }))
-  local rendered_text = table.concat(rendered_lines, "\n")
+  local rendered_text = table.concat(ctx.rendered_lines, "\n")
   assert_contains(rendered_text, "failed to attach workspace session preview: ")
   assert_contains(rendered_text, "permission denied")
   assert_contains(rendered_text, "env -u TMUX tmux attach-session -t codux-preview-test")
@@ -476,31 +362,14 @@ if type(vim.api) == "table" then
     status = "idle",
   }))
   assert_equal(termopen_calls, 1)
-  vim.api.nvim_buf_delete(bufnr, { force = true })
+  output_fixtures.delete_buffer(ctx.bufnr)
 end
 
 if type(vim.api) == "table" then
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  local rendered_lines
   local on_exit
-  local controller = mission_control_mod.new({
-    state = {
-      mission_dashboard_output_buf = bufnr,
-      mission_dashboard_output_win = 13,
-    },
-    is_loaded_buf = function(target)
-      return target == bufnr and vim.api.nvim_buf_is_loaded(target)
-    end,
-    ui = {
-      set_lines = function(_, lines)
-        rendered_lines = lines
-      end,
-    },
+  local controller, ctx = output_fixtures.controller({
     workspace_interactive_preview = function()
-      return {
-        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
-        preview_session = "codux-preview-test",
-      }, nil
+      return output_fixtures.preview(), nil
     end,
     termopen = function(_, opts)
       on_exit = opts.on_exit
@@ -522,33 +391,16 @@ if type(vim.api) == "table" then
     status = "inactive",
   }))
   on_exit(77, 2)
-  assert_equal(table.concat(rendered_lines, "\n"), "Output: workspace inactive")
-  vim.api.nvim_buf_delete(bufnr, { force = true })
+  assert_equal(table.concat(ctx.rendered_lines, "\n"), "Output: workspace inactive")
+  output_fixtures.delete_buffer(ctx.bufnr)
 end
 
 if type(vim.api) == "table" then
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  local rendered_lines
   local closed_preview
   local termopen_calls = 0
-  local controller = mission_control_mod.new({
-    state = {
-      mission_dashboard_output_buf = bufnr,
-      mission_dashboard_output_win = 13,
-    },
-    is_loaded_buf = function(target)
-      return target == bufnr and vim.api.nvim_buf_is_loaded(target)
-    end,
-    ui = {
-      set_lines = function(_, lines)
-        rendered_lines = lines
-      end,
-    },
+  local controller, ctx = output_fixtures.controller({
     workspace_interactive_preview = function()
-      return {
-        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
-        preview_session = "codux-preview-test",
-      }, nil
+      return output_fixtures.preview(), nil
     end,
     close_workspace_interactive_preview = function(preview)
       closed_preview = preview
@@ -565,7 +417,7 @@ if type(vim.api) == "table" then
     mission_role = "Reviewer",
     status = "idle",
   }))
-  local rendered_text = table.concat(rendered_lines, "\n")
+  local rendered_text = table.concat(ctx.rendered_lines, "\n")
   assert_contains(rendered_text, "failed to attach workspace session preview: invalid job id 0")
   assert_contains(rendered_text, "env -u TMUX tmux attach-session -t codux-preview-test")
   assert_equal(closed_preview.preview_session, "codux-preview-test")
@@ -578,33 +430,16 @@ if type(vim.api) == "table" then
     status = "idle",
   }))
   assert_equal(termopen_calls, 1)
-  vim.api.nvim_buf_delete(bufnr, { force = true })
+  output_fixtures.delete_buffer(ctx.bufnr)
 end
 
 if type(vim.api) == "table" then
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  local rendered_lines
   local closed_preview
   local on_exit
   local termopen_calls = 0
-  local controller = mission_control_mod.new({
-    state = {
-      mission_dashboard_output_buf = bufnr,
-      mission_dashboard_output_win = 13,
-    },
-    is_loaded_buf = function(target)
-      return target == bufnr and vim.api.nvim_buf_is_loaded(target)
-    end,
-    ui = {
-      set_lines = function(_, lines)
-        rendered_lines = lines
-      end,
-    },
+  local controller, ctx = output_fixtures.controller({
     workspace_interactive_preview = function()
-      return {
-        command = { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "codux-preview-test" },
-        preview_session = "codux-preview-test",
-      }, nil
+      return output_fixtures.preview(), nil
     end,
     close_workspace_interactive_preview = function(preview)
       closed_preview = preview
@@ -624,7 +459,7 @@ if type(vim.api) == "table" then
   }))
   assert_equal(controller.state.mission_dashboard_output_job, 77)
   on_exit(77, 2)
-  assert_contains(table.concat(rendered_lines, "\n"), "workspace preview exited with code 2")
+  assert_contains(table.concat(ctx.rendered_lines, "\n"), "workspace preview exited with code 2")
   assert_equal(closed_preview.preview_session, "codux-preview-test")
   assert_nil(controller.state.mission_dashboard_output_job)
   assert_nil(controller.state.mission_dashboard_output_preview)
@@ -635,26 +470,12 @@ if type(vim.api) == "table" then
     status = "idle",
   }))
   assert_equal(termopen_calls, 1)
-  vim.api.nvim_buf_delete(bufnr, { force = true })
+  output_fixtures.delete_buffer(ctx.bufnr)
 end
 
 if type(vim.api) == "table" then
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  local rendered_lines
   local preview_called = false
-  local controller = mission_control_mod.new({
-    state = {
-      mission_dashboard_output_buf = bufnr,
-      mission_dashboard_output_win = 13,
-    },
-    is_loaded_buf = function(target)
-      return target == bufnr and vim.api.nvim_buf_is_loaded(target)
-    end,
-    ui = {
-      set_lines = function(_, lines)
-        rendered_lines = lines
-      end,
-    },
+  local controller, ctx = output_fixtures.controller({
     workspace_interactive_preview = function()
       preview_called = true
       return nil, "should not be called"
@@ -667,13 +488,13 @@ if type(vim.api) == "table" then
     status = "inactive",
   }))
   assert_false(preview_called)
-  local rendered_text = table.concat(rendered_lines, "\n")
+  local rendered_text = table.concat(ctx.rendered_lines, "\n")
   assert_contains(rendered_text, "Output: workspace inactive")
   assert_equal(rendered_text:find("Output: Reviewer", 1, true), nil)
   assert_equal(rendered_text:find("alpha-reviewer", 1, true), nil)
   assert_equal(rendered_text:find("Ctrl-o workspace", 1, true), nil)
   assert_equal(rendered_text:find("Ctrl-q", 1, true), nil)
-  vim.api.nvim_buf_delete(bufnr, { force = true })
+  output_fixtures.delete_buffer(ctx.bufnr)
 end
 
 if type(vim.api) == "table" then

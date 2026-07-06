@@ -1,24 +1,22 @@
 local M = {}
 M.__index = M
 
-local action_palette_mod = require("codux.action_palette")
+local control_defaults = require("codux.mission_control_defaults")
 local dashboard_actions = require("codux.mission_dashboard_actions")
+local dashboard_action_palette = require("codux.mission_dashboard_action_palette")
 local dashboard_command_bar = require("codux.mission_dashboard_command_bar")
 local dashboard_layout = require("codux.mission_dashboard_layout")
 local dashboard_render = require("codux.mission_dashboard_render")
-local dashboard_search_mod = require("codux.dashboard_search")
+local dashboard_search_controller = require("codux.mission_dashboard_search_controller")
 local mission_dashboard = require("codux.mission_dashboard")
 local dashboard_selection = require("codux.mission_dashboard_selection")
 local dashboard_viewport = require("codux.mission_dashboard_viewport")
 local dashboard_windows = require("codux.mission_dashboard_windows")
 local mission_objective_editor = require("codux.mission_objective_editor")
 local mission_preview = require("codux.mission_preview")
-local mission_mod = require("codux.mission")
 local text_util = require("codux.text")
 local ui = require("codux.ui")
 local output_panel = require("codux.mission_output_panel")
-
-local function noop() end
 
 local function trim(value)
   return text_util.trim(value)
@@ -27,288 +25,15 @@ end
 local dashboard_command_items = mission_dashboard.command_items()
 
 function M.new(opts)
-  opts = type(opts) == "table" and opts or {}
-  local controller = {
-    state = type(opts.state) == "table" and opts.state or {},
-    mission = type(opts.mission) == "table" and opts.mission or mission_mod,
-    ui = type(opts.ui) == "table" and opts.ui or ui,
-    workspace_ui = type(opts.workspace_ui) == "table" and opts.workspace_ui or require("codux.workspace_ui"),
-    is_valid_win = type(opts.is_valid_win) == "function" and opts.is_valid_win or ui.is_valid_win,
-    is_loaded_buf = type(opts.is_loaded_buf) == "function" and opts.is_loaded_buf or ui.is_loaded_buf,
-    window_buffer = type(opts.window_buffer) == "function" and opts.window_buffer or function()
-      return nil
-    end,
-    buffer_filetype = type(opts.buffer_filetype) == "function" and opts.buffer_filetype or function()
-      return nil
-    end,
-    get_window_config = type(opts.get_window_config) == "function" and opts.get_window_config or function(win)
-      local ok, config = pcall(vim.api.nvim_win_get_config, win)
-      return ok and type(config) == "table" and config or {}
-    end,
-    set_window_config = type(opts.set_window_config) == "function" and opts.set_window_config or function(win, config)
-      return pcall(vim.api.nvim_win_set_config, win, config)
-    end,
-    get_window_height = type(opts.get_window_height) == "function" and opts.get_window_height or function(win)
-      local ok, height = pcall(vim.api.nvim_win_get_height, win)
-      return ok and type(height) == "number" and height or nil
-    end,
-    get_window_width = type(opts.get_window_width) == "function" and opts.get_window_width or function(win)
-      local ok, width = pcall(vim.api.nvim_win_get_width, win)
-      return ok and type(width) == "number" and width or nil
-    end,
-    get_current_win = type(opts.get_current_win) == "function" and opts.get_current_win or function()
-      local ok, win = pcall(vim.api.nvim_get_current_win)
-      return ok and type(win) == "number" and win or nil
-    end,
-    get_window_cursor = type(opts.get_window_cursor) == "function" and opts.get_window_cursor or function(win)
-      local ok, cursor = pcall(vim.api.nvim_win_get_cursor, win)
-      return ok and type(cursor) == "table" and cursor or nil
-    end,
-    set_current_win = type(opts.set_current_win) == "function" and opts.set_current_win or function(win)
-      return pcall(vim.api.nvim_set_current_win, win)
-    end,
-    set_window_cursor = type(opts.set_window_cursor) == "function" and opts.set_window_cursor or function(win, cursor)
-      return pcall(vim.api.nvim_win_set_cursor, win, cursor)
-    end,
-    reveal_window_row = type(opts.reveal_window_row) == "function" and opts.reveal_window_row
-      or dashboard_viewport.reveal_window_row,
-    notify = type(opts.notify) == "function" and opts.notify or noop,
-    token_usage_label = type(opts.token_usage_label) == "function" and opts.token_usage_label or function()
-      return ""
-    end,
-    refresh_token_usage = type(opts.refresh_token_usage) == "function" and opts.refresh_token_usage or noop,
-    token_usage_refresh_ms = type(opts.token_usage_refresh_ms) == "function" and opts.token_usage_refresh_ms or function()
-      return 60000
-    end,
-    token_usage_now_ms = type(opts.token_usage_now_ms) == "function" and opts.token_usage_now_ms or function()
-      local loop = vim.uv or vim.loop
-      if loop and type(loop.now) == "function" then
-        return loop.now()
-      end
-      return os.time() * 1000
-    end,
-    create_mission = type(opts.create_mission) == "function" and opts.create_mission or noop,
-    create_workspace_prompt = type(opts.create_workspace_prompt) == "function" and opts.create_workspace_prompt or noop,
-    workspace_entries_for_project = type(opts.workspace_entries_for_project) == "function"
-        and opts.workspace_entries_for_project
-      or function()
-        return {}
-      end,
-    missions_for_project = type(opts.missions_for_project) == "function" and opts.missions_for_project or nil,
-    edit_saved_workspace_instruction = type(opts.edit_saved_workspace_instruction) == "function"
-        and opts.edit_saved_workspace_instruction
-      or noop,
-    delete_saved_workspace = type(opts.delete_saved_workspace) == "function" and opts.delete_saved_workspace or noop,
-    close_saved_workspace_window = type(opts.close_saved_workspace_window) == "function"
-        and opts.close_saved_workspace_window
-      or noop,
-    workspace_interactive_preview = type(opts.workspace_interactive_preview) == "function" and opts.workspace_interactive_preview
-      or function()
-        return nil, "workspace preview unavailable"
-      end,
-    close_workspace_interactive_preview = type(opts.close_workspace_interactive_preview) == "function"
-        and opts.close_workspace_interactive_preview
-      or noop,
-    send_prompt_to_workspace = type(opts.send_prompt_to_workspace) == "function" and opts.send_prompt_to_workspace
-      or function()
-        return false, "workspace prompt unavailable"
-      end,
-    select_workspace_question_option = type(opts.select_workspace_question_option) == "function"
-        and opts.select_workspace_question_option
-      or function()
-        return false, "workspace answer unavailable"
-      end,
-    submit_workspace_question_note = type(opts.submit_workspace_question_note) == "function"
-        and opts.submit_workspace_question_note
-      or function()
-        return false, "workspace note unavailable"
-      end,
-    interrupt_workspace = type(opts.interrupt_workspace) == "function" and opts.interrupt_workspace or function()
-      return false, "workspace interrupt unavailable"
-    end,
-    switch_workspace_mode = type(opts.switch_workspace_mode) == "function" and opts.switch_workspace_mode or function()
-      return false, "workspace mode switch unavailable"
-    end,
-    update_mission_objective = type(opts.update_mission_objective) == "function"
-        and opts.update_mission_objective
-      or noop,
-    mission_dirty_roles = type(opts.mission_dirty_roles) == "function" and opts.mission_dirty_roles or function()
-      return {}
-    end,
-    workspace_branch_state = type(opts.workspace_branch_state) == "function" and opts.workspace_branch_state or function(entry)
-      entry = type(entry) == "table" and entry or {}
-      return {
-        worktree = entry.workspace_kind == "worktree",
-        branch = entry.worktree_branch,
-        base = entry.worktree_base,
-        ahead_count = 0,
-        merged = false,
-      }
-    end,
-    start_mission = type(opts.start_mission) == "function" and opts.start_mission or noop,
-    close_mission = type(opts.close_mission) == "function" and opts.close_mission or noop,
-    delete_mission = type(opts.delete_mission) == "function" and opts.delete_mission or noop,
-    project_root = type(opts.project_root) == "function" and opts.project_root or function()
-      return vim.loop.cwd()
-    end,
-    set_buffer_keymap = type(opts.set_buffer_keymap) == "function" and opts.set_buffer_keymap or ui.set_keymap,
-    bind_close_keys = type(opts.bind_close_keys) == "function" and opts.bind_close_keys or ui.bind_close_keys,
-    termopen = type(opts.termopen) == "function" and opts.termopen or function(command, term_opts)
-      return vim.fn.termopen(command, term_opts)
-    end,
-    jobstop = type(opts.jobstop) == "function" and opts.jobstop or function(job_id)
-      return vim.fn.jobstop(job_id)
-    end,
-    namespace = opts.namespace
-      or (vim.api and vim.api.nvim_create_namespace and vim.api.nvim_create_namespace("codux.mission_control"))
-      or 0,
-  }
-
-  return setmetatable(controller, M)
+  return setmetatable(control_defaults.normalize(opts), M)
 end
 
 function M:action_palette_controller()
-  return action_palette_mod.new({
-    state = self.state,
-    ui = self.ui,
-    is_valid_win = self.is_valid_win,
-    is_loaded_buf = self.is_loaded_buf,
-    get_window_cursor = self.get_window_cursor,
-    set_window_cursor = self.set_window_cursor,
-    set_buffer_keymap = self.set_buffer_keymap,
-    bind_close_keys = self.bind_close_keys,
-    notify = self.notify,
-    namespace = self.namespace,
-    win_key = "mission_dashboard_action_win",
-    buf_key = "mission_dashboard_action_buf",
-    sink_win_key = "mission_dashboard_action_sink_win",
-    sink_buf_key = "mission_dashboard_action_sink_buf",
-    items_key = "mission_dashboard_action_items",
-    key_only = true,
-    create_buffer_options = {
-      bufhidden = "wipe",
-      filetype = "codux-missions-actions",
-      buftype = "nofile",
-      swapfile = false,
-      modifiable = false,
-    },
-    items = function(target, kind)
-      if kind == "workspace" then
-        return self.workspace_ui.role_workspace_action_items(target)
-      end
-      return self.workspace_ui.mission_action_items(target)
-    end,
-    line_for = function(item, width, target, kind)
-      if kind == "workspace" then
-        return self.workspace_ui.role_workspace_action_line(item, width)
-      end
-      return self.workspace_ui.mission_action_line(item, width)
-    end,
-    width = function()
-      return self:action_palette_width()
-    end,
-    window_config = function(target, item_count, kind)
-      return self:action_palette_config(target, item_count, kind)
-    end,
-    target = function()
-      return self:action_palette_target()
-    end,
-    assign_open_state = function(palette, target, kind, action_items, bufnr)
-      palette.state.mission_dashboard_action_buf = bufnr
-      palette.state.mission_dashboard_action_items = action_items
-      palette.state.mission_dashboard_action_mission = kind == "workspace" and nil or target
-      palette.state.mission_dashboard_action_workspace = kind == "workspace" and target or nil
-      palette.state.mission_dashboard_action_kind = kind
-    end,
-    clear_state = function(palette)
-      palette.state.mission_dashboard_action_win = nil
-      palette.state.mission_dashboard_action_buf = nil
-      palette.state.mission_dashboard_action_sink_win = nil
-      palette.state.mission_dashboard_action_sink_buf = nil
-      palette.state.mission_dashboard_action_items = {}
-      palette.state.mission_dashboard_action_mission = nil
-      palette.state.mission_dashboard_action_workspace = nil
-      palette.state.mission_dashboard_action_kind = nil
-    end,
-    action_label = function(_, kind)
-      return kind == "workspace" and "Workspace" or "Mission"
-    end,
-    create_error = function(_, kind)
-      local label = kind == "workspace" and "workspace" or "mission"
-      return "Failed to create Codux " .. label .. " actions"
-    end,
-    open_error = function(_, kind)
-      local label = kind == "workspace" and "workspace" or "mission"
-      return "Failed to open Codux " .. label .. " actions"
-    end,
-    after_create_buffer = function(bufnr)
-      ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
-    end,
-    run_action = function(action, target)
-      return self:run_action(action, target)
-    end,
-  })
+  return dashboard_action_palette.new(self)
 end
 
 function M:dashboard_search_controller()
-  return dashboard_search_mod.new({
-    state = self.state,
-    ui = self.ui,
-    is_valid_win = self.is_valid_win,
-    is_loaded_buf = self.is_loaded_buf,
-    set_current_win = self.set_current_win,
-    get_current_win = self.get_current_win,
-    set_window_cursor = self.set_window_cursor,
-    set_window_config = self.set_window_config,
-    set_buffer_keymap = self.set_buffer_keymap,
-    bind_close_keys = self.bind_close_keys,
-    notify = self.notify,
-    main_win = function()
-      return self.state.mission_dashboard_win
-    end,
-    cursor_width = function()
-      return self:window_width()
-    end,
-    window_config = function()
-      return self:dashboard_search_config()
-    end,
-    render_owner = function()
-      return self:render_dashboard()
-    end,
-    focus_list = function()
-      return self:focus_mission_list()
-    end,
-    close_owner = function()
-      return self:close_dashboard()
-    end,
-    after_create_buffer = function(bufnr)
-      ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
-    end,
-    create_buffer_options = {
-      bufhidden = "wipe",
-      filetype = "codux-missions-search",
-      buftype = "nofile",
-      swapfile = false,
-      modifiable = false,
-    },
-    win_key = "mission_dashboard_search_win",
-    buf_key = "mission_dashboard_search_buf",
-    query_key = "mission_dashboard_query",
-    selected_key = "mission_dashboard_selected_row",
-    best_match_key = "mission_dashboard_best_match_row",
-    focus_match_key = "mission_dashboard_focus_match",
-    confirmed_key = "mission_dashboard_search_confirmed",
-    create_error = "Failed to create Codux mission search",
-    open_error = "Failed to open Codux mission search",
-    close_desc = "Close Codux Missions",
-    focus_list_desc = "Focus Codux Mission List",
-    select_desc = "Select Codux Mission",
-    select_error = "No Codux mission selected",
-    delete_desc = "Delete Codux Mission Search Character",
-    clear_desc = "Clear Codux Mission Search",
-    search_desc = "Search Codux Missions",
-    augroup_prefix = "codux-mission-search-",
-  })
+  return dashboard_search_controller.new(self)
 end
 
 function M:window_height()
