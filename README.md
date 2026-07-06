@@ -2,7 +2,6 @@
   <img src="assets/codux-title.svg" alt="codux.nvim" width="900">
 </p>
 
-# codux.nvim
 
 codux.nvim runs the OpenAI Codex CLI from Neovim and keeps the session close to
 the code you are already editing. It provides a persistent floating terminal,
