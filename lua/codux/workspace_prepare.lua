@@ -103,19 +103,28 @@ function M.prepare(runtime, name, opts)
   local file_instruction = runtime:read_instruction_file(root, safe_name_or_error)
   if type(existing) == "table" and not opts.allow_existing then
     if creating_worktree then
-      runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      if cleanup_ok == false then
+        return nil, "workspace already exists; cleanup failed: " .. tostring(cleanup_error)
+      end
     end
     return nil, "workspace already exists"
   end
   if type(existing) == "table" and existing.name ~= display_name and not opts.allow_existing then
     if creating_worktree then
-      runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      if cleanup_ok == false then
+        return nil, "workspace already exists; cleanup failed: " .. tostring(cleanup_error)
+      end
     end
     return nil, "workspace already exists"
   end
   if type(existing) ~= "table" and file_instruction and not opts.allow_existing then
     if creating_worktree then
-      runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      if cleanup_ok == false then
+        return nil, "workspace already exists; cleanup failed: " .. tostring(cleanup_error)
+      end
     end
     return nil, "workspace already exists"
   end
@@ -208,7 +217,10 @@ function M.prepare(runtime, name, opts)
     })
   if not window_id then
     if creating_worktree then
-      runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      if cleanup_ok == false then
+        return nil, "Failed to create tmux window " .. workspace.window_name .. "; cleanup failed: " .. tostring(cleanup_error)
+      end
     end
     return nil, "Failed to create tmux window " .. workspace.window_name
   end
@@ -223,7 +235,10 @@ function M.prepare(runtime, name, opts)
       runtime:kill_tmux_window(window_id)
     end
     if creating_worktree then
-      runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      if cleanup_ok == false then
+        return nil, tostring(instruction_error) .. "; cleanup failed: " .. tostring(cleanup_error)
+      end
     end
     return nil, instruction_error
   end
@@ -263,7 +278,10 @@ function M.prepare(runtime, name, opts)
       runtime:delete_instruction_file(workspace.project_root, workspace.safe_name)
     end
     if creating_worktree then
-      runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      if cleanup_ok == false then
+        return nil, tostring(write_error) .. "; cleanup failed: " .. tostring(cleanup_error)
+      end
     end
     return nil, write_error
   end
@@ -284,7 +302,10 @@ function M.prepare(runtime, name, opts)
         if wrote_new_instruction_file then
           runtime:delete_instruction_file(workspace.project_root, workspace.safe_name)
         end
-        runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+        local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+        if cleanup_ok == false then
+          return nil, tostring(verify_error or "workspace did not become ready") .. "; cleanup failed: " .. tostring(cleanup_error)
+        end
       else
         local current_project = runtime:project_state(state_data, root)
         local record = current_project.workspaces[workspace.safe_name]

@@ -72,11 +72,13 @@ function M.normalize(opts)
       return os.time() * 1000
     end),
     create_mission = opt_function(opts, "create_mission", noop),
+    cleanup_mission_residue = opt_function(opts, "cleanup_mission_residue", nil),
     create_workspace_prompt = opt_function(opts, "create_workspace_prompt", noop),
     workspace_entries_for_project = opt_function(opts, "workspace_entries_for_project", function()
       return {}
     end),
     missions_for_project = opt_function(opts, "missions_for_project", nil),
+    mission_residue_for_project = opt_function(opts, "mission_residue_for_project", nil),
     edit_saved_workspace_instruction = opt_function(opts, "edit_saved_workspace_instruction", noop),
     delete_saved_workspace = opt_function(opts, "delete_saved_workspace", noop),
     close_saved_workspace_window = opt_function(opts, "close_saved_workspace_window", noop),

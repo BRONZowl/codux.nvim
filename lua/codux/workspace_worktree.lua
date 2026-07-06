@@ -362,12 +362,22 @@ function M.prompt_merged_workspaces(runtime, root)
 end
 
 function M.cleanup_created_worktree(runtime, base_root, worktree_path, branch)
+  local errors = {}
   if type(worktree_path) == "string" and worktree_path ~= "" then
-    runtime:remove_git_worktree(base_root, worktree_path)
+    local ok, err = runtime:remove_git_worktree(base_root, worktree_path)
+    if not ok then
+      table.insert(errors, err or ("failed to remove Git worktree " .. tostring(worktree_path)))
+    end
   end
   if type(branch) == "string" and branch ~= "" then
-    runtime:delete_git_branch(base_root, branch)
+    if not runtime:delete_git_branch(base_root, branch) then
+      table.insert(errors, "failed to delete Git branch " .. tostring(branch))
+    end
   end
+  if #errors > 0 then
+    return false, table.concat(errors, "; ")
+  end
+  return true, nil
 end
 
 return M

@@ -194,6 +194,9 @@ function M.delete_saved_workspace(runtime, entry)
     if next(project.workspaces) == nil and vim.empty_dict then
       project.workspaces = vim.empty_dict()
     end
+    if next(project.workspaces) == nil and root == (existing.worktree_path or existing.project_root) then
+      state_data.projects[root] = nil
+    end
     project.updated_at = runtime:timestamp()
     local write_ok, write_error = runtime:write_state(state_data)
     if not write_ok then

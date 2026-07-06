@@ -12,6 +12,7 @@ local workspace_prepare = require("codux.workspace_prepare")
 local workspace_remote = require("codux.workspace_remote")
 local workspace_remote_actions = require("codux.workspace_remote_actions")
 local workspace_registry = require("codux.workspace_registry")
+local workspace_residue = require("codux.workspace_residue")
 local workspace_sessions = require("codux.workspace_sessions")
 local workspace_sync = require("codux.workspace_sync")
 local workspace_target = require("codux.workspace_target")
@@ -335,6 +336,22 @@ end
 
 function M:cleanup_created_worktree(base_root, worktree_path, branch)
   return workspace_worktree.cleanup_created_worktree(self, base_root, worktree_path, branch)
+end
+
+function M:mission_residue_for_project(root)
+  return workspace_residue.inspect(self, root)
+end
+
+function M:cleanup_mission_residue(root)
+  return workspace_residue.cleanup(self, root)
+end
+
+function M:prune_empty_project_buckets(state_data, directory)
+  return workspace_residue.prune_empty_project_buckets(self, state_data, directory)
+end
+
+function M:worktree_directory(root)
+  return workspace_residue.worktree_directory(self, root)
 end
 
 function M:workspace_instruction_relative_dir(root)

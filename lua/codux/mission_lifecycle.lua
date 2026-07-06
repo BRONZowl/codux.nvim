@@ -220,6 +220,22 @@ function M.delete(runtime, name, opts)
     end
   end
 
+  if type(runtime.cleanup_mission_residue) == "function" then
+    local cleanup_ok, cleanup_result = runtime:cleanup_mission_residue(root)
+    if not cleanup_ok then
+      runtime.notify(
+        "Deleted Codux mission "
+          .. tostring(mission.name or name)
+          .. " with "
+          .. tostring(deleted)
+          .. " roles; residue cleanup failed: "
+          .. tostring(cleanup_result),
+        vim.log.levels.ERROR
+      )
+      return false
+    end
+  end
+
   runtime.notify("Deleted Codux mission " .. tostring(mission.name or name) .. " with " .. tostring(deleted) .. " roles")
   return true
 end

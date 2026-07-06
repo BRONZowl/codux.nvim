@@ -47,6 +47,28 @@ end
 
 do
   local controller = mission_control_mod.new({
+    missions_for_project = function()
+      return {}, nil
+    end,
+    mission_residue_for_project = function()
+      return {
+        count = 2,
+        empty_project_buckets = { { path = "/codux-worktrees/debug-builder" } },
+        leftover_directories = { { path = "/codux-worktrees/debug-reviewer", cleanable = true } },
+      }, nil
+    end,
+  })
+
+  local lines = controller:dashboard_lines("/repo", { dashboard_width = 100 })
+  local text = table.concat(lines, "\n")
+  assert_contains(text, "No Codux missions")
+  assert_contains(text, "Stale Mission Control residue found")
+  assert_contains(text, "1 empty state buckets | 1 leftover directories")
+  assert_contains(text, "c cleanup empty residue | n create mission")
+end
+
+do
+  local controller = mission_control_mod.new({
     workspace_entries_for_project = function()
       return {
         {

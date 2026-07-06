@@ -70,6 +70,38 @@ do
 end
 
 do
+  local dashboard_created = false
+  local controller = mission_control_mod.new({
+    notify = function() end,
+    mission_residue_for_project = function(root)
+      assert_equal(root, "/repo")
+      return { count = 1, empty_project_buckets = { { path = "/codux-worktrees/debug-builder" } } }, nil
+    end,
+    ui = {
+      create_scratch_buffer = function()
+        dashboard_created = true
+        return nil
+      end,
+    },
+  })
+  function controller:close_dashboard()
+    return true
+  end
+  function controller:mission_count()
+    return 0
+  end
+  function controller:dashboard_lines()
+    return { "No Codux missions", "Stale Mission Control residue found" }, {}, {}, nil, 0
+  end
+  function controller:open_prompt()
+    error("mission prompt should not open when cleanup residue exists")
+  end
+
+  assert_false(controller:open_dashboard("/repo"))
+  assert_true(dashboard_created)
+end
+
+do
   local notifications = {}
   local controller = mission_control_mod.new({
     notify = function(message)

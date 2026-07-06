@@ -5,6 +5,8 @@ local text = require("codux.text")
 local COMMAND_ITEMS = {
   { key = "Tab", label = "search" },
   { key = "m", label = "menu" },
+  { key = "n", label = "new" },
+  { key = "c", label = "cleanup" },
   { key = "a", label = "answer" },
   { key = "p", label = "prompt" },
   { key = "i", label = "interrupt" },
@@ -208,11 +210,33 @@ function M.lines(controller, root, opts)
   local selectable_rows = {}
   local best_match_row = nil
   if #all_missions == 0 then
-    return { M.center_display_line(controller.workspace_ui, "No Codux missions", dashboard_width) },
-      items,
-      selectable_rows,
-      nil,
-      0
+    local residue = nil
+    if type(controller.mission_residue_for_root) == "function" then
+      residue = controller:mission_residue_for_root(root)
+    end
+    residue = type(residue) == "table" and residue or {}
+    local residue_count = tonumber(residue.count) or 0
+    local empty_buckets = type(residue.empty_project_buckets) == "table" and #residue.empty_project_buckets or 0
+    local leftover_dirs = type(residue.leftover_directories) == "table" and #residue.leftover_directories or 0
+    if residue_count == 0 then
+      return { M.center_display_line(controller.workspace_ui, "No Codux missions", dashboard_width) },
+        items,
+        selectable_rows,
+        nil,
+        0
+    end
+
+    return {
+      M.center_display_line(controller.workspace_ui, "No Codux missions", dashboard_width),
+      "",
+      M.center_display_line(controller.workspace_ui, "Stale Mission Control residue found", dashboard_width),
+      M.center_display_line(
+        controller.workspace_ui,
+        tostring(empty_buckets) .. " empty state buckets | " .. tostring(leftover_dirs) .. " leftover directories",
+        dashboard_width
+      ),
+      M.center_display_line(controller.workspace_ui, "c cleanup empty residue | n create mission", dashboard_width),
+    }, items, selectable_rows, nil, 0
   end
   if query ~= "" and #missions == 0 then
     return { M.center_display_line(controller.workspace_ui, "No matching Codux missions", dashboard_width) },

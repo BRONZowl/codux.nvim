@@ -173,7 +173,14 @@ function M.open_dashboard(controller, root)
     return false
   end
   if existing_count == 0 then
-    return controller:open_prompt()
+    local residue, residue_error = controller:mission_residue_for_root(root)
+    if residue_error then
+      controller.notify(residue_error, vim.log.levels.ERROR)
+      return false
+    end
+    if not residue or (tonumber(residue.count) or 0) == 0 then
+      return controller:open_prompt()
+    end
   end
 
   local lines, items, selectable_rows, best_match_row = controller:dashboard_lines(root)

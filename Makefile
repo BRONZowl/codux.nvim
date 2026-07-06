@@ -38,6 +38,7 @@ TEST_SPECS := \
 	tests/workspace_instruction_actions_spec.lua \
 	tests/workspace_prepare_spec.lua \
 	tests/workspace_registry_spec.lua \
+	tests/workspace_residue_spec.lua \
 	tests/workspace_remote_actions_spec.lua \
 	tests/workspace_remote_spec.lua \
 	tests/workspace_runtime_worktree_spec.lua \

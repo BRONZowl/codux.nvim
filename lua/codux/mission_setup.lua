@@ -49,6 +49,12 @@ function M.new(deps)
     missions_for_project = function(root)
       return workspace_runtime:missions_for_project(root)
     end,
+    mission_residue_for_project = function(root)
+      return workspace_runtime:mission_residue_for_project(root)
+    end,
+    cleanup_mission_residue = function(root)
+      return workspace_runtime:cleanup_mission_residue(root)
+    end,
     workspace_entries_for_project = deps.workspace_entries_for_project,
     edit_saved_workspace_instruction = deps.edit_saved_workspace_instruction,
     delete_saved_workspace = deps.delete_saved_workspace,

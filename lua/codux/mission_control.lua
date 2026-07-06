@@ -536,6 +536,37 @@ function M:mission_count(root)
   return #missions
 end
 
+function M:mission_residue_for_root(root)
+  if type(self.mission_residue_for_project) ~= "function" then
+    return { count = 0, empty_project_buckets = {}, leftover_directories = {} }, nil
+  end
+  return self.mission_residue_for_project(root)
+end
+
+function M:cleanup_empty_mission_residue(root)
+  root = root or self.state.mission_dashboard_project_root or self.project_root()
+  if type(self.cleanup_mission_residue) ~= "function" then
+    self.notify("Codux mission residue cleanup is unavailable", vim.log.levels.WARN)
+    return false
+  end
+
+  local ok, result = self.cleanup_mission_residue(root)
+  if not ok then
+    self.notify(result or "Failed to clean Codux mission residue", vim.log.levels.ERROR)
+    return false
+  end
+
+  result = type(result) == "table" and result or {}
+  self.notify(
+    "Cleaned Codux mission residue: "
+      .. tostring(result.removed_buckets or 0)
+      .. " state buckets, "
+      .. tostring(result.removed_directories or 0)
+      .. " directories"
+  )
+  return self:refresh_loaded_dashboard(root)
+end
+
 function M:update_dashboard_after_mission_delete(root)
   local remaining_count, error_message = self:mission_count(root)
   if error_message then
@@ -620,6 +651,12 @@ function M:bind_dashboard_commands(bufnr)
   self.set_buffer_keymap(bufnr, "n", "m", function()
     return self:open_action_palette()
   end, "Open Codux Mission Menu")
+  self.set_buffer_keymap(bufnr, "n", "n", function()
+    return self:create_new_mission()
+  end, "Create Codux Mission")
+  self.set_buffer_keymap(bufnr, "n", "c", function()
+    return self:cleanup_empty_mission_residue()
+  end, "Clean Codux Mission Residue")
   self.set_buffer_keymap(bufnr, "n", "a", function()
     return self:open_workspace_question_answer()
   end, "Answer Codux Mission Role Question")
