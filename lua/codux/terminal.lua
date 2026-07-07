@@ -228,6 +228,14 @@ function M:reset_terminal_prompt_input()
   return terminal_prompt.reset_input(self)
 end
 
+function M:clear_terminal_prompt_input_line()
+  return terminal_prompt.clear_input_line(self)
+end
+
+function M:schedule_terminal_prompt_input_clear_after_interrupt(opts)
+  return terminal_prompt.schedule_clear_after_interrupt(self, opts)
+end
+
 function M:invalidate_terminal_prompt_tracking()
   return terminal_prompt.invalidate_tracking(self)
 end

@@ -62,6 +62,7 @@ do
 end
 
 do
+  local calls = {}
   local api = compat.install_terminal({}, {
     terminal = {
       mark_terminal_prompt_submission = function()
@@ -89,6 +90,7 @@ do
         return note == "note"
       end,
       interrupt_codex_session = function()
+        table.insert(calls, "interrupt")
         return true
       end,
       toggle_plan_mode = function()
@@ -112,6 +114,7 @@ do
   assert_equal(api.remote_select_codex_question_option("2", true), "ok")
   assert_equal(api.remote_submit_codex_question_note("note"), "ok")
   assert_equal(api.remote_interrupt_codex_session(), "ok")
+  assert_equal(table.concat(calls, ","), "interrupt")
   assert_equal(api.remote_switch_codex_mode(), "ok")
   assert_equal(api.remote_show_existing_codex_terminal(), "ok")
   assert_equal(api.remote_workspace_status(), "ready")

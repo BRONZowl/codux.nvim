@@ -269,6 +269,10 @@ function M.send_to_codex(controller, message)
     return false
   end
 
+  if controller:clear_terminal_prompt_input_line() then
+    pcall(vim.fn.sleep, "20m")
+  end
+
   local paste = "\27[200~" .. message .. "\27[201~\r"
   local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, paste)
   if not send_ok or sent == 0 then

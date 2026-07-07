@@ -527,11 +527,13 @@ do
 end
 
 do
-  local sent
+  local sent = {}
+  local old_defer_fn = vim.defer_fn
   local old_chansend = vim.fn.chansend
+  vim.defer_fn = nil
   vim.fn.chansend = function(job_id, value)
     assert_equal(job_id, 42)
-    sent = value
+    table.insert(sent, value)
     return 1
   end
 
@@ -545,12 +547,129 @@ do
   end
 
   assert_true(controller:interrupt_codex_session())
-  assert_equal(sent, "\3")
+  assert_equal(sent[1], "\3")
+  assert_equal(sent[2], nil)
   assert_false(controller.state.codex_working)
   assert_equal(controller.state.terminal_prompt_input, "")
   assert_true(controller.state.terminal_prompt_tracking_valid)
 
+  vim.defer_fn = old_defer_fn
   vim.fn.chansend = old_chansend
+end
+
+do
+  local old_api = vim.api
+  local old_defer_fn = vim.defer_fn
+  local old_chansend = vim.fn.chansend
+  local lines = { "Esc to interrupt" }
+  local sent = {}
+  local scheduled = {}
+  vim.api = {
+    nvim_buf_is_valid = function()
+      return true
+    end,
+    nvim_buf_is_loaded = function()
+      return true
+    end,
+    nvim_buf_line_count = function()
+      return #lines
+    end,
+    nvim_buf_get_lines = function(_, start_line, end_line)
+      local result = {}
+      for index = start_line + 1, end_line do
+        table.insert(result, lines[index])
+      end
+      return result
+    end,
+  }
+  vim.defer_fn = function(callback, delay)
+    table.insert(scheduled, { callback = callback, delay = delay })
+  end
+  vim.fn.chansend = function(job_id, value)
+    assert_equal(job_id, 42)
+    table.insert(sent, value)
+    return 1
+  end
+
+  local controller = terminal_mod.new({})
+  controller.state.buf = 9
+  controller.state.job_id = 42
+  controller.state.codex_working = true
+  controller.state.terminal_prompt_input = "unfinished"
+  controller.state.terminal_prompt_tracking_valid = false
+  function controller:terminal_running()
+    return true
+  end
+
+  assert_true(controller:interrupt_codex_session())
+  assert_equal(sent[1], "\3")
+  assert_equal(sent[2], nil)
+  assert_equal(#scheduled, 1)
+  assert_equal(scheduled[1].delay, 80)
+  assert_true(controller.state.terminal_prompt_clear_after_interrupt_pending)
+
+  scheduled[1].callback()
+  assert_equal(sent[2], nil)
+  assert_equal(#scheduled, 2)
+
+  lines = { "› unfinished" }
+  scheduled[2].callback()
+  assert_equal(sent[2], "\21")
+  assert_equal(sent[3], nil)
+  assert_false(controller.state.terminal_prompt_clear_after_interrupt_pending)
+  assert_equal(controller.state.terminal_prompt_input, "")
+  assert_true(controller.state.terminal_prompt_tracking_valid)
+
+  vim.api = old_api
+  vim.defer_fn = old_defer_fn
+  vim.fn.chansend = old_chansend
+end
+
+do
+  local sent = {}
+  local old_chansend = vim.fn.chansend
+  local old_sleep = vim.fn.sleep
+  vim.fn.chansend = function(job_id, value)
+    assert_equal(job_id, 42)
+    table.insert(sent, value)
+    return 1
+  end
+  local sleeps = {}
+  vim.fn.sleep = function(value)
+    table.insert(sleeps, value)
+    return 1
+  end
+
+  local controller = terminal_mod.new({})
+  controller.state.job_id = 42
+  controller.state.terminal_prompt_input = "stale prompt"
+  controller.state.terminal_prompt_tracking_valid = true
+  function controller:terminal_running()
+    return true
+  end
+  function controller:ensure_codex()
+    return true
+  end
+  function controller:mark_terminal_prompt_submission()
+    self.state.marked_prompt_submission = true
+  end
+  function controller:set_codex_working(working)
+    self.state.codex_working = working == true
+  end
+
+  assert_true(controller:send_to_codex("ship it"))
+  assert_equal(sent[1], "\21")
+  assert_equal(sent[2], "\27[200~ship it\27[201~\r")
+  assert_equal(sent[3], nil)
+  assert_equal(sleeps[1], "20m")
+  assert_equal(sleeps[2], nil)
+  assert_equal(controller.state.terminal_prompt_input, "")
+  assert_false(controller.state.terminal_prompt_tracking_valid)
+  assert_true(controller.state.marked_prompt_submission)
+  assert_true(controller.state.codex_working)
+
+  vim.fn.chansend = old_chansend
+  vim.fn.sleep = old_sleep
 end
 
 do

@@ -38,6 +38,60 @@ function M.delete_input_char(controller)
   controller.state.terminal_prompt_input = vim.fn.strcharpart(input, 0, length - 1)
 end
 
+function M.clear_input_line(controller)
+  controller:reset_terminal_prompt_input()
+  if not controller:terminal_running() then
+    return false
+  end
+
+  local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, "\21")
+  return send_ok and sent ~= 0
+end
+
+function M.schedule_clear_after_interrupt(controller, opts)
+  opts = type(opts) == "table" and opts or {}
+  controller:reset_terminal_prompt_input()
+  if controller.state.terminal_prompt_clear_after_interrupt_pending == true then
+    return true
+  end
+
+  controller.state.terminal_prompt_clear_after_interrupt_pending = true
+  local attempts = math.max(1, tonumber(opts.attempts) or 12)
+  local delay_ms = math.max(1, tonumber(opts.delay_ms) or 80)
+
+  local function clear_when_ready(attempts_left)
+    if not controller:terminal_running() then
+      controller.state.terminal_prompt_clear_after_interrupt_pending = false
+      return
+    end
+
+    if controller:startup_sequence_ready() then
+      controller:clear_terminal_prompt_input_line()
+      controller.state.terminal_prompt_clear_after_interrupt_pending = false
+      return
+    end
+
+    if attempts_left <= 0 or type(vim.defer_fn) ~= "function" then
+      controller.state.terminal_prompt_clear_after_interrupt_pending = false
+      return
+    end
+
+    vim.defer_fn(function()
+      clear_when_ready(attempts_left - 1)
+    end, delay_ms)
+  end
+
+  if type(vim.defer_fn) == "function" then
+    vim.defer_fn(function()
+      clear_when_ready(attempts - 1)
+    end, delay_ms)
+  else
+    clear_when_ready(0)
+  end
+
+  return true
+end
+
 function M.input_key(controller, input, opts)
   opts = type(opts) == "table" and opts or {}
   return function()
@@ -138,7 +192,12 @@ function M.interrupt(controller)
   controller:set_codex_working(false, { force_idle = true })
   controller:reset_terminal_prompt_input()
   local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, "\3")
-  return send_ok and sent ~= 0
+  if not send_ok or sent == 0 then
+    return false
+  end
+
+  controller:schedule_terminal_prompt_input_clear_after_interrupt()
+  return true
 end
 
 return M
