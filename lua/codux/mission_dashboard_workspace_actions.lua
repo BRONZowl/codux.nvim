@@ -10,17 +10,6 @@ end
 
 function M.run_workspace_action(controller, action, target)
   local workspace = target or controller.state.mission_dashboard_action_workspace
-  if action == "open_workspace" then
-    return false
-  end
-  if action == "prompt_workspace" then
-    workspace = workspace or controller:selected_role_workspace_or_notify()
-    if not workspace then
-      return false
-    end
-    controller:close_action_palette()
-    return controller:open_workspace_prompt(workspace)
-  end
   if action == "edit_instructions" then
     workspace = workspace or controller:selected_role_workspace_or_notify()
     if not workspace then

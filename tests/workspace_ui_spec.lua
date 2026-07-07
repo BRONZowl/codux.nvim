@@ -118,6 +118,14 @@ do
 end
 
 do
+  local function action_signature(actions)
+    local parts = {}
+    for _, action in ipairs(actions) do
+      table.insert(parts, tostring(action.key) .. ":" .. tostring(action.action) .. ":" .. tostring(action.label))
+    end
+    return table.concat(parts, "|")
+  end
+
   local actions = workspace_ui.role_workspace_action_items({ status = "inactive" })
   local by_key = {}
   local labels_by_key = {}
@@ -145,22 +153,21 @@ do
   assert_nil(labels_by_key.o)
   assert_equal(labels_by_key.d, "Delete Workspace")
   assert_equal(labels_by_key.w, "Create Workspace")
-end
-
-do
+  local inactive_signature = action_signature(actions)
   for _, status in ipairs({ "active", "idle", "question" }) do
-    local actions = workspace_ui.role_workspace_action_items({ status = status })
+    local status_actions = workspace_ui.role_workspace_action_items({ status = status })
     local by_key = {}
     local labels_by_key = {}
-    for _, action in ipairs(actions) do
+    for _, action in ipairs(status_actions) do
       by_key[action.key] = action.action
       labels_by_key[action.key] = action.label
     end
 
+    assert_equal(action_signature(status_actions), inactive_signature)
     assert_nil(by_key.a)
     assert_nil(labels_by_key.a)
     assert_equal(by_key.e, "edit_instructions")
-    assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Edit Instructions")
+    assert_contains(workspace_ui.role_workspace_action_line(status_actions[1], 40), "Edit Instructions")
   end
 end
 

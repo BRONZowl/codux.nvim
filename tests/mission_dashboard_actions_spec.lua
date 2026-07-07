@@ -459,7 +459,6 @@ do
     dashboard_closed = true
   end
 
-  assert_false(controller:run_action("open_workspace", entry))
   assert_true(controller:run_action("edit_instructions", entry))
   assert_true(controller:run_action("close_workspace", entry))
   assert_true(controller:run_action("delete_workspace", entry))

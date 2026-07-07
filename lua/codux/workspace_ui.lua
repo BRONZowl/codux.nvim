@@ -261,8 +261,7 @@ function M.mission_action_line(item, width)
   return M.manager_action_line(item, width)
 end
 
-function M.role_workspace_action_items(entry)
-  entry = type(entry) == "table" and entry or {}
+function M.role_workspace_action_items()
   local items = {}
   table.insert(items, { key = "e", action = "edit_instructions", label = "Edit Instructions" })
   table.insert(items, { key = "x", action = "close_workspace", label = "Close Workspace" })
