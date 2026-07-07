@@ -156,6 +156,59 @@ do
 end
 
 do
+  local closed_win
+  local deleted_buf
+  local stopped_job
+  local closed_preview
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_win = 13,
+      mission_dashboard_output_buf = 14,
+      mission_dashboard_output_entry = { safe_name = "alpha-builder" },
+      mission_dashboard_output_key = "key",
+      mission_dashboard_output_blocked_key = "blocked",
+      mission_dashboard_output_job = 77,
+      mission_dashboard_output_preview = { preview_session = "codux-preview-test" },
+      mission_dashboard_output_buf_kind = "terminal",
+      mission_dashboard_output_control = true,
+      mission_dashboard_output_control_key = "control",
+    },
+    ui = {
+      close_window = function(win)
+        closed_win = win
+      end,
+      delete_buffer = function(buf)
+        deleted_buf = buf
+      end,
+    },
+    jobstop = function(job_id)
+      stopped_job = job_id
+      return true
+    end,
+    close_workspace_interactive_preview = function(preview)
+      closed_preview = preview
+      return true
+    end,
+  })
+
+  assert_true(controller:close_output_panel())
+  assert_equal(closed_win, 13)
+  assert_equal(deleted_buf, 14)
+  assert_equal(stopped_job, 77)
+  assert_equal(closed_preview.preview_session, "codux-preview-test")
+  assert_nil(controller.state.mission_dashboard_output_win)
+  assert_nil(controller.state.mission_dashboard_output_buf)
+  assert_nil(controller.state.mission_dashboard_output_entry)
+  assert_nil(controller.state.mission_dashboard_output_key)
+  assert_nil(controller.state.mission_dashboard_output_blocked_key)
+  assert_nil(controller.state.mission_dashboard_output_job)
+  assert_nil(controller.state.mission_dashboard_output_preview)
+  assert_nil(controller.state.mission_dashboard_output_buf_kind)
+  assert_false(controller.state.mission_dashboard_output_control)
+  assert_nil(controller.state.mission_dashboard_output_control_key)
+end
+
+do
   local old_api = vim.api
   local highlights = {}
   vim.api = {

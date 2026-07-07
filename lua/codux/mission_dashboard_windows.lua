@@ -78,16 +78,7 @@ function M.close_dashboard(controller)
   controller.state.mission_dashboard_command_win = nil
   controller.state.mission_dashboard_command_bar_buf = nil
   controller.state.mission_dashboard_command_bar_win = nil
-  controller.state.mission_dashboard_output_buf = nil
-  controller.state.mission_dashboard_output_win = nil
-  controller.state.mission_dashboard_output_entry = nil
-  controller.state.mission_dashboard_output_key = nil
-  controller.state.mission_dashboard_output_blocked_key = nil
-  controller.state.mission_dashboard_output_job = nil
-  controller.state.mission_dashboard_output_preview = nil
-  controller.state.mission_dashboard_output_buf_kind = nil
-  controller.state.mission_dashboard_output_control = false
-  controller.state.mission_dashboard_output_control_key = nil
+  controller:clear_output_panel_state()
   controller.state.mission_dashboard_action_buf = nil
   controller.state.mission_dashboard_action_win = nil
   controller.state.mission_dashboard_action_items = {}

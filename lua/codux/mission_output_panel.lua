@@ -68,6 +68,19 @@ function Output:output_entry_key(entry)
   return role_cache_key(entry)
 end
 
+function Output:clear_output_panel_state()
+  self.state.mission_dashboard_output_win = nil
+  self.state.mission_dashboard_output_buf = nil
+  self.state.mission_dashboard_output_entry = nil
+  self.state.mission_dashboard_output_key = nil
+  self.state.mission_dashboard_output_blocked_key = nil
+  self.state.mission_dashboard_output_job = nil
+  self.state.mission_dashboard_output_preview = nil
+  self.state.mission_dashboard_output_buf_kind = nil
+  self.state.mission_dashboard_output_control = false
+  self.state.mission_dashboard_output_control_key = nil
+end
+
 function Output:render_output_status(entry, message)
   if not self:ensure_output_buffer("status", self:output_panel_lines(entry, message)) then
     return false
@@ -235,14 +248,7 @@ function Output:close_output_panel()
   self:close_output_preview()
   self.ui.close_window(self.state.mission_dashboard_output_win)
   self.ui.delete_buffer(self.state.mission_dashboard_output_buf)
-  self.state.mission_dashboard_output_win = nil
-  self.state.mission_dashboard_output_buf = nil
-  self.state.mission_dashboard_output_entry = nil
-  self.state.mission_dashboard_output_key = nil
-  self.state.mission_dashboard_output_blocked_key = nil
-  self.state.mission_dashboard_output_buf_kind = nil
-  self.state.mission_dashboard_output_control = false
-  self.state.mission_dashboard_output_control_key = nil
+  self:clear_output_panel_state()
   return true
 end
 

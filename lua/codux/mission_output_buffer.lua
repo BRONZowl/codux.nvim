@@ -26,14 +26,7 @@ function M.attach_output_buffer_autocmd(self, bufnr)
       end
       if self.state.mission_dashboard_output_buf == bufnr then
         self:close_output_preview()
-        self.state.mission_dashboard_output_buf = nil
-        self.state.mission_dashboard_output_win = nil
-        self.state.mission_dashboard_output_entry = nil
-        self.state.mission_dashboard_output_key = nil
-        self.state.mission_dashboard_output_blocked_key = nil
-        self.state.mission_dashboard_output_buf_kind = nil
-        self.state.mission_dashboard_output_control = false
-        self.state.mission_dashboard_output_control_key = nil
+        self:clear_output_panel_state()
       end
       pcall(vim.api.nvim_del_augroup_by_id, group)
     end,

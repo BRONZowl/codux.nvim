@@ -101,6 +101,49 @@ if type(vim.api) == "table" then
 end
 
 if type(vim.api) == "table" then
+  local output_buf = vim.api.nvim_create_buf(false, true)
+  local stopped_job
+  local closed_preview
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_buf = output_buf,
+      mission_dashboard_output_win = 13,
+      mission_dashboard_output_entry = { safe_name = "alpha-builder" },
+      mission_dashboard_output_key = "key",
+      mission_dashboard_output_blocked_key = "blocked",
+      mission_dashboard_output_job = 77,
+      mission_dashboard_output_preview = { preview_session = "codux-preview-test" },
+      mission_dashboard_output_buf_kind = "terminal",
+      mission_dashboard_output_control = true,
+      mission_dashboard_output_control_key = "control",
+    },
+    jobstop = function(job_id)
+      stopped_job = job_id
+      return true
+    end,
+    close_workspace_interactive_preview = function(preview)
+      closed_preview = preview
+      return true
+    end,
+  })
+
+  assert_true(controller:attach_output_buffer_autocmd(output_buf))
+  vim.api.nvim_buf_delete(output_buf, { force = true })
+  assert_equal(stopped_job, 77)
+  assert_equal(closed_preview.preview_session, "codux-preview-test")
+  assert_nil(controller.state.mission_dashboard_output_buf)
+  assert_nil(controller.state.mission_dashboard_output_win)
+  assert_nil(controller.state.mission_dashboard_output_entry)
+  assert_nil(controller.state.mission_dashboard_output_key)
+  assert_nil(controller.state.mission_dashboard_output_blocked_key)
+  assert_nil(controller.state.mission_dashboard_output_job)
+  assert_nil(controller.state.mission_dashboard_output_preview)
+  assert_nil(controller.state.mission_dashboard_output_buf_kind)
+  assert_false(controller.state.mission_dashboard_output_control)
+  assert_nil(controller.state.mission_dashboard_output_control_key)
+end
+
+if type(vim.api) == "table" then
   local old_buf = vim.api.nvim_create_buf(false, true)
   local deleted = {}
   local controller = mission_control_mod.new({
