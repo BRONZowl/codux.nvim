@@ -21,6 +21,7 @@ do
           name = "Alpha",
           mission_id = "mission:alpha",
           objective = "Build it",
+          focus_packet = "# Mission Focus Packet\n\nCurrent User Intent:\nBuild dashboard UX",
           roles = {
             {
               name = "alpha-builder",
@@ -39,10 +40,16 @@ do
     end,
   })
 
-  local lines = controller:dashboard_lines("/repo", { dashboard_width = 100, now = 100 })
+  local lines, items, rows = controller:dashboard_lines("/repo", { dashboard_width = 100, now = 100 })
+  local text = table.concat(lines, "\n")
   assert_equal(controller:mission_count("/repo"), 1)
-  assert_contains(table.concat(lines, "\n"), "Alpha")
-  assert_contains(table.concat(lines, "\n"), "Builder")
+  assert_contains(text, "Alpha")
+  assert_contains(text, "focus: Build dashboard UX")
+  assert_contains(text, "Builder")
+  assert_equal(items[3].kind, "mission")
+  assert_nil(items[4])
+  assert_equal(items[6].kind, "role")
+  assert_equal(table.concat(rows, ","), "3,6")
 end
 
 do

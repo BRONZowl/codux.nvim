@@ -35,6 +35,15 @@ do
 end
 
 do
+  assert_equal(
+    mission_mod.focus_packet_preview("# Mission Focus Packet\n\nCurrent User Intent:\nShip dashboard UX\n\nNotes:\nKeep it tight"),
+    "Ship dashboard UX"
+  )
+  assert_equal(mission_mod.focus_packet_preview("# Mission Focus Packet\n\nFallback focus line\n\nNotes:"), "Fallback focus line")
+  assert_equal(mission_mod.focus_packet_preview(""), "")
+end
+
+do
   local mission, error_message = mission_mod.plan("Crew", "Ship it", {
     roles = {
       { name = "One", safe_name = "same" },

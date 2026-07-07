@@ -114,21 +114,7 @@ function M.mission_line(controller, mission, counts, status, dashboard_width)
 end
 
 function M.mission_focus_line(controller, mission, dashboard_width)
-  local focus = tostring((type(mission) == "table" and mission.focus_packet) or "")
-  local preview = ""
-  local use_next = false
-  for line in (focus:gsub("\r", "") .. "\n"):gmatch("(.-)\n") do
-    local normalized = line:gsub("^%s+", ""):gsub("%s+$", "")
-    if use_next and normalized ~= "" then
-      preview = normalized
-      break
-    end
-    if normalized == "Current User Intent:" then
-      use_next = true
-    elseif preview == "" and normalized ~= "" and not normalized:match("^#") and not normalized:match(":$") then
-      preview = normalized
-    end
-  end
+  local preview = controller.mission.focus_packet_preview(type(mission) == "table" and mission.focus_packet or nil)
   if preview == "" then
     return nil
   end

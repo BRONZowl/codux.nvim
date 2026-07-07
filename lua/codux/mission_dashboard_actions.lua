@@ -59,18 +59,19 @@ function M.render_action_palette(controller)
   return controller:action_palette_controller():render(nil, controller.state.mission_dashboard_action_kind)
 end
 
-function M.edit_selected_mission(controller, mission)
+local function edit_selected_mission_text(controller, mission, opts)
+  opts = type(opts) == "table" and opts or {}
   local root = controller.state.mission_dashboard_project_root or controller.project_root()
   mission = mission or controller:selected_mission()
   if not mission then
     controller.notify("No Codux mission selected", vim.log.levels.WARN)
     return false
   end
-  return controller:open_objective_editor(mission.name, mission.objective, {
-    title = " Edit Codux Mission Objective ",
+  return controller:open_objective_editor(mission.name, opts.value(mission), {
+    title = opts.title,
     footer = " Ctrl-s/:w save | Ctrl-q cancel ",
-    on_save = function(_, objective)
-      local ok = controller.update_mission_objective(mission.name, objective, root)
+    on_save = function(_, value)
+      local ok = opts.update(mission.name, value, root)
       if ok ~= false then
         vim.schedule(function()
           controller:refresh_loaded_dashboard(root)
@@ -81,25 +82,23 @@ function M.edit_selected_mission(controller, mission)
   })
 end
 
-function M.edit_selected_mission_focus(controller, mission)
-  local root = controller.state.mission_dashboard_project_root or controller.project_root()
-  mission = mission or controller:selected_mission()
-  if not mission then
-    controller.notify("No Codux mission selected", vim.log.levels.WARN)
-    return false
-  end
-  return controller:open_objective_editor(mission.name, mission.focus_packet or "", {
-    title = " Edit Codux Mission Focus ",
-    footer = " Ctrl-s/:w save | Ctrl-q cancel ",
-    on_save = function(_, focus_packet)
-      local ok = controller.update_mission_focus_packet(mission.name, focus_packet, root)
-      if ok ~= false then
-        vim.schedule(function()
-          controller:refresh_loaded_dashboard(root)
-        end)
-      end
-      return ok
+function M.edit_selected_mission(controller, mission)
+  return edit_selected_mission_text(controller, mission, {
+    title = " Edit Codux Mission Objective ",
+    value = function(selected)
+      return selected.objective
     end,
+    update = controller.update_mission_objective,
+  })
+end
+
+function M.edit_selected_mission_focus(controller, mission)
+  return edit_selected_mission_text(controller, mission, {
+    title = " Edit Codux Mission Focus ",
+    value = function(selected)
+      return selected.focus_packet or ""
+    end,
+    update = controller.update_mission_focus_packet,
   })
 end
 

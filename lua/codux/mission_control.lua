@@ -208,37 +208,41 @@ function M:mission_for_name(root, name)
   return self.mission.find_mission(missions, name)
 end
 
-function M:open_saved_objective_editor(name, root)
-  root = root or self.project_root()
-  local mission, mission_error = self:mission_for_name(root, name)
+local function open_saved_mission_text_editor(controller, name, root, opts)
+  opts = type(opts) == "table" and opts or {}
+  root = root or controller.project_root()
+  local mission, mission_error = controller:mission_for_name(root, name)
   if not mission then
-    self.notify(mission_error or "mission not found", vim.log.levels.ERROR)
+    controller.notify(mission_error or "mission not found", vim.log.levels.ERROR)
     return false
   end
 
-  return self:open_objective_editor(mission.name, mission.objective, {
-    title = " Edit Codux Mission Objective ",
+  return controller:open_objective_editor(mission.name, opts.value(mission), {
+    title = opts.title,
     footer = " Ctrl-s/:w save | Ctrl-q cancel ",
-    on_save = function(_, objective)
-      return self.update_mission_objective(mission.name, objective, root)
+    on_save = function(_, value)
+      return opts.update(mission.name, value, root)
     end,
   })
 end
 
-function M:open_saved_focus_editor(name, root)
-  root = root or self.project_root()
-  local mission, mission_error = self:mission_for_name(root, name)
-  if not mission then
-    self.notify(mission_error or "mission not found", vim.log.levels.ERROR)
-    return false
-  end
-
-  return self:open_objective_editor(mission.name, mission.focus_packet or "", {
-    title = " Edit Codux Mission Focus ",
-    footer = " Ctrl-s/:w save | Ctrl-q cancel ",
-    on_save = function(_, focus_packet)
-      return self.update_mission_focus_packet(mission.name, focus_packet, root)
+function M:open_saved_objective_editor(name, root)
+  return open_saved_mission_text_editor(self, name, root, {
+    title = " Edit Codux Mission Objective ",
+    value = function(mission)
+      return mission.objective
     end,
+    update = self.update_mission_objective,
+  })
+end
+
+function M:open_saved_focus_editor(name, root)
+  return open_saved_mission_text_editor(self, name, root, {
+    title = " Edit Codux Mission Focus ",
+    value = function(mission)
+      return mission.focus_packet or ""
+    end,
+    update = self.update_mission_focus_packet,
   })
 end
 

@@ -194,6 +194,24 @@ function M.prompt_with_focus_packet(prompt, focus_packet)
   }, "\n")
 end
 
+function M.focus_packet_preview(focus_packet)
+  local focus = tostring(focus_packet or "")
+  local preview = ""
+  local use_next = false
+  for line in (focus:gsub("\r", "") .. "\n"):gmatch("(.-)\n") do
+    local normalized = trim(line)
+    if use_next and normalized ~= "" then
+      return normalized
+    end
+    if normalized == "Current User Intent:" then
+      use_next = true
+    elseif preview == "" and normalized ~= "" and not normalized:match("^#") and not normalized:match(":$") then
+      preview = normalized
+    end
+  end
+  return preview
+end
+
 function M.role_prompt(mission_name, objective, role, focus_packet)
   role = type(role) == "table" and role or {}
   local role_name = role.name or role.safe_name or "Agent"
