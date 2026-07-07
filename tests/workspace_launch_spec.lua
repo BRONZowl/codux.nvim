@@ -17,6 +17,7 @@ do
     mission_name = "Mission",
     mission_role = "Builder",
     mission_objective = "Build it",
+    mission_focus_packet = "Focus packet",
     nvim_server = "/tmp/codux/mission-builder.sock",
     initial_mode = "plan",
   })
@@ -25,6 +26,7 @@ do
   assert_contains(lua, 'mission_name="Mission"')
   assert_contains(lua, 'mission_role="Builder"')
   assert_contains(lua, 'mission_objective="Build it"')
+  assert_contains(lua, 'mission_focus_packet="Focus packet"')
   assert_contains(lua, 'nvim_server="/tmp/codux/mission-builder.sock"')
   assert_contains(lua, 'initial_mode="plan"')
 end

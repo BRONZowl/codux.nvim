@@ -225,6 +225,23 @@ function M:open_saved_objective_editor(name, root)
   })
 end
 
+function M:open_saved_focus_editor(name, root)
+  root = root or self.project_root()
+  local mission, mission_error = self:mission_for_name(root, name)
+  if not mission then
+    self.notify(mission_error or "mission not found", vim.log.levels.ERROR)
+    return false
+  end
+
+  return self:open_objective_editor(mission.name, mission.focus_packet or "", {
+    title = " Edit Codux Mission Focus ",
+    footer = " Ctrl-s/:w save | Ctrl-q cancel ",
+    on_save = function(_, focus_packet)
+      return self.update_mission_focus_packet(mission.name, focus_packet, root)
+    end,
+  })
+end
+
 function M:objective_preview_config(line_count)
   return dashboard_layout.objective_preview_config(self, line_count)
 end
@@ -580,6 +597,7 @@ end
 
 for _, method in ipairs({
   "edit_selected_mission",
+  "edit_selected_mission_focus",
   "delete_selected_mission",
   "close_selected_mission",
   "start_selected_mission",

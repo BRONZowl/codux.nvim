@@ -102,6 +102,7 @@ function M.normalize(opts)
       return false, "workspace mode switch unavailable"
     end),
     update_mission_objective = opt_function(opts, "update_mission_objective", noop),
+    update_mission_focus_packet = opt_function(opts, "update_mission_focus_packet", noop),
     mission_dirty_roles = opt_function(opts, "mission_dirty_roles", function()
       return {}
     end),

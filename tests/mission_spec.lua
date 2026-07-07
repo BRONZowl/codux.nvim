@@ -14,12 +14,21 @@ do
   assert_equal(mission.name, "Blow Socks Off")
   assert_equal(mission.safe_name, "blow-socks-off")
   assert_equal(mission.mission_id, "mission:blow-socks-off")
-  assert_equal(#mission.roles, 2)
+  assert_equal(#mission.roles, 1)
   assert_equal(mission.roles[1].workspace_name, "blow-socks-off-builder")
-  assert_equal(mission.roles[2].workspace_name, "blow-socks-off-reviewer")
+  assert_contains(mission.focus_packet, "# Mission Focus Packet")
+  assert_contains(mission.focus_packet, "Build a standout agentic engineering feature.")
   assert_contains(mission.roles[1].instruction, "Mission: Blow Socks Off")
+  assert_contains(mission.roles[1].initial_prompt, "Mission Focus Packet:")
   assert_contains(mission.roles[1].initial_prompt, "Start your Mission Control role now.")
   assert_contains(mission.roles[1].initial_prompt, "stay in plan mode")
+end
+
+do
+  local wrapped = mission_mod.prompt_with_focus_packet("Ship it", "Focus here")
+  assert_contains(wrapped, "Mission Focus Packet:\nFocus here")
+  assert_contains(wrapped, "User Request:\nShip it")
+  assert_equal(mission_mod.prompt_with_focus_packet("Ship it", "  "), "Ship it")
 end
 
 do
@@ -70,6 +79,7 @@ do
   assert_equal(#grouped, 1)
   assert_equal(grouped[1].name, "Alpha")
   assert_equal(#grouped[1].roles, 2)
+  assert_nil(grouped[1].focus_packet)
   assert_equal(grouped[1].roles[1].mission_role, "Architect")
   assert_equal(mission_mod.status_label(grouped[1]), "inactive")
   local found = assert(mission_mod.find_mission(grouped, "alpha"))

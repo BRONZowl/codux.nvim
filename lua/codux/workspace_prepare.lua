@@ -165,6 +165,7 @@ function M.prepare(runtime, name, opts)
     mission_name = opts.mission_name,
     mission_role = opts.mission_role,
     mission_objective = opts.mission_objective,
+    mission_focus_packet = opts.mission_focus_packet,
     window_name = runtime.workspace_window_name(safe_name_or_error),
     nvim_server = runtime:workspace_server_path(root, safe_name_or_error),
     custom_instruction = custom_instruction,
@@ -189,6 +190,7 @@ function M.prepare(runtime, name, opts)
   workspace.mission_name = opts.mission_name or workspace.mission_name
   workspace.mission_role = opts.mission_role or workspace.mission_role
   workspace.mission_objective = opts.mission_objective or workspace.mission_objective
+  workspace.mission_focus_packet = opts.mission_focus_packet or workspace.mission_focus_packet
   workspace.session = session
   workspace.safe_name = workspace.safe_name or safe_name_or_error
   workspace.window_name = runtime.workspace_window_name(workspace.safe_name)
@@ -454,6 +456,7 @@ function M.create_mission(runtime, mission_or_name, objective, opts)
       mission_name = mission.name,
       mission_role = role.name,
       mission_objective = mission.objective,
+      mission_focus_packet = mission.focus_packet,
     })
     if not workspace then
       for index = #created, 1, -1 do

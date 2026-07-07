@@ -166,6 +166,7 @@ do
               mission_name = "Alpha",
               mission_role = "Builder",
               mission_objective = "Build it",
+              mission_focus_packet = "Focus Alpha",
             },
           },
         },
@@ -181,6 +182,7 @@ do
   local missions = workspace_registry.missions_for_project(rt, "/repo")
   assert_equal(#missions, 1)
   assert_equal(missions[1].name, "Alpha")
+  assert_equal(missions[1].focus_packet, "Focus Alpha")
   assert_equal(missions[1].roles[1].project_root, "/codux-worktrees/alpha-builder")
   assert_equal(missions[1].roles[1].mission_role, "Builder")
 end
@@ -215,6 +217,45 @@ do
   assert_true(opts.written_instructions["/repo\0builder"]:find("New", 1, true) ~= nil)
   assert_true(opts.rendered)
   assert_true(opts.notification:find("Updated Codux mission Alpha objective", 1, true) ~= nil)
+end
+
+do
+  local opts = {
+    state = {
+      workspace_manager_project_root = "/repo",
+      workspace = {
+        project_root = "/repo",
+        safe_name = "builder",
+      },
+    },
+    state_data = {
+      projects = {
+        ["/repo"] = {
+          workspaces = {
+            builder = {
+              name = "mission-builder",
+              safe_name = "builder",
+              project_root = "/repo",
+              mission_id = "mission:alpha",
+              mission_name = "Alpha",
+              mission_role = "Builder",
+              mission_objective = "Build it",
+              mission_focus_packet = "Old focus",
+            },
+          },
+        },
+      },
+    },
+  }
+  local rt = runtime(opts)
+  local ok, err = workspace_registry.update_mission_focus_packet(rt, "Alpha", "New focus", { project_root = "/repo" })
+  assert_equal(ok, true)
+  assert_equal(err, nil)
+  assert_equal(rt:written_count(), 1)
+  assert_equal(rt:state_data().projects["/repo"].workspaces.builder.mission_focus_packet, "New focus")
+  assert_equal(opts.state.workspace.mission_focus_packet, "New focus")
+  assert_true(opts.rendered)
+  assert_true(opts.notification:find("Updated Codux mission Alpha focus", 1, true) ~= nil)
 end
 
 print("workspace_registry_spec.lua: ok")

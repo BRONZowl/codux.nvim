@@ -29,6 +29,9 @@ function M.new(deps)
     update_mission_objective = function(name, objective, root)
       return codux.update_mission_objective(name, objective, { project_root = root })
     end,
+    update_mission_focus_packet = function(name, focus_packet, root)
+      return codux.update_mission_focus_packet(name, focus_packet, { project_root = root })
+    end,
     mission_dirty_roles = function(name, root)
       return workspace_runtime:mission_dirty_roles(name, { project_root = root })
     end,

@@ -49,6 +49,7 @@ local function workspace_entry(runtime, session, record, safe_name, record_root)
     mission_name = record.mission_name,
     mission_role = record.mission_role,
     mission_objective = record.mission_objective,
+    mission_focus_packet = record.mission_focus_packet,
     custom_instruction = record.custom_instruction,
     resolved_instruction = record.resolved_instruction,
     window_name = window_name,
@@ -274,6 +275,66 @@ function M.update_mission_objective(runtime, name, objective, opts)
     "Updated Codux mission "
       .. tostring(mission.name or name)
       .. " objective for "
+      .. tostring(updated)
+      .. " roles"
+  )
+  return true, nil
+end
+
+function M.update_mission_focus_packet(runtime, name, focus_packet, opts)
+  opts = type(opts) == "table" and opts or {}
+  focus_packet = type(focus_packet) == "string" and trim(focus_packet) or ""
+  if focus_packet == "" then
+    return false, "Mission focus packet is required"
+  end
+
+  local root = opts.project_root or runtime:project_root()
+  local mission, mission_error = runtime:mission_for_name(root, name)
+  if not mission then
+    return false, mission_error or "mission not found"
+  end
+
+  local state_data, state_error = runtime:read_state()
+  if state_error then
+    return false, state_error
+  end
+
+  local updated = 0
+  for _, entry in ipairs(mission.roles) do
+    local entry_root = entry.project_root or root
+    local safe_name = entry.safe_name
+    if type(entry_root) == "string" and entry_root ~= "" and type(safe_name) == "string" and safe_name ~= "" then
+      local project = runtime:project_state(state_data, entry_root)
+      local record = project.workspaces[safe_name]
+      if type(record) == "table" then
+        record.mission_focus_packet = focus_packet
+        project.updated_at = runtime:timestamp()
+        updated = updated + 1
+      end
+
+      if runtime.state.workspace and runtime.state.workspace.project_root == entry_root and runtime.state.workspace.safe_name == safe_name then
+        runtime.state.workspace.mission_focus_packet = focus_packet
+      end
+    end
+  end
+
+  if updated == 0 then
+    return false, "mission roles not found"
+  end
+
+  local write_ok, write_error = runtime:write_state(state_data)
+  if not write_ok then
+    return false, write_error
+  end
+
+  if runtime.state.workspace_manager_project_root then
+    runtime.render_workspace_manager()
+  end
+
+  runtime.notify(
+    "Updated Codux mission "
+      .. tostring(mission.name or name)
+      .. " focus for "
       .. tostring(updated)
       .. " roles"
   )

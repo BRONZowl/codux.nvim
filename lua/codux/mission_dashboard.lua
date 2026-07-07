@@ -113,6 +113,31 @@ function M.mission_line(controller, mission, counts, status, dashboard_width)
   return string.rep(" ", padding) .. mission_name .. " " .. right
 end
 
+function M.mission_focus_line(controller, mission, dashboard_width)
+  local focus = tostring((type(mission) == "table" and mission.focus_packet) or "")
+  local preview = ""
+  local use_next = false
+  for line in (focus:gsub("\r", "") .. "\n"):gmatch("(.-)\n") do
+    local normalized = line:gsub("^%s+", ""):gsub("%s+$", "")
+    if use_next and normalized ~= "" then
+      preview = normalized
+      break
+    end
+    if normalized == "Current User Intent:" then
+      use_next = true
+    elseif preview == "" and normalized ~= "" and not normalized:match("^#") and not normalized:match(":$") then
+      preview = normalized
+    end
+  end
+  if preview == "" then
+    return nil
+  end
+
+  local width = math.max(20, tonumber(dashboard_width) or 80)
+  local line = "focus: " .. preview
+  return M.center_display_line(controller.workspace_ui, controller.workspace_ui.truncate_display_tail(line, width), width)
+end
+
 function M.role_header_line(controller, dashboard_width)
   local columns = M.role_column_widths(dashboard_width)
   return M.center_display_line(
@@ -287,6 +312,10 @@ function M.lines(controller, root, opts)
     table.insert(selectable_rows, #lines)
     if query ~= "" and not best_match_row and mission._codux_match_kind == "mission" then
       best_match_row = #lines
+    end
+    local focus_line = M.mission_focus_line(controller, mission, dashboard_width)
+    if focus_line then
+      table.insert(lines, focus_line)
     end
     table.insert(lines, M.role_header_line(controller, dashboard_width))
     local dirty_by_role = controller:mission_dirty_status_by_role(root, mission, now)

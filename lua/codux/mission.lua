@@ -122,14 +122,38 @@ M.DEFAULT_ROLES = {
   {
     name = "Builder",
     safe_name = "builder",
-    focus = "Implement the primary code changes with focused validation.",
-  },
-  {
-    name = "Reviewer",
-    safe_name = "reviewer",
-    focus = "Review the branch for bugs, regressions, edge cases, and test gaps.",
+    focus = "Create the requested outcome accurately, keep context focused, validate cheaply, and ask only high-impact questions.",
   },
 }
+
+function M.default_focus_packet(mission_name, objective)
+  return table.concat({
+    "# Mission Focus Packet",
+    "",
+    "Mission:",
+    tostring(mission_name or ""),
+    "",
+    "Current User Intent:",
+    trim(objective),
+    "",
+    "Current Direction:",
+    "Use one focused Builder by default. Preserve prompt fidelity, keep context narrow, and avoid unnecessary review loops.",
+    "",
+    "User Preferences:",
+    "- Prefer accurate creation from the user's prompt.",
+    "- Ask fewer questions; ask only when the answer materially changes the result.",
+    "- Avoid extra token use and broad context expansion.",
+    "",
+    "Active Scope:",
+    "The files, behavior, and validation needed for this mission.",
+    "",
+    "Out of Scope:",
+    "Automatic reviewer loops, heavy acceptance workflows, and unrelated refactors.",
+    "",
+    "Next Action:",
+    "Ground in the current repo state, implement the most faithful interpretation, and report validation clearly.",
+  }, "\n")
+end
 
 function M.workspace_name(safe_mission_name, role)
   role = type(role) == "table" and role or {}
@@ -154,10 +178,26 @@ function M.role_instruction(mission_name, objective, role)
   }, "\n")
 end
 
-function M.role_prompt(mission_name, objective, role)
+function M.prompt_with_focus_packet(prompt, focus_packet)
+  prompt = tostring(prompt or "")
+  focus_packet = trim(focus_packet)
+  if focus_packet == "" then
+    return prompt
+  end
+
+  return table.concat({
+    "Mission Focus Packet:",
+    focus_packet,
+    "",
+    "User Request:",
+    prompt,
+  }, "\n")
+end
+
+function M.role_prompt(mission_name, objective, role, focus_packet)
   role = type(role) == "table" and role or {}
   local role_name = role.name or role.safe_name or "Agent"
-  return table.concat({
+  local prompt = table.concat({
     "Start your Mission Control role now.",
     "",
     "Mission: " .. tostring(mission_name or ""),
@@ -168,6 +208,7 @@ function M.role_prompt(mission_name, objective, role)
     "",
     "First pass: stay in plan mode, ground yourself in the repo, and identify your role-specific next steps before executing. Report blockers and handoff notes clearly.",
   }, "\n")
+  return M.prompt_with_focus_packet(prompt, focus_packet)
 end
 
 function M.extract_role_focus(instruction)
@@ -215,6 +256,8 @@ function M.plan(name, objective, opts)
     safe_name = safe_name_or_error,
     mission_id = M.mission_id(safe_name_or_error),
     objective = objective,
+    focus_packet = trim(opts.focus_packet or opts.mission_focus_packet)
+      ~= "" and trim(opts.focus_packet or opts.mission_focus_packet) or M.default_focus_packet(mission_name, objective),
     roles = {},
   }
 
@@ -245,7 +288,7 @@ function M.plan(name, objective, opts)
     }
     normalized_role.workspace_name = M.workspace_name(mission.safe_name, normalized_role)
     normalized_role.instruction = M.role_instruction(mission.name, objective, normalized_role)
-    normalized_role.initial_prompt = M.role_prompt(mission.name, objective, normalized_role)
+    normalized_role.initial_prompt = M.role_prompt(mission.name, objective, normalized_role, mission.focus_packet)
     table.insert(mission.roles, normalized_role)
   end
 
@@ -348,6 +391,7 @@ function M.group_entries(entries)
           mission_id = entry.mission_id,
           name = entry.mission_name or entry.mission_id,
           objective = entry.mission_objective,
+          focus_packet = entry.mission_focus_packet,
           roles = {},
         }
         missions[entry.mission_id] = mission

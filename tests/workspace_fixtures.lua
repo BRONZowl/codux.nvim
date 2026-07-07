@@ -119,6 +119,7 @@ function M.default_state_record(_, workspace)
     mission_name = workspace.mission_name,
     mission_role = workspace.mission_role,
     mission_objective = workspace.mission_objective,
+    mission_focus_packet = workspace.mission_focus_packet,
     nvim_server = workspace.nvim_server,
     initial_mode = workspace.initial_mode,
     codex_mode = workspace.codex_mode,

@@ -49,6 +49,7 @@ for _, name in ipairs({
   "open_missions",
   "open_mission_dashboard",
   "edit_mission_objective",
+  "edit_mission_focus_packet",
   "delete_saved_mission",
   "close_saved_mission",
   "toggle",
@@ -84,6 +85,7 @@ commands.create(codux, {
 assert_true(type(created.Codux.callback) == "function")
 assert_equal(created.CoduxWorkspace.opts.nargs, "*")
 assert_equal(created.CoduxMissionEdit.opts.nargs, 1)
+assert_equal(created.CoduxMissionFocus.opts.nargs, 1)
 
 created.CoduxWorkspace.callback({ fargs = { "alpha" } })
 assert_equal(calls[#calls], "custom:alpha")

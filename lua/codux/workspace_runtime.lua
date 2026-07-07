@@ -758,6 +758,10 @@ function M:update_mission_objective(name, objective, opts)
   return workspace_registry.update_mission_objective(self, name, objective, opts)
 end
 
+function M:update_mission_focus_packet(name, focus_packet, opts)
+  return workspace_registry.update_mission_focus_packet(self, name, focus_packet, opts)
+end
+
 function M:saved_workspace_instruction_request(entry)
   return workspace_lifecycle_actions.saved_workspace_instruction_request(self, entry)
 end
@@ -916,6 +920,7 @@ function M:create_workspace(name, opts)
     mission_name = opts.mission_name,
     mission_role = opts.mission_role,
     mission_objective = opts.mission_objective,
+    mission_focus_packet = opts.mission_focus_packet,
   })
   if not workspace then
     self.notify(error_message or "Failed to prepare Codux workspace", vim.log.levels.ERROR)

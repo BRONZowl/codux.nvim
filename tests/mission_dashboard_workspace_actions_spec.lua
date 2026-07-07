@@ -39,6 +39,33 @@ do
 end
 
 do
+  local sent_prompt
+  local entry = {
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+    mission_focus_packet = "Focus on dashboard UX",
+  }
+  local controller = mission_control_mod.new({
+    ui = {
+      single_line_prompt = function(_, callback)
+        callback("make it clearer")
+        return true
+      end,
+    },
+    send_prompt_to_workspace = function(_, prompt)
+      sent_prompt = prompt
+      return true, nil
+    end,
+  })
+
+  assert_true(controller:open_workspace_prompt(entry))
+  assert_contains(sent_prompt, "Mission Focus Packet:\nFocus on dashboard UX")
+  assert_contains(sent_prompt, "User Request:\nmake it clearer")
+end
+
+do
   local old_key_choice_menu = ui_mod.key_choice_menu
   local selected
   local notifications, notify = notifications_fixture()

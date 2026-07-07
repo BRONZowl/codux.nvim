@@ -134,9 +134,11 @@ do
     safe_name = "review",
     project_root = "/repo",
     nvim_server = "/run/user/1000/codux/ws-review.sock",
+    mission_focus_packet = "Focused context",
   }, "review", "/repo")
 
   assert_equal(normalized.nvim_server, "/run/user/1000/codux/ws-review.sock")
+  assert_equal(normalized.mission_focus_packet, "Focused context")
 end
 
 do
@@ -144,13 +146,16 @@ do
     name = "review",
     safe_name = "review",
     project_root = "/repo",
+    mission_focus_packet = "Current focus",
     last_activity_at = "2026-07-05T10:00:00Z",
     last_target_at = "2026-07-05T09:00:00Z",
   }, {
+    mission_focus_packet = "Old focus",
     last_activity_at = "2026-07-04T10:00:00Z",
     last_target_at = "2026-07-04T09:00:00Z",
   })
 
+  assert_equal(workspace.mission_focus_packet, "Current focus")
   assert_equal(workspace.last_activity_at, "2026-07-05T10:00:00Z")
   assert_equal(workspace.last_target_at, "2026-07-05T09:00:00Z")
 end
@@ -163,11 +168,13 @@ do
     project_root = "/repo",
     window_name = "review",
     status = "idle",
+    mission_focus_packet = "Current focus",
   }, {
     last_activity_at = "2026-07-05T10:00:00Z",
     last_target_at = "2026-07-05T09:00:00Z",
   })
 
+  assert_equal(record.mission_focus_packet, "Current focus")
   assert_equal(record.last_activity_at, "2026-07-05T10:00:00Z")
   assert_equal(record.last_target_at, "2026-07-05T09:00:00Z")
 end

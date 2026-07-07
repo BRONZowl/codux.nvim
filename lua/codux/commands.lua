@@ -114,6 +114,10 @@ function M.create(codux, deps)
     codux.edit_mission_objective(opts.args)
   end, { force = true, nargs = 1, complete = codux._v5.complete_mission_names, desc = "Edit a Codux mission objective" })
 
+  vim.api.nvim_create_user_command("CoduxMissionFocus", function(opts)
+    codux.edit_mission_focus_packet(opts.args)
+  end, { force = true, nargs = 1, complete = codux._v5.complete_mission_names, desc = "Edit a Codux mission focus packet" })
+
   vim.api.nvim_create_user_command("CoduxMissionDelete", function(opts)
     codux.delete_saved_mission(opts.args)
   end, { force = true, nargs = 1, complete = codux._v5.complete_mission_names, desc = "Delete a Codux mission" })

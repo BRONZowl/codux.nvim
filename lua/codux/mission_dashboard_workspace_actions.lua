@@ -1,4 +1,5 @@
 local text_util = require("codux.text")
+local mission_mod = require("codux.mission")
 local ui = require("codux.ui")
 
 local M = {}
@@ -83,6 +84,7 @@ function M.mission_context_for_workspace(_, entry)
     mission_id = mission_id,
     mission_name = entry.mission_name,
     mission_objective = entry.mission_objective,
+    mission_focus_packet = entry.mission_focus_packet,
   }
 end
 
@@ -271,7 +273,8 @@ function M.open_workspace_prompt_input(controller, entry, label, submit_fn, succ
       return
     end
 
-    local ok, error_message = submit_fn(entry, input)
+    local prompt = mission_mod.prompt_with_focus_packet(input, entry and entry.mission_focus_packet)
+    local ok, error_message = submit_fn(entry, prompt)
     if ok then
       controller.notify(success_prefix .. tostring(label))
       controller:render_dashboard()

@@ -21,6 +21,7 @@ local function mission_context(opts)
     mission_id = context.mission_id,
     mission_name = context.mission_name or context.mission_id,
     mission_objective = context.mission_objective,
+    mission_focus_packet = context.mission_focus_packet,
   }
 end
 
@@ -377,6 +378,7 @@ function M:open_create_preview(request)
       mission_name = request.mission_name,
       mission_role = mission_role,
       mission_objective = request.mission_objective,
+      mission_focus_packet = request.mission_focus_packet,
     })
   end
 
@@ -412,6 +414,7 @@ function M:open_custom_instruction_prompt(name, opts)
     request.mission_id = context.mission_id
     request.mission_name = context.mission_name
     request.mission_objective = context.mission_objective
+    request.mission_focus_packet = context.mission_focus_packet
   end
 
   return self:open_instruction_editor(request, {

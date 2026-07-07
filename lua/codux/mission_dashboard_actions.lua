@@ -81,6 +81,28 @@ function M.edit_selected_mission(controller, mission)
   })
 end
 
+function M.edit_selected_mission_focus(controller, mission)
+  local root = controller.state.mission_dashboard_project_root or controller.project_root()
+  mission = mission or controller:selected_mission()
+  if not mission then
+    controller.notify("No Codux mission selected", vim.log.levels.WARN)
+    return false
+  end
+  return controller:open_objective_editor(mission.name, mission.focus_packet or "", {
+    title = " Edit Codux Mission Focus ",
+    footer = " Ctrl-s/:w save | Ctrl-q cancel ",
+    on_save = function(_, focus_packet)
+      local ok = controller.update_mission_focus_packet(mission.name, focus_packet, root)
+      if ok ~= false then
+        vim.schedule(function()
+          controller:refresh_loaded_dashboard(root)
+        end)
+      end
+      return ok
+    end,
+  })
+end
+
 function M.delete_selected_mission(controller, mission)
   local root = controller.state.mission_dashboard_project_root or controller.project_root()
   mission = mission or controller:selected_mission()
@@ -151,6 +173,10 @@ function M.run_mission_action(controller, action, target)
   if action == "edit_objective" then
     controller:close_action_palette()
     return controller:edit_selected_mission(mission)
+  end
+  if action == "edit_focus" then
+    controller:close_action_palette()
+    return controller:edit_selected_mission_focus(mission)
   end
   if action == "view_objective" then
     controller:close_action_palette()

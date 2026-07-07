@@ -641,5 +641,42 @@ do
   vim.schedule = old_schedule
 end
 
+do
+  local old_schedule = vim.schedule
+  local saved_root
+  local saved_focus
+  local refreshed_root
+  local on_save
+  vim.schedule = function(callback)
+    return callback()
+  end
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_project_root = "/repo",
+    },
+    update_mission_focus_packet = function(_, focus_packet, root)
+      saved_focus = focus_packet
+      saved_root = root
+      return true
+    end,
+  })
+  function controller:open_objective_editor(_, default_focus, opts)
+    assert_equal(default_focus, "old focus")
+    on_save = opts.on_save
+    return true
+  end
+  function controller:refresh_loaded_dashboard(root)
+    refreshed_root = root
+    return true
+  end
+
+  assert_true(controller:edit_selected_mission_focus({ name = "Alpha", focus_packet = "old focus" }))
+  assert_true(on_save("Alpha", "new focus"))
+  assert_equal(saved_focus, "new focus")
+  assert_equal(saved_root, "/repo")
+  assert_equal(refreshed_root, "/repo")
+  vim.schedule = old_schedule
+end
+
 
 print("mission_dashboard_actions_spec.lua: ok")

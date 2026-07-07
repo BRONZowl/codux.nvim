@@ -108,6 +108,7 @@ Codux can send editor context to the active Codex session:
 | Create a Mission Control crew | none | `:CoduxMissionCreate` |
 | Show Mission Control | `<leader>zM` | `:CoduxMissions` or `:CoduxMissionDashboard` |
 | Edit a mission objective | none | `:CoduxMissionEdit <mission>` |
+| Edit a mission focus packet | none | `:CoduxMissionFocus <mission>` |
 | Close a mission | none | `:CoduxMissionClose <mission>` |
 | Delete a mission | none | `:CoduxMissionDelete <mission>` |
 | Run Neovim health checks | none | `:CoduxHealth` |
@@ -197,13 +198,19 @@ Mission Control launches a small crew of Codux workspaces for one objective. Run
 
 The default crew is:
 
-- Builder: implements the primary code changes with focused validation.
-- Reviewer: reviews the branch for bugs, regressions, edge cases, and test gaps.
+- Builder: creates the requested outcome accurately, keeps context focused,
+  validates cheaply, and asks only high-impact questions.
 
 Each role gets a clean Git worktree workspace, mission metadata in Codux
 workspace state, workspace-auto permissions, and an initial plan-mode prompt. If
 Codux cannot confirm plan mode for a newly created mission role, it rolls back
 the new role workspaces.
+
+Each mission also carries a short focus packet. The packet is separate from the
+stable workspace instruction and captures the current intent, direction,
+preferences, active scope, and next action. Mission startup and dashboard-sent
+role prompts include the current packet so iteration stays narrow without
+turning the workspace instruction into a transcript.
 
 `:CoduxMissions`, `:CoduxMissionDashboard`, and `<leader>zM` open the mission
 dashboard. It shows mission and role rows with status, mode, profile, age, and
@@ -220,7 +227,7 @@ Dashboard controls:
   rows.
 
 Mission menu actions include start/reopen mission, view objective, edit
-objective, close mission, delete mission, and create a mission. Role workspace
+objective, edit focus, close mission, delete mission, and create a mission. Role workspace
 menus include answer question when active, edit instructions, close workspace,
 delete workspace, and create workspace.
 

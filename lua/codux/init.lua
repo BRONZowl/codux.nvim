@@ -651,6 +651,14 @@ function M.update_mission_objective(name, objective, opts)
   return ok
 end
 
+function M.update_mission_focus_packet(name, focus_packet, opts)
+  local ok, error_message = workspace_runtime:update_mission_focus_packet(name, focus_packet, opts)
+  if not ok and error_message then
+    notify(error_message, vim.log.levels.ERROR)
+  end
+  return ok
+end
+
 function M.delete_mission(name, opts)
   return workspace_runtime:delete_mission(name, opts)
 end
@@ -777,6 +785,10 @@ end
 
 function M.edit_mission_objective(name)
   return mission_controller:open_saved_objective_editor(name, workspace_manager_project_root())
+end
+
+function M.edit_mission_focus_packet(name)
+  return mission_controller:open_saved_focus_editor(name, workspace_manager_project_root())
 end
 
 function M.delete_saved_mission(name)
