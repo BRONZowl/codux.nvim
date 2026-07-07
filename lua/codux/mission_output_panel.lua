@@ -8,6 +8,7 @@ local function role_cache_key(entry)
   return table.concat({
     tostring(entry.project_root or entry.worktree_path or ""),
     tostring(entry.safe_name or entry.name or entry.mission_role or ""),
+    tostring(entry.status or ""),
     tostring(entry.worktree_branch or ""),
     tostring(entry.worktree_base or ""),
     tostring(entry.worktree_base_commit or ""),

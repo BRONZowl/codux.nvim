@@ -194,6 +194,48 @@ end
 
 if type(vim.api) == "table" then
   local closed_preview
+  local stopped_job
+  local preview_calls = 0
+  local controller, ctx = output_fixtures.controller({
+    workspace_interactive_preview = function()
+      preview_calls = preview_calls + 1
+      return output_fixtures.preview(), nil
+    end,
+    close_workspace_interactive_preview = function(preview)
+      closed_preview = preview
+      return true
+    end,
+    jobstop = function(job_id)
+      stopped_job = job_id
+      return true
+    end,
+    termopen = function()
+      return 77
+    end,
+  })
+
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "idle",
+  }))
+  assert_equal(controller.state.mission_dashboard_output_job, 77)
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "inactive",
+  }))
+  assert_equal(stopped_job, 77)
+  assert_equal(closed_preview.preview_session, "codux-preview-test")
+  assert_equal(preview_calls, 1)
+  assert_nil(controller.state.mission_dashboard_output_job)
+  assert_nil(controller.state.mission_dashboard_output_preview)
+  assert_equal(table.concat(ctx.rendered_lines, "\n"), "Output: workspace inactive")
+  output_fixtures.delete_buffer(ctx.bufnr)
+end
+
+if type(vim.api) == "table" then
+  local closed_preview
   local termopen_calls = 0
   local controller, ctx = output_fixtures.controller({
     workspace_interactive_preview = function()
