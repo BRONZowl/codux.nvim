@@ -527,6 +527,220 @@ do
 end
 
 do
+  with_tmux_env("/tmp/tmux,1,0", function()
+  with_filereadable(0, function()
+    local state_data = {
+      projects = {
+        ["/codux-worktrees/alpha-builder"] = {
+          workspaces = {
+            ["alpha-builder"] = review_workspace_record({
+              name = "alpha-builder",
+              safe_name = "alpha-builder",
+              project_root = "/codux-worktrees/alpha-builder",
+              tmux_window = "alpha-builder",
+              tmux_target = "session:alpha-builder",
+              status = "idle",
+              codex_status = "idle",
+              workspace_kind = "worktree",
+              git_common_dir = "/repo/.git",
+              worktree_path = "/codux-worktrees/alpha-builder",
+              worktree_branch = "dev/alpha-builder",
+              git_branch = "dev/alpha-builder",
+              target_path = "/codux-worktrees/alpha-builder/lua/init.lua",
+              mission_id = "mission:alpha",
+              mission_name = "Alpha",
+              mission_role = "Builder",
+              mission_objective = "Build it",
+              resolved_instruction = table.concat({
+                "You are the Builder for Codux Mission Control.",
+                "",
+                "Mission: Alpha",
+                "",
+                "Objective:",
+                "Build it",
+                "",
+                "Role focus:",
+                "Keep the implementation focused.",
+                "",
+                "Stay inside this workspace and keep your work scoped to this role. Coordinate through concise handoff notes when another role needs context.",
+              }, "\n"),
+            }),
+          },
+        },
+      },
+    }
+    local commands = {}
+    local written_instruction
+    local runtime = runtime_mod.new({
+      state = {
+        workspace_manager_project_root = "/repo",
+        workspace = {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          project_root = "/codux-worktrees/alpha-builder",
+          worktree_path = "/codux-worktrees/alpha-builder",
+          worktree_branch = "dev/alpha-builder",
+          tmux_target = "session:alpha-builder",
+          mission_role = "Builder",
+        },
+      },
+      notify = function() end,
+      system = function(args)
+        local command = table.concat(args, " ")
+        table.insert(commands, command)
+        if
+          command
+          == "git -C /codux-worktrees/alpha-builder show-ref --verify --quiet refs/heads/dev/alpha-build-lead"
+        then
+          return "", 1
+        end
+        if
+          command
+          == "git -C /codux-worktrees/alpha-builder worktree move /codux-worktrees/alpha-builder /codux-worktrees/alpha-build-lead"
+        then
+          return "", 0
+        end
+        if command == "git -C /codux-worktrees/alpha-build-lead branch -m dev/alpha-builder dev/alpha-build-lead" then
+          return "", 0
+        end
+        if command == "tmux rename-window -t @1 alpha-build-lead" then
+          return "", 0
+        end
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        return "", 1
+      end,
+      store = {
+        read_state = function()
+          return state_data, nil
+        end,
+        write_state = function(_, next_state)
+          state_data = next_state
+          return true, nil
+        end,
+        timestamp = function()
+          return "2026-06-30T00:00:00Z"
+        end,
+        project_state = project_state,
+        instruction_file_path = function(_, root, safe_name)
+          return root .. "/.agents/codux/" .. safe_name .. ".md"
+        end,
+        write_instruction_file = function(_, root, safe_name, instruction)
+          written_instruction = {
+            root = root,
+            safe_name = safe_name,
+            instruction = instruction,
+          }
+          return true, nil
+        end,
+      },
+    })
+    function runtime:mission_for_name(root, name)
+      assert_equal(root, "/repo")
+      assert_equal(name, "Alpha")
+      return {
+        name = "Alpha",
+        objective = "Build it",
+        roles = {
+          {
+            name = "alpha-builder",
+            safe_name = "alpha-builder",
+            project_root = "/codux-worktrees/alpha-builder",
+            mission_role = "Builder",
+          },
+        },
+      }, nil
+    end
+
+    assert_true(runtime:rename_mission_role({
+      name = "alpha-builder",
+      safe_name = "alpha-builder",
+      project_root = "/codux-worktrees/alpha-builder",
+      window_id = "@1",
+      window_name = "alpha-builder",
+      mission_name = "Alpha",
+    }, "Build Lead", { project_root = "/repo" }))
+    assert_nil(state_data.projects["/codux-worktrees/alpha-builder"].workspaces["alpha-builder"])
+    local record = state_data.projects["/codux-worktrees/alpha-build-lead"].workspaces["alpha-build-lead"]
+    assert_equal(record.name, "alpha-build-lead")
+    assert_equal(record.safe_name, "alpha-build-lead")
+    assert_equal(record.project_root, "/codux-worktrees/alpha-build-lead")
+    assert_equal(record.worktree_path, "/codux-worktrees/alpha-build-lead")
+    assert_equal(record.worktree_branch, "dev/alpha-build-lead")
+    assert_equal(record.git_branch, "dev/alpha-build-lead")
+    assert_equal(record.target_path, "/codux-worktrees/alpha-build-lead/lua/init.lua")
+    assert_equal(record.tmux_window, "alpha-build-lead")
+    assert_equal(record.tmux_target, "session:alpha-build-lead")
+    assert_equal(record.mission_role, "Build Lead")
+    assert_contains(record.resolved_instruction, "You are the Build Lead")
+    assert_contains(record.resolved_instruction, "Role focus:\nKeep the implementation focused.")
+    assert_equal(written_instruction.root, "/codux-worktrees/alpha-build-lead")
+    assert_equal(written_instruction.safe_name, "alpha-build-lead")
+    assert_equal(written_instruction.instruction, record.resolved_instruction)
+    assert_equal(runtime.state.workspace.name, "alpha-build-lead")
+    assert_equal(runtime.state.workspace.safe_name, "alpha-build-lead")
+    assert_equal(runtime.state.workspace.project_root, "/codux-worktrees/alpha-build-lead")
+    assert_equal(runtime.state.workspace.worktree_branch, "dev/alpha-build-lead")
+    assert_equal(runtime.state.workspace.mission_role, "Build Lead")
+    local command_text = table.concat(commands, "\n")
+    assert_contains(
+      command_text,
+      "git -C /codux-worktrees/alpha-builder worktree move /codux-worktrees/alpha-builder /codux-worktrees/alpha-build-lead"
+    )
+    assert_contains(command_text, "git -C /codux-worktrees/alpha-build-lead branch -m dev/alpha-builder dev/alpha-build-lead")
+    assert_contains(command_text, "tmux rename-window -t @1 alpha-build-lead")
+  end)
+  end)
+end
+
+do
+  local commands = {}
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    system = function(args)
+      table.insert(commands, table.concat(args, " "))
+      return "", 1
+    end,
+  })
+  function runtime:mission_for_name()
+    return {
+      name = "Alpha",
+      roles = {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          project_root = "/codux-worktrees/alpha-builder",
+          mission_role = "Builder",
+        },
+        {
+          name = "alpha-reviewer",
+          safe_name = "alpha-reviewer",
+          project_root = "/codux-worktrees/alpha-reviewer",
+          mission_role = "Reviewer",
+        },
+      },
+    }, nil
+  end
+
+  local ok, err = runtime:rename_mission_role({
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    project_root = "/codux-worktrees/alpha-builder",
+    mission_name = "Alpha",
+  }, "Reviewer", { project_root = "/repo" })
+
+  assert_false(ok)
+  assert_equal(err, "mission role already exists")
+  assert_equal(#commands, 0)
+end
+
+do
   local state_data = {
     projects = {
       ["/repo"] = {

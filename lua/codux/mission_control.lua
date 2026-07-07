@@ -623,6 +623,7 @@ for _, method in ipairs({
   "interrupt_workspace_action",
   "interrupt_selected_workspace",
   "switch_selected_workspace_mode",
+  "rename_selected_role",
   "delete_role_workspace",
   "open_action_palette",
 }) do

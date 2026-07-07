@@ -762,6 +762,10 @@ function M:update_mission_focus_packet(name, focus_packet, opts)
   return workspace_registry.update_mission_focus_packet(self, name, focus_packet, opts)
 end
 
+function M:rename_mission_role(entry, new_name, opts)
+  return workspace_lifecycle_actions.rename_mission_role(self, entry, new_name, opts)
+end
+
 function M:saved_workspace_instruction_request(entry)
   return workspace_lifecycle_actions.saved_workspace_instruction_request(self, entry)
 end

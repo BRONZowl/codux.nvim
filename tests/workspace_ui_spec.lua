@@ -135,6 +135,7 @@ do
   end
 
   assert_nil(by_key.o)
+  assert_equal(by_key.r, "rename_role")
   assert_equal(by_key.e, "edit_instructions")
   assert_equal(by_key.x, "close_workspace")
   assert_equal(by_key.d, "delete_workspace")
@@ -143,14 +144,14 @@ do
   assert_nil(by_key.i)
   assert_nil(by_key.s)
   assert_nil(by_key.a)
-  assert_nil(by_key.r)
   assert_nil(by_key.X)
-  assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Edit Instructions")
+  assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Rename Role")
   assert_nil(labels_by_key.p)
   assert_nil(labels_by_key.i)
   assert_nil(labels_by_key.s)
   assert_nil(labels_by_key.a)
   assert_nil(labels_by_key.o)
+  assert_equal(labels_by_key.r, "Rename Role")
   assert_equal(labels_by_key.d, "Delete Workspace")
   assert_equal(labels_by_key.w, "Create Workspace")
   local inactive_signature = action_signature(actions)
@@ -166,8 +167,9 @@ do
     assert_equal(action_signature(status_actions), inactive_signature)
     assert_nil(by_key.a)
     assert_nil(labels_by_key.a)
+    assert_equal(by_key.r, "rename_role")
     assert_equal(by_key.e, "edit_instructions")
-    assert_contains(workspace_ui.role_workspace_action_line(status_actions[1], 40), "Edit Instructions")
+    assert_contains(workspace_ui.role_workspace_action_line(status_actions[1], 40), "Rename Role")
   end
 end
 

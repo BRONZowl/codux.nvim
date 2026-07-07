@@ -494,6 +494,107 @@ do
 end
 
 do
+  local calls = {}
+  local notifications, notify = notifications_fixture()
+  local refreshed_root
+  local entry = {
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    mission_name = "Alpha",
+  }
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_project_root = "/repo",
+    },
+    notify = notify,
+    ui = {
+      close_window = function() end,
+      delete_buffer = function() end,
+      single_line_prompt = function(opts, callback)
+        assert_equal(opts.prompt, "Rename Codux role: ")
+        assert_equal(opts.default, "Builder")
+        assert_equal(opts.filetype, "codux-mission-role-rename")
+        callback("  Build Lead  ")
+        return true
+      end,
+    },
+    rename_mission_role = function(workspace, new_name, root)
+      table.insert(calls, tostring(workspace.safe_name) .. ":" .. tostring(new_name) .. ":" .. tostring(root))
+      return true, nil
+    end,
+  })
+  function controller:refresh_loaded_dashboard(root)
+    refreshed_root = root
+    return true
+  end
+
+  assert_true(controller:rename_selected_role(entry))
+  assert_equal(calls[1], "alpha-builder:Build Lead:/repo")
+  assert_equal(refreshed_root, "/repo")
+  assert_equal(notifications[#notifications], "Renamed Codux role to Build Lead")
+end
+
+do
+  local called = false
+  local refreshed = false
+  local controller = mission_control_mod.new({
+    ui = {
+      single_line_prompt = function(_, callback)
+        callback("   ")
+        return true
+      end,
+    },
+    rename_mission_role = function()
+      called = true
+      return true, nil
+    end,
+  })
+  function controller:refresh_loaded_dashboard()
+    refreshed = true
+  end
+
+  assert_true(controller:rename_selected_role({
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+  }))
+  assert_false(called)
+  assert_false(refreshed)
+end
+
+do
+  local notifications, notify = notifications_fixture()
+  local refreshed = false
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_project_root = "/repo",
+    },
+    notify = notify,
+    ui = {
+      single_line_prompt = function(_, callback)
+        callback("Reviewer")
+        return true
+      end,
+    },
+    rename_mission_role = function()
+      return false, "mission role already exists"
+    end,
+  })
+  function controller:refresh_loaded_dashboard()
+    refreshed = true
+  end
+
+  assert_true(controller:rename_selected_role({
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+  }))
+  assert_false(refreshed)
+  assert_equal(notifications[#notifications], "mission role already exists")
+end
+
+do
   local confirmed_message
   local old_confirm = vim.fn.confirm
   vim.fn.confirm = function(message, choices, default)

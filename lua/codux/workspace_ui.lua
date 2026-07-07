@@ -263,6 +263,7 @@ end
 
 function M.role_workspace_action_items()
   local items = {}
+  table.insert(items, { key = "r", action = "rename_role", label = "Rename Role" })
   table.insert(items, { key = "e", action = "edit_instructions", label = "Edit Instructions" })
   table.insert(items, { key = "x", action = "close_workspace", label = "Close Workspace" })
   table.insert(items, { key = "d", action = "delete_workspace", label = "Delete Workspace" })

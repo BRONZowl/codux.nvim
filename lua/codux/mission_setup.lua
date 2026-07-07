@@ -32,6 +32,13 @@ function M.new(deps)
     update_mission_focus_packet = function(name, focus_packet, root)
       return codux.update_mission_focus_packet(name, focus_packet, { project_root = root })
     end,
+    rename_mission_role = function(entry, new_name, root)
+      local ok, error_message = workspace_runtime:rename_mission_role(entry, new_name, { project_root = root })
+      if not ok and error_message then
+        return false, error_message
+      end
+      return ok
+    end,
     mission_dirty_roles = function(name, root)
       return workspace_runtime:mission_dirty_roles(name, { project_root = root })
     end,

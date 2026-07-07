@@ -1,3 +1,4 @@
+local mission_mod = require("codux.mission")
 local workspace_instruction_actions = require("codux.workspace_instruction_actions")
 local workspace_lifecycle = require("codux.workspace_lifecycle")
 
@@ -11,29 +12,34 @@ function M.update_saved_workspace_instruction(runtime, entry, instruction)
   return workspace_instruction_actions.update_saved_workspace_instruction(runtime, entry, instruction)
 end
 
-function M.rename_saved_workspace(runtime, entry, new_name)
+local function rename_saved_workspace_impl(runtime, entry, new_name, opts)
+  opts = type(opts) == "table" and opts or {}
+  local function fail(message, level)
+    if opts.return_errors == true then
+      return false, message
+    end
+    runtime.notify(message, level or vim.log.levels.ERROR)
+    return false
+  end
+
   local display_name, safe_name_or_error = runtime.sanitize_workspace_name(new_name)
   if not display_name then
-    runtime.notify(safe_name_or_error, vim.log.levels.ERROR)
-    return false
+    return fail(safe_name_or_error)
   end
 
   local root = entry.project_root or runtime.state.workspace_manager_project_root
   local state_data, state_error = runtime:read_state()
   if state_error then
-    runtime.notify(state_error, vim.log.levels.ERROR)
-    return false
+    return fail(state_error)
   end
 
   local project = runtime:project_state(state_data, root)
   local existing = project.workspaces[entry.safe_name]
   if type(existing) ~= "table" then
-    runtime.notify("workspace not found", vim.log.levels.ERROR)
-    return false
+    return fail("workspace not found")
   end
   if safe_name_or_error ~= entry.safe_name and project.workspaces[safe_name_or_error] ~= nil then
-    runtime.notify("workspace already exists", vim.log.levels.ERROR)
-    return false
+    return fail("workspace already exists")
   end
 
   local new_window_name = runtime.workspace_window_name(safe_name_or_error)
@@ -50,24 +56,20 @@ function M.rename_saved_workspace(runtime, entry, new_name)
     new_worktree_path = workspace_lifecycle.renamed_worktree_path(old_worktree_path, safe_name_or_error)
     new_branch = runtime:renamed_worktree_branch(existing, safe_name_or_error)
     if runtime.target_path_exists(new_worktree_path) then
-      runtime.notify("worktree path already exists", vim.log.levels.ERROR)
-      return false
+      return fail("worktree path already exists")
     end
     if old_branch ~= new_branch and runtime:git_branch_exists(root, new_branch) then
-      runtime.notify("branch already exists: " .. new_branch, vim.log.levels.ERROR)
-      return false
+      return fail("branch already exists: " .. new_branch)
     end
     previous_next_project = state_data.projects[new_worktree_path] and vim.deepcopy(state_data.projects[new_worktree_path]) or nil
     if not runtime:move_git_worktree(root, old_worktree_path, new_worktree_path) then
-      runtime.notify("Failed to move Git worktree " .. tostring(old_worktree_path), vim.log.levels.ERROR)
-      return false
+      return fail("Failed to move Git worktree " .. tostring(old_worktree_path))
     end
     worktree_renamed = true
     if old_branch ~= new_branch then
       if not runtime:rename_git_branch(new_worktree_path, old_branch, new_branch) then
         runtime:move_git_worktree(new_worktree_path, new_worktree_path, old_worktree_path)
-        runtime.notify("Failed to rename Git branch " .. tostring(old_branch), vim.log.levels.ERROR)
-        return false
+        return fail("Failed to rename Git branch " .. tostring(old_branch))
       end
       branch_renamed = true
     end
@@ -81,10 +83,11 @@ function M.rename_saved_workspace(runtime, entry, new_name)
         runtime:move_git_worktree(new_worktree_path or root, new_worktree_path, old_worktree_path)
       end
     end
-    runtime.notify("Failed to rename tmux window " .. tostring(entry.window_name), vim.log.levels.ERROR)
-    return false
+    return fail("Failed to rename tmux window " .. tostring(entry.window_name))
   end
 
+  local old_root = root
+  local old_safe_name = entry.safe_name
   project.workspaces[entry.safe_name] = nil
   existing.name = display_name
   existing.safe_name = safe_name_or_error
@@ -100,6 +103,24 @@ function M.rename_saved_workspace(runtime, entry, new_name)
   existing.tmux_target = entry.window_id and runtime.tmux_target(runtime:current_tmux_session(), new_window_name) or nil
   existing.status = runtime:dashboard_workspace_status(existing, entry.window_id)
   existing.last_opened_at = runtime:timestamp()
+
+  local context = {
+    old_root = old_root,
+    old_safe_name = old_safe_name,
+    old_worktree_path = old_worktree_path,
+    new_worktree_path = new_worktree_path,
+    old_branch = old_branch,
+    new_branch = new_branch,
+    display_name = display_name,
+    safe_name = safe_name_or_error,
+  }
+  if type(opts.update_record) == "function" then
+    local ok, err = opts.update_record(existing, context)
+    if ok == false then
+      return fail(err or "Failed to update Codux workspace")
+    end
+  end
+
   if existing.workspace_kind == "worktree" then
     if next(project.workspaces) == nil and vim.empty_dict then
       project.workspaces = vim.empty_dict()
@@ -132,8 +153,7 @@ function M.rename_saved_workspace(runtime, entry, new_name)
     if #rollback_errors > 0 then
       message = message .. "; " .. table.concat(rollback_errors, "; ")
     end
-    runtime.notify(message, vim.log.levels.ERROR)
-    return false
+    return fail(message)
   end
 
   local instruction_root = existing.workspace_kind == "worktree" and new_worktree_path or root
@@ -149,13 +169,118 @@ function M.rename_saved_workspace(runtime, entry, new_name)
   then
     local rename_ok, rename_result = pcall(vim.fn.rename, old_instruction_path, new_instruction_path)
     if not rename_ok or rename_result ~= 0 then
+      if opts.return_errors == true then
+        return false, "Renamed workspace, but failed to move Codux instruction file"
+      end
       runtime.notify("Renamed workspace, but failed to move Codux instruction file", vim.log.levels.WARN)
     end
   end
 
-  runtime.notify("Renamed Codux workspace to " .. display_name)
-  runtime.close_workspace_manager()
-  return true
+  if type(opts.after_instruction_move) == "function" then
+    local ok, err = opts.after_instruction_move(existing, context, instruction_root)
+    if ok == false then
+      return fail(err or "Renamed workspace, but failed to update Codux instruction file")
+    end
+  end
+
+  if
+    type(opts.update_active_workspace) == "function"
+    and runtime.state.workspace
+    and runtime.state.workspace.project_root == old_root
+    and runtime.state.workspace.safe_name == old_safe_name
+  then
+    opts.update_active_workspace(runtime.state.workspace, existing, context)
+  end
+
+  if opts.success_message ~= false then
+    runtime.notify("Renamed Codux workspace to " .. display_name)
+  end
+  if opts.close_manager ~= false then
+    runtime.close_workspace_manager()
+  end
+  return true, nil
+end
+
+function M.rename_saved_workspace(runtime, entry, new_name)
+  return rename_saved_workspace_impl(runtime, entry, new_name)
+end
+
+function M.rename_mission_role(runtime, entry, new_name, opts)
+  entry = type(entry) == "table" and entry or {}
+  opts = type(opts) == "table" and opts or {}
+  local role_name, role_safe_or_error = runtime.sanitize_workspace_name(new_name)
+  if not role_name then
+    return false, tostring(role_safe_or_error or "Mission role name is required"):gsub("^Workspace", "Mission role")
+  end
+
+  local root = opts.project_root or entry.project_root or runtime:project_root()
+  local mission_name = entry.mission_name or entry.mission_id
+  local mission, mission_error = runtime:mission_for_name(root, mission_name)
+  if not mission then
+    return false, mission_error or "mission not found"
+  end
+
+  local mission_display, mission_safe_or_error = runtime.sanitize_workspace_name(mission.name or entry.mission_name)
+  if not mission_display then
+    return false, mission_safe_or_error
+  end
+  local new_workspace_name = mission_mod.workspace_name(mission_safe_or_error, { safe_name = role_safe_or_error })
+
+  local selected_root = entry.project_root or root
+  local selected_safe_name = entry.safe_name
+  if type(selected_root) ~= "string" or selected_root == "" or type(selected_safe_name) ~= "string" or selected_safe_name == "" then
+    return false, "mission role not found"
+  end
+
+  for _, role_entry in ipairs(type(mission.roles) == "table" and mission.roles or {}) do
+    if not (role_entry.safe_name == selected_safe_name and (role_entry.project_root or root) == selected_root) then
+      local other_display, other_safe =
+        runtime.sanitize_workspace_name(role_entry.mission_role or role_entry.name or role_entry.safe_name)
+      if other_display and other_safe == role_safe_or_error then
+        return false, "mission role already exists"
+      end
+    end
+  end
+
+  return rename_saved_workspace_impl(runtime, entry, new_workspace_name, {
+    return_errors = true,
+    success_message = false,
+    close_manager = false,
+    update_record = function(existing)
+      local role = mission_mod.role_from_entry({
+        mission_role = role_name,
+        resolved_instruction = existing.resolved_instruction or entry.resolved_instruction,
+        custom_instruction = existing.custom_instruction or entry.custom_instruction,
+      })
+      role.name = role_name
+      role.safe_name = role_safe_or_error
+
+      local objective = existing.mission_objective or entry.mission_objective or mission.objective
+      local instruction = mission_mod.role_instruction(mission.name, objective, role)
+      existing.mission_role = role_name
+      existing.custom_instruction = instruction
+      existing.resolved_instruction = instruction
+      return true, nil
+    end,
+    after_instruction_move = function(existing, _, instruction_root)
+      return runtime:write_instruction_file(instruction_root, existing.safe_name, existing.resolved_instruction)
+    end,
+    update_active_workspace = function(workspace, existing)
+      workspace.name = existing.name
+      workspace.safe_name = existing.safe_name
+      workspace.project_root = existing.project_root
+      workspace.target_path = existing.target_path
+      workspace.git_branch = existing.git_branch
+      workspace.worktree_path = existing.worktree_path
+      workspace.worktree_branch = existing.worktree_branch
+      workspace.tmux_window = existing.tmux_window
+      workspace.window_name = existing.tmux_window
+      workspace.tmux_target = existing.tmux_target
+      workspace.mission_role = existing.mission_role
+      workspace.custom_instruction = existing.custom_instruction
+      workspace.resolved_instruction = existing.resolved_instruction
+    end,
+  })
 end
 
 function M.delete_saved_workspace(runtime, entry)

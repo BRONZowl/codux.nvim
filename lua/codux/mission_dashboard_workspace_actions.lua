@@ -10,6 +10,14 @@ end
 
 function M.run_workspace_action(controller, action, target)
   local workspace = target or controller.state.mission_dashboard_action_workspace
+  if action == "rename_role" then
+    workspace = workspace or controller:selected_role_workspace_or_notify()
+    if not workspace then
+      return false
+    end
+    controller:close_action_palette()
+    return controller:rename_selected_role(workspace)
+  end
   if action == "edit_instructions" then
     workspace = workspace or controller:selected_role_workspace_or_notify()
     if not workspace then
@@ -313,6 +321,48 @@ function M.switch_selected_workspace_mode(controller, entry)
 
   controller.notify(error_message or "Failed to switch workspace mode", vim.log.levels.ERROR)
   return false
+end
+
+function M.rename_selected_role(controller, entry)
+  entry = type(entry) == "table" and entry or controller:selected_role_workspace_or_notify()
+  if not entry then
+    return false
+  end
+
+  local prompt_fn = controller.ui.single_line_prompt
+  if type(prompt_fn) ~= "function" then
+    controller.notify("Codux prompt input is unavailable", vim.log.levels.ERROR)
+    return false
+  end
+
+  local current_name = entry.mission_role or entry.name or entry.safe_name or ""
+  return prompt_fn({
+    prompt = "Rename Codux role: ",
+    default = current_name,
+    filetype = "codux-mission-role-rename",
+    zindex = 80,
+    on_create_buffer = function(bufnr)
+      ui.disable_buffer_completion(bufnr, { is_loaded_buf = controller.is_loaded_buf })
+    end,
+  }, function(input)
+    local new_name = trim(input)
+    if new_name == "" then
+      return
+    end
+
+    local root = controller.state.mission_dashboard_project_root or controller.project_root()
+    local ok, error_message = controller.rename_mission_role(entry, new_name, root)
+    if ok then
+      controller.notify("Renamed Codux role to " .. tostring(new_name))
+      controller:refresh_loaded_dashboard(root)
+      return
+    end
+    controller.notify(error_message or "Failed to rename Codux role", vim.log.levels.ERROR)
+  end, {
+    notify = controller.notify,
+    set_buffer_keymap = controller.set_buffer_keymap,
+    bind_close_keys = controller.bind_close_keys,
+  })
 end
 
 function M.delete_role_workspace(controller, entry)

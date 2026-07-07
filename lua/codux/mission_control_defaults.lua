@@ -103,6 +103,9 @@ function M.normalize(opts)
     end),
     update_mission_objective = opt_function(opts, "update_mission_objective", noop),
     update_mission_focus_packet = opt_function(opts, "update_mission_focus_packet", noop),
+    rename_mission_role = opt_function(opts, "rename_mission_role", function()
+      return false, "mission role rename unavailable"
+    end),
     mission_dirty_roles = opt_function(opts, "mission_dirty_roles", function()
       return {}
     end),
