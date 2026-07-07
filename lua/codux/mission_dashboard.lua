@@ -7,11 +7,7 @@ local COMMAND_ITEMS = {
   { key = "m", label = "menu" },
   { key = "n", label = "new" },
   { key = "c", label = "cleanup" },
-  { key = "a", label = "answer" },
-  { key = "p", label = "prompt" },
-  { key = "o", label = "control" },
-  { key = "i", label = "interrupt" },
-  { key = "s", label = "mode" },
+  { key = "<C-o>", label = "control" },
 }
 
 local ROLE_TABLE_MAX_WIDTH = 112

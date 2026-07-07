@@ -21,14 +21,6 @@ function M.run_workspace_action(controller, action, target)
     controller:close_action_palette()
     return controller:open_workspace_prompt(workspace)
   end
-  if action == "answer_question" then
-    workspace = workspace or controller:selected_role_workspace_or_notify()
-    if not workspace then
-      return false
-    end
-    controller:close_action_palette()
-    return controller:open_workspace_question_answer(workspace)
-  end
   if action == "edit_instructions" then
     workspace = workspace or controller:selected_role_workspace_or_notify()
     if not workspace then

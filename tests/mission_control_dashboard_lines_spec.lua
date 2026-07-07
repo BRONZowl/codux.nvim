@@ -330,10 +330,7 @@ do
   local commands = {
     { key = "Tab", label = "search" },
     { key = "m", label = "menu" },
-    { key = "p", label = "prompt" },
-    { key = "o", label = "control" },
-    { key = "i", label = "interrupt" },
-    { key = "s", label = "mode" },
+    { key = "<C-o>", label = "control" },
   }
   local search_start = 1
   for _, command in ipairs(commands) do

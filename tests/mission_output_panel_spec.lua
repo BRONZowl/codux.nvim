@@ -73,6 +73,8 @@ end
 do
   local bound = {}
   local closed = false
+  local focused = false
+  local exited = false
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_output_entry = {
@@ -97,11 +99,20 @@ do
   function controller:render_output_panel()
     return true
   end
+  function controller:focus_mission_list()
+    focused = true
+    return true
+  end
+  function controller:exit_output_control()
+    exited = true
+    self.state.mission_dashboard_output_control = false
+    return true
+  end
 
   controller:bind_output_panel_commands(12)
   assert_equal(bound["<C-q>"].desc, "Close Codux Missions")
-  assert_equal(bound["<Esc>"].desc, "Exit Codux Output Control")
-  assert_nil(bound["<C-o>"])
+  assert_equal(bound["<C-o>"].desc, "Return to Codux Missions")
+  assert_nil(bound["<Esc>"])
   assert_nil(bound.r)
   assert_nil(bound.o)
   assert_nil(bound.p)
@@ -112,7 +123,11 @@ do
   assert_nil(bound.w)
   assert_true(bound["<C-q>"].rhs())
   assert_true(closed)
-  assert_false(bound["<Esc>"].rhs())
+  assert_true(bound["<C-o>"].rhs())
+  assert_true(focused)
+  controller.state.mission_dashboard_output_control = true
+  assert_true(bound["<C-o>"].rhs())
+  assert_true(exited)
 end
 
 do

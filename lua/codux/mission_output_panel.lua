@@ -176,16 +176,16 @@ end
 
 function Output:bind_output_panel_commands(bufnr)
   self.set_buffer_keymap(bufnr, { "n", "t" }, "<C-q>", function()
-    if self.state.mission_dashboard_output_control then
-      return self:exit_output_control()
-    end
     return self:close_dashboard()
   end, "Close Codux Missions", {
     nowait = true,
   })
-  self.set_buffer_keymap(bufnr, { "n", "t" }, "<Esc>", function()
-    return self:exit_output_control()
-  end, "Exit Codux Output Control", {
+  self.set_buffer_keymap(bufnr, { "n", "t" }, "<C-o>", function()
+    if self.state.mission_dashboard_output_control then
+      return self:exit_output_control()
+    end
+    return self:focus_mission_list()
+  end, "Return to Codux Missions", {
     nowait = true,
   })
 end

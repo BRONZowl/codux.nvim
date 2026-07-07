@@ -157,9 +157,10 @@ do
       labels_by_key[action.key] = action.label
     end
 
-    assert_equal(by_key.a, "answer_question")
-    assert_equal(labels_by_key.a, "Answer Question")
-    assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Answer Question")
+    assert_nil(by_key.a)
+    assert_nil(labels_by_key.a)
+    assert_equal(by_key.e, "edit_instructions")
+    assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Edit Instructions")
   end
 end
 

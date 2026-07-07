@@ -264,9 +264,6 @@ end
 function M.role_workspace_action_items(entry)
   entry = type(entry) == "table" and entry or {}
   local items = {}
-  if entry.status ~= "inactive" then
-    table.insert(items, { key = "a", action = "answer_question", label = "Answer Question" })
-  end
   table.insert(items, { key = "e", action = "edit_instructions", label = "Edit Instructions" })
   table.insert(items, { key = "x", action = "close_workspace", label = "Close Workspace" })
   table.insert(items, { key = "d", action = "delete_workspace", label = "Delete Workspace" })
