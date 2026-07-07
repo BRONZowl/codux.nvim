@@ -331,6 +331,7 @@ do
     { key = "Tab", label = "search" },
     { key = "m", label = "menu" },
     { key = "p", label = "prompt" },
+    { key = "o", label = "control" },
     { key = "i", label = "interrupt" },
     { key = "s", label = "mode" },
   }

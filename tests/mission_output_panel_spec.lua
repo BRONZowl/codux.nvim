@@ -100,6 +100,7 @@ do
 
   controller:bind_output_panel_commands(12)
   assert_equal(bound["<C-q>"].desc, "Close Codux Missions")
+  assert_equal(bound["<Esc>"].desc, "Exit Codux Output Control")
   assert_nil(bound["<C-o>"])
   assert_nil(bound.r)
   assert_nil(bound.o)
@@ -111,6 +112,7 @@ do
   assert_nil(bound.w)
   assert_true(bound["<C-q>"].rhs())
   assert_true(closed)
+  assert_false(bound["<Esc>"].rhs())
 end
 
 do

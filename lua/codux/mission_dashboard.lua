@@ -9,6 +9,7 @@ local COMMAND_ITEMS = {
   { key = "c", label = "cleanup" },
   { key = "a", label = "answer" },
   { key = "p", label = "prompt" },
+  { key = "o", label = "control" },
   { key = "i", label = "interrupt" },
   { key = "s", label = "mode" },
 }

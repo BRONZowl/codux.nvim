@@ -386,6 +386,34 @@ end
 
 do
   with_workspace_prepare_env(function()
+    local harness = remote_harness({
+      system = function(_, command)
+        if command == "tmux kill-session -t codux-preview-test" then
+          return "", 1
+        end
+        if command == "tmux new-session -d -t session -s codux-preview-test" then
+          return "", 0
+        end
+        if command == "tmux select-window -t codux-preview-test:review" then
+          return "", 0
+        end
+      end,
+    })
+    local runtime = harness.runtime
+    local preview, error_message = runtime:workspace_interactive_preview(remote_workspace(), {
+      attempts = 1,
+      preview_session = "codux-preview-test",
+      control = true,
+    })
+    assert_nil(error_message)
+    assert_equal(table.concat(preview.command, " "), "env -u TMUX tmux attach-session -t codux-preview-test")
+    assert_true(preview.control)
+    assert_equal(preview.preview_session, "codux-preview-test")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
     local runtime = workspace_prepare_runtime({
       get_config = function()
         local config = default_workspace_config()

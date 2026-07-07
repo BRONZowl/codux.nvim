@@ -47,7 +47,8 @@ function M.close_output_preview(self)
   end
 end
 
-function M.start_output_preview(self, entry)
+function M.start_output_preview(self, entry, opts)
+  opts = type(opts) == "table" and opts or {}
   if not self.is_loaded_buf(self.state.mission_dashboard_output_buf) then
     return false
   end
@@ -66,7 +67,7 @@ function M.start_output_preview(self, entry)
   end
 
   self:render_output_status(entry, "opening workspace session preview...")
-  local preview, error_message = self.workspace_interactive_preview(entry)
+  local preview, error_message = self.workspace_interactive_preview(entry, opts)
   if not preview then
     self.state.mission_dashboard_output_blocked_key = self.state.mission_dashboard_output_key
     return self:render_output_status(entry, error_message or "workspace session preview unavailable")
@@ -99,11 +100,21 @@ function M.start_output_preview(self, entry)
           local active_key = self.state.mission_dashboard_output_key
           local active_preview = self.state.mission_dashboard_output_preview
           self.state.mission_dashboard_output_preview = nil
+          local was_control = type(active_preview) == "table" and active_preview.control == true
           if active_preview then
             pcall(self.close_workspace_interactive_preview, active_preview)
           end
-          self.state.mission_dashboard_output_blocked_key = active_key
-          self:render_output_status(active_entry, "workspace preview exited with code " .. tostring(code))
+          if was_control then
+            self.state.mission_dashboard_output_control = false
+            self.state.mission_dashboard_output_control_key = nil
+            self:set_output_window_focusable(false)
+            self:render_output_panel(active_entry)
+            self:start_monitor_timer()
+            self:focus_mission_list()
+          else
+            self.state.mission_dashboard_output_blocked_key = active_key
+            self:render_output_status(active_entry, "workspace preview exited with code " .. tostring(code))
+          end
         end
       end,
     })

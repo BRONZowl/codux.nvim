@@ -9,6 +9,9 @@ local function role_cache_key(entry)
     tostring(entry.project_root or entry.worktree_path or ""),
     tostring(entry.safe_name or entry.name or entry.mission_role or ""),
     tostring(entry.status or ""),
+    tostring(entry.window_id or ""),
+    tostring(entry.tmux_target or ""),
+    tostring(entry.tmux_window or entry.window_name or ""),
     tostring(entry.worktree_branch or ""),
     tostring(entry.worktree_base or ""),
     tostring(entry.worktree_base_commit or ""),
@@ -80,6 +83,9 @@ function Output:render_output_panel(entry)
   if not self.is_loaded_buf(self.state.mission_dashboard_output_buf) then
     return false
   end
+  if self.state.mission_dashboard_output_control then
+    return true
+  end
   entry = type(entry) == "table" and entry or self:selected_output_entry()
   local key = self:output_entry_key(entry)
   if key ~= self.state.mission_dashboard_output_key then
@@ -106,10 +112,80 @@ function Output:focus_output_panel()
   return ok
 end
 
+function Output:set_output_window_focusable(focusable)
+  local win = self.state.mission_dashboard_output_win
+  if not self.is_valid_win(win) then
+    return false
+  end
+  local config = self.get_window_config(win)
+  config = type(config) == "table" and config or {}
+  config.focusable = focusable == true
+  return self.set_window_config(win, config)
+end
+
+function Output:enter_output_control()
+  local entry = self:selected_output_entry()
+  if type(entry) ~= "table" then
+    self.notify("Select a workspace row to control its output", vim.log.levels.WARN)
+    return false
+  end
+  if entry.status == "inactive" then
+    self.notify("Workspace output is inactive", vim.log.levels.WARN)
+    return false
+  end
+  if not self.is_loaded_buf(self.state.mission_dashboard_output_buf) or not self.is_valid_win(self.state.mission_dashboard_output_win) then
+    if not self:open_output_panel(entry) then
+      return false
+    end
+  end
+
+  self:stop_monitor_timer()
+  self.state.mission_dashboard_output_control = true
+  self.state.mission_dashboard_output_control_key = self:output_entry_key(entry)
+  self:set_output_window_focusable(true)
+
+  if not self:start_output_preview(entry, { control = true }) then
+    self.state.mission_dashboard_output_control = false
+    self.state.mission_dashboard_output_control_key = nil
+    self:set_output_window_focusable(false)
+    self:start_monitor_timer()
+    return false
+  end
+  if not self:focus_output_panel() then
+    self:exit_output_control()
+    return false
+  end
+  return true
+end
+
+function Output:exit_output_control()
+  if not self.state.mission_dashboard_output_control then
+    return false
+  end
+
+  local entry = self:selected_output_entry() or self.state.mission_dashboard_output_entry
+  self.state.mission_dashboard_output_control = false
+  self.state.mission_dashboard_output_control_key = nil
+  self:set_output_window_focusable(false)
+  self:close_output_preview()
+  self:render_output_panel(entry)
+  self:start_monitor_timer()
+  self:focus_mission_list()
+  return true
+end
+
 function Output:bind_output_panel_commands(bufnr)
   self.set_buffer_keymap(bufnr, { "n", "t" }, "<C-q>", function()
+    if self.state.mission_dashboard_output_control then
+      return self:exit_output_control()
+    end
     return self:close_dashboard()
   end, "Close Codux Missions", {
+    nowait = true,
+  })
+  self.set_buffer_keymap(bufnr, { "n", "t" }, "<Esc>", function()
+    return self:exit_output_control()
+  end, "Exit Codux Output Control", {
     nowait = true,
   })
 end
@@ -165,6 +241,8 @@ function Output:close_output_panel()
   self.state.mission_dashboard_output_key = nil
   self.state.mission_dashboard_output_blocked_key = nil
   self.state.mission_dashboard_output_buf_kind = nil
+  self.state.mission_dashboard_output_control = false
+  self.state.mission_dashboard_output_control_key = nil
   return true
 end
 

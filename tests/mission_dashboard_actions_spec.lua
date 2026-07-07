@@ -75,6 +75,7 @@ do
   assert_equal(bound["<Tab>"], "Search/List Codux Missions")
   assert_equal(bound.a, "Answer Codux Mission Role Question")
   assert_equal(bound.p, "Prompt Codux Mission Role")
+  assert_equal(bound.o, "Control Codux Mission Role Output")
   assert_equal(bound.i, "Interrupt Codux Mission Role")
   assert_equal(bound.s, "Switch Codux Mission Role Mode")
   assert_equal(bound.n, "Create Codux Mission")

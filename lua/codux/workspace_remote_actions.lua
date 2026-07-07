@@ -50,12 +50,21 @@ function M.workspace_interactive_preview(runtime, entry, opts)
     return nil, "failed to select Codux workspace preview window"
   end
 
+  local command = { "env", "-u", "TMUX", runtime:tmux_cmd(), "attach-session" }
+  if opts.control ~= true then
+    table.insert(command, "-f")
+    table.insert(command, "read-only")
+  end
+  table.insert(command, "-t")
+  table.insert(command, preview_session)
+
   return {
-    command = { "env", "-u", "TMUX", runtime:tmux_cmd(), "attach-session", "-f", "read-only", "-t", preview_session },
+    command = command,
     preview_session = preview_session,
     workspace = workspace,
     window_name = window_name,
     window_id = workspace.window_id,
+    control = opts.control == true,
   }, nil
 end
 

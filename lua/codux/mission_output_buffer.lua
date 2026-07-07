@@ -32,6 +32,8 @@ function M.attach_output_buffer_autocmd(self, bufnr)
         self.state.mission_dashboard_output_key = nil
         self.state.mission_dashboard_output_blocked_key = nil
         self.state.mission_dashboard_output_buf_kind = nil
+        self.state.mission_dashboard_output_control = false
+        self.state.mission_dashboard_output_control_key = nil
       end
       pcall(vim.api.nvim_del_augroup_by_id, group)
     end,

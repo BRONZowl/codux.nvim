@@ -86,6 +86,8 @@ function M.close_dashboard(controller)
   controller.state.mission_dashboard_output_job = nil
   controller.state.mission_dashboard_output_preview = nil
   controller.state.mission_dashboard_output_buf_kind = nil
+  controller.state.mission_dashboard_output_control = false
+  controller.state.mission_dashboard_output_control_key = nil
   controller.state.mission_dashboard_action_buf = nil
   controller.state.mission_dashboard_action_win = nil
   controller.state.mission_dashboard_action_items = {}
