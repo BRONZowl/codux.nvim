@@ -120,8 +120,8 @@ end
 
 M.DEFAULT_ROLES = {
   {
-    name = "Builder",
-    safe_name = "builder",
+    name = "Agent",
+    safe_name = "agent",
     focus = "Create the requested outcome accurately, keep context focused, validate cheaply, and ask only high-impact questions.",
   },
 }
@@ -137,7 +137,7 @@ function M.default_focus_packet(mission_name, objective)
     trim(objective),
     "",
     "Current Direction:",
-    "Use one focused Builder by default. Preserve prompt fidelity, keep context narrow, and avoid unnecessary review loops.",
+    "Use one focused Agent by default. Preserve prompt fidelity, keep context narrow, and avoid unnecessary review loops.",
     "",
     "User Preferences:",
     "- Prefer accurate creation from the user's prompt.",

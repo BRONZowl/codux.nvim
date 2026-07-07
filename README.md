@@ -198,7 +198,7 @@ Mission Control launches a small crew of Codux workspaces for one objective. Run
 
 The default crew is:
 
-- Builder: creates the requested outcome accurately, keeps context focused,
+- Agent: creates the requested outcome accurately, keeps context focused,
   validates cheaply, and asks only high-impact questions.
 
 Each role gets a clean Git worktree workspace, mission metadata in Codux
