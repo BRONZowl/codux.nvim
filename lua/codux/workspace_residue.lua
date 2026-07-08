@@ -1,4 +1,5 @@
 local workspace_git = require("codux.workspace_git")
+local workspace_worktree = require("codux.workspace_worktree")
 
 local M = {}
 
@@ -7,15 +8,10 @@ local function empty_dict()
 end
 
 local function worktree_directory(runtime, root)
-  local config = runtime:worktree_config()
-  local directory = config.directory
-  if type(directory) ~= "string" or directory == "" then
+  if not runtime or type(runtime.worktree_config) ~= "function" then
     return nil
   end
-  if directory:sub(1, 1) ~= "/" then
-    directory = workspace_git.normalize_absolute_path(root, directory)
-  end
-  return workspace_git.strip_trailing_slashes(directory)
+  return workspace_worktree.worktree_directory(runtime, root)
 end
 
 local function child_path(parent, name)
@@ -102,25 +98,39 @@ local function git_worktree(runtime, path)
   return code == 0
 end
 
+local function child_directories(path)
+  local result = {}
+  for _, name in ipairs(directory_entries(path) or {}) do
+    local next_path = child_path(path, name)
+    if is_directory(next_path) then
+      table.insert(result, next_path)
+    end
+  end
+  return result
+end
+
+local function append_leftover(result, kind, path, cleanable)
+  table.insert(result.leftover_directories, {
+    kind = kind,
+    path = path,
+    cleanable = cleanable,
+  })
+end
+
 local function inspect_leftover_directory(runtime, projects, result, path, depth)
   if git_worktree(runtime, path) then
     local project = projects[path]
     if project_empty(project) then
-      table.insert(result.leftover_directories, {
-        kind = "orphaned_worktree",
-        path = path,
-        cleanable = false,
-      })
+      append_leftover(result, "orphaned_worktree", path, false)
     end
     return
   end
 
+  local children = depth < 1 and child_directories(path) or {}
   if depth < 1 then
-    local entries = directory_entries(path) or {}
     local has_worktree_child = false
-    for _, name in ipairs(entries) do
-      local next_path = child_path(path, name)
-      if is_directory(next_path) and git_worktree(runtime, next_path) then
+    for _, next_path in ipairs(children) do
+      if git_worktree(runtime, next_path) then
         has_worktree_child = true
         break
       end
@@ -128,11 +138,8 @@ local function inspect_leftover_directory(runtime, projects, result, path, depth
 
     if has_worktree_child then
       local before = #result.leftover_directories
-      for _, name in ipairs(entries) do
-        local next_path = child_path(path, name)
-        if is_directory(next_path) then
-          inspect_leftover_directory(runtime, projects, result, next_path, depth + 1)
-        end
+      for _, next_path in ipairs(children) do
+        inspect_leftover_directory(runtime, projects, result, next_path, depth + 1)
       end
       if #result.leftover_directories > before then
         return
@@ -142,33 +149,21 @@ local function inspect_leftover_directory(runtime, projects, result, path, depth
 
   local cleanable = safe_empty_shell(path)
   if cleanable then
-    table.insert(result.leftover_directories, {
-      kind = "leftover_directory",
-      path = path,
-      cleanable = true,
-    })
+    append_leftover(result, "leftover_directory", path, true)
     return
   end
 
   if depth < 1 then
     local before = #result.leftover_directories
-    local entries = directory_entries(path) or {}
-    for _, name in ipairs(entries) do
-      local next_path = child_path(path, name)
-      if is_directory(next_path) then
-        inspect_leftover_directory(runtime, projects, result, next_path, depth + 1)
-      end
+    for _, next_path in ipairs(children) do
+      inspect_leftover_directory(runtime, projects, result, next_path, depth + 1)
     end
     if #result.leftover_directories > before then
       return
     end
   end
 
-  table.insert(result.leftover_directories, {
-    kind = "leftover_directory",
-    path = path,
-    cleanable = false,
-  })
+  append_leftover(result, "leftover_directory", path, false)
 end
 
 function M.inspect(runtime, root)

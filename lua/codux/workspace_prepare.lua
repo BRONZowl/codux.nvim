@@ -11,6 +11,27 @@ end
 local normalize_codex_mode = workspace_git.normalize_codex_mode
 local inactive_like_status = workspace_git.inactive_like_status
 
+local function mission_role_specs(runtime, mission, base_root)
+  local specs = {}
+  local seen = {}
+  for _, role in ipairs(type(mission.roles) == "table" and mission.roles or {}) do
+    local display_name, safe_name_or_error = runtime.sanitize_workspace_name(role.workspace_name)
+    if not display_name then
+      return nil, safe_name_or_error
+    end
+    if seen[safe_name_or_error] then
+      return nil, "Duplicate mission workspace: " .. safe_name_or_error
+    end
+    seen[safe_name_or_error] = true
+    table.insert(specs, {
+      role = role,
+      safe_name = safe_name_or_error,
+      worktree_path = runtime:mission_worktree_path(base_root, safe_name_or_error),
+    })
+  end
+  return specs, nil
+end
+
 local function tmux_window_error(window_name, detail)
   local message = "Failed to create tmux window " .. tostring(window_name)
   detail = trim(detail)
@@ -389,35 +410,29 @@ function M.preflight_mission(runtime, mission)
 
   local state_data = runtime:read_state()
   local projects = type(state_data) == "table" and type(state_data.projects) == "table" and state_data.projects or {}
-  local seen = {}
-  for _, role in ipairs(mission.roles) do
-    local workspace_name = role.workspace_name
-    local display_name, safe_name_or_error = runtime.sanitize_workspace_name(workspace_name)
-    if not display_name then
-      return false, safe_name_or_error
-    end
-    if seen[safe_name_or_error] then
-      return false, "Duplicate mission workspace: " .. safe_name_or_error
-    end
-    seen[safe_name_or_error] = true
-
-    local worktree_path = runtime:mission_worktree_path(base_root, safe_name_or_error)
+  local role_specs, spec_error = mission_role_specs(runtime, mission, base_root)
+  if not role_specs then
+    return false, spec_error
+  end
+  for _, spec in ipairs(role_specs) do
+    local safe_name = spec.safe_name
+    local worktree_path = spec.worktree_path
     local project = type(projects[worktree_path]) == "table" and projects[worktree_path] or nil
     local workspaces = type(project) == "table" and type(project.workspaces) == "table" and project.workspaces or nil
-    if type(workspaces) == "table" and type(workspaces[safe_name_or_error]) == "table" then
-      return false, "workspace already exists: " .. safe_name_or_error
+    if type(workspaces) == "table" and type(workspaces[safe_name]) == "table" then
+      return false, "workspace already exists: " .. safe_name
     end
     if runtime.target_path_exists(worktree_path) then
       return false, "worktree path already exists: " .. worktree_path
     end
-    local branch, branch_error = runtime:resolve_worktree_branch(base_root, safe_name_or_error)
+    local branch, branch_error = runtime:resolve_worktree_branch(base_root, safe_name)
     if not branch then
       return false, branch_error
     end
-    if runtime:tmux_window_id(session, runtime.workspace_window_name(safe_name_or_error)) then
-      return false, "tmux window already exists: " .. safe_name_or_error
+    if runtime:tmux_window_id(session, runtime.workspace_window_name(safe_name)) then
+      return false, "tmux window already exists: " .. safe_name
     end
-    local instruction_path = runtime:instruction_file_path(worktree_path, safe_name_or_error)
+    local instruction_path = runtime:instruction_file_path(worktree_path, safe_name)
     if instruction_path and vim.fn.filereadable(instruction_path) == 1 then
       return false, "workspace instruction already exists: " .. instruction_path
     end
@@ -447,15 +462,20 @@ function M.create_mission(runtime, mission_or_name, objective, opts)
   local created = {}
   local context = runtime:target_context()
   local base_root = context.root
-  for _, role in ipairs(mission.roles) do
-    local _, safe_name_or_error = runtime.sanitize_workspace_name(role.workspace_name)
+  local role_specs, spec_error = mission_role_specs(runtime, mission, base_root)
+  if not role_specs then
+    runtime.notify(spec_error or "Codux mission preflight failed", vim.log.levels.ERROR)
+    return false
+  end
+  for _, spec in ipairs(role_specs) do
+    local role = spec.role
     local workspace, workspace_error = runtime:prepare_workspace(role.workspace_name, {
       custom_instruction = role.instruction,
       resolved_instruction = role.instruction,
       initial_prompt = role.initial_prompt,
       initial_mode = "plan",
       permission_profile = "auto",
-      worktree_path = runtime:mission_worktree_path(base_root, safe_name_or_error),
+      worktree_path = spec.worktree_path,
       mission_id = mission.mission_id,
       mission_name = mission.name,
       mission_role = role.name,

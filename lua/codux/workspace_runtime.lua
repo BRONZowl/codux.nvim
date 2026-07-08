@@ -282,6 +282,10 @@ function M:mission_worktree_path(base_root, safe_name)
   return workspace_worktree.mission_worktree_path(self, base_root, safe_name)
 end
 
+function M:worktree_directory(root)
+  return workspace_worktree.worktree_directory(self, root)
+end
+
 function M:worktree_branch(safe_name)
   return workspace_worktree.worktree_branch(self, safe_name)
 end
@@ -352,10 +356,6 @@ end
 
 function M:prune_empty_project_buckets(state_data, directory)
   return workspace_residue.prune_empty_project_buckets(self, state_data, directory)
-end
-
-function M:worktree_directory(root)
-  return workspace_residue.worktree_directory(self, root)
 end
 
 function M:workspace_instruction_relative_dir(root)

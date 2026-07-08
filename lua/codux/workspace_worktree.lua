@@ -96,22 +96,22 @@ function M.resolve_worktree_branch(runtime, root, safe_name)
   return nil, "no available branch namespace for " .. prefix_namespace .. "/"
 end
 
-function M.worktree_path(runtime, base_root, safe_name)
+function M.worktree_directory(runtime, base_root)
   local config = runtime:worktree_config()
   local directory = config.directory
   if directory:sub(1, 1) ~= "/" then
     directory = workspace_git.normalize_absolute_path(base_root, directory)
   end
+  return workspace_git.strip_trailing_slashes(directory)
+end
+
+function M.worktree_path(runtime, base_root, safe_name)
+  local directory = M.worktree_directory(runtime, base_root)
   return workspace_git.normalize_absolute_path(directory, safe_name)
 end
 
 function M.mission_worktree_path(runtime, base_root, safe_name)
-  local config = runtime:worktree_config()
-  local directory = config.directory
-  if directory:sub(1, 1) ~= "/" then
-    directory = workspace_git.normalize_absolute_path(base_root, directory)
-  end
-
+  local directory = M.worktree_directory(runtime, base_root)
   local normalized_root = workspace_git.strip_trailing_slashes(base_root)
   local project_name = normalized_root:match("([^/]+)$") or normalized_root
   local project_token = workspace_git.path_token(project_name)
