@@ -278,6 +278,10 @@ function M:worktree_path(base_root, safe_name)
   return workspace_worktree.worktree_path(self, base_root, safe_name)
 end
 
+function M:mission_worktree_path(base_root, safe_name)
+  return workspace_worktree.mission_worktree_path(self, base_root, safe_name)
+end
+
 function M:worktree_branch(safe_name)
   return workspace_worktree.worktree_branch(self, safe_name)
 end

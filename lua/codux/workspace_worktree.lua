@@ -105,6 +105,19 @@ function M.worktree_path(runtime, base_root, safe_name)
   return workspace_git.normalize_absolute_path(directory, safe_name)
 end
 
+function M.mission_worktree_path(runtime, base_root, safe_name)
+  local config = runtime:worktree_config()
+  local directory = config.directory
+  if directory:sub(1, 1) ~= "/" then
+    directory = workspace_git.normalize_absolute_path(base_root, directory)
+  end
+
+  local normalized_root = workspace_git.strip_trailing_slashes(base_root)
+  local project_name = normalized_root:match("([^/]+)$") or normalized_root
+  local project_token = workspace_git.path_token(project_name)
+  return workspace_git.normalize_absolute_path(workspace_git.normalize_absolute_path(directory, project_token), safe_name)
+end
+
 function M.worktree_branch(runtime, safe_name)
   return runtime:worktree_config().branch_prefix .. tostring(safe_name or "")
 end

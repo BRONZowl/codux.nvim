@@ -201,10 +201,11 @@ The default crew is:
 - Agent: creates the requested outcome accurately, keeps context focused,
   validates cheaply, and asks only high-impact questions.
 
-Each role gets a clean Git worktree workspace, mission metadata in Codux
-workspace state, workspace-auto permissions, and an initial plan-mode prompt. If
-Codux cannot confirm plan mode for a newly created mission role, it rolls back
-the new role workspaces.
+Each role gets a clean Git worktree workspace under
+`../codux-worktrees/<project>/<workspace>`, mission metadata in Codux workspace
+state, workspace-auto permissions, and an initial plan-mode prompt. If Codux
+cannot confirm plan mode for a newly created mission role, it rolls back the new
+role workspaces.
 
 Each mission also carries a short focus packet. The packet is separate from the
 stable workspace instruction and captures the current intent, direction,

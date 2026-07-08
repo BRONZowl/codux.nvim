@@ -102,6 +102,75 @@ local function git_worktree(runtime, path)
   return code == 0
 end
 
+local function inspect_leftover_directory(runtime, projects, result, path, depth)
+  if git_worktree(runtime, path) then
+    local project = projects[path]
+    if project_empty(project) then
+      table.insert(result.leftover_directories, {
+        kind = "orphaned_worktree",
+        path = path,
+        cleanable = false,
+      })
+    end
+    return
+  end
+
+  if depth < 1 then
+    local entries = directory_entries(path) or {}
+    local has_worktree_child = false
+    for _, name in ipairs(entries) do
+      local next_path = child_path(path, name)
+      if is_directory(next_path) and git_worktree(runtime, next_path) then
+        has_worktree_child = true
+        break
+      end
+    end
+
+    if has_worktree_child then
+      local before = #result.leftover_directories
+      for _, name in ipairs(entries) do
+        local next_path = child_path(path, name)
+        if is_directory(next_path) then
+          inspect_leftover_directory(runtime, projects, result, next_path, depth + 1)
+        end
+      end
+      if #result.leftover_directories > before then
+        return
+      end
+    end
+  end
+
+  local cleanable = safe_empty_shell(path)
+  if cleanable then
+    table.insert(result.leftover_directories, {
+      kind = "leftover_directory",
+      path = path,
+      cleanable = true,
+    })
+    return
+  end
+
+  if depth < 1 then
+    local before = #result.leftover_directories
+    local entries = directory_entries(path) or {}
+    for _, name in ipairs(entries) do
+      local next_path = child_path(path, name)
+      if is_directory(next_path) then
+        inspect_leftover_directory(runtime, projects, result, next_path, depth + 1)
+      end
+    end
+    if #result.leftover_directories > before then
+      return
+    end
+  end
+
+  table.insert(result.leftover_directories, {
+    kind = "leftover_directory",
+    path = path,
+    cleanable = false,
+  })
+end
+
 function M.inspect(runtime, root)
   local state_data, state_error = runtime:read_state()
   if state_error then
@@ -132,23 +201,7 @@ function M.inspect(runtime, root)
     for _, name in ipairs(entries) do
       local path = child_path(directory, name)
       if is_directory(path) then
-        if git_worktree(runtime, path) then
-          local project = projects[path]
-          if project_empty(project) then
-            table.insert(result.leftover_directories, {
-              kind = "orphaned_worktree",
-              path = path,
-              cleanable = false,
-            })
-          end
-        else
-          local cleanable = safe_empty_shell(path)
-          table.insert(result.leftover_directories, {
-            kind = "leftover_directory",
-            path = path,
-            cleanable = cleanable,
-          })
-        end
+        inspect_leftover_directory(runtime, projects, result, path, 0)
       end
     end
   end

@@ -46,6 +46,9 @@ local function runtime(opts)
     worktree_path = function(_, root, safe_name)
       return tostring(root) .. "-worktrees/" .. tostring(safe_name)
     end,
+    mission_worktree_path = function(_, root, safe_name)
+      return tostring(root) .. "-worktrees/" .. tostring(safe_name)
+    end,
     git_current_ref = function()
       return "main"
     end,
@@ -146,6 +149,13 @@ do
   local calls = { prepared = 0, deleted = {}, notification = nil }
   local rt = {
     state = {},
+    sanitize_workspace_name = runtime_mod.sanitize_workspace_name,
+    target_context = function()
+      return { root = "/repo" }
+    end,
+    mission_worktree_path = function(_, root, safe_name)
+      return tostring(root) .. "-worktrees/" .. tostring(safe_name)
+    end,
     preflight_mission = function()
       return true
     end,

@@ -284,12 +284,12 @@ do
   with_workspace_prepare_env(function()
     local state_data = {
       projects = {
-        ["/codux-worktrees/mission-builder"] = {
+        ["/codux-worktrees/repo/mission-builder"] = {
           workspaces = {
             ["mission-builder"] = review_workspace_record({
               name = "mission-builder",
               safe_name = "mission-builder",
-              project_root = "/codux-worktrees/mission-builder",
+              project_root = "/codux-worktrees/repo/mission-builder",
               workspace_kind = "worktree",
             }),
           },
@@ -323,6 +323,40 @@ end
 
 do
   with_workspace_prepare_env(function()
+    h.with_stubs({
+      {
+        target = vim.fn,
+        key = "isdirectory",
+        value = function(path)
+          return (path == "/repo" or path == "/codux-worktrees/repo/mission-builder") and 1 or 0
+        end,
+      },
+    }, function()
+      local harness = prepare_harness({
+        system = function(_, command)
+          if command == "tmux display-message -p #S" then
+            return "session\n", 0
+          end
+          return "", 1
+        end,
+      })
+      local runtime = harness.runtime
+      local mission = assert(mission_mod.plan("Mission", "Build it", {
+        roles = {
+          { name = "Builder" },
+        },
+      }))
+
+      local ok, error_message = runtime:preflight_mission(mission)
+      assert_false(ok)
+      assert_equal(error_message, "worktree path already exists: /codux-worktrees/repo/mission-builder")
+      assert_equal(harness.command_text():find("worktree add", 1, true), nil)
+    end)
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
     local windows = {}
     local next_window_id = 1
     local harness = prepare_harness({
@@ -349,10 +383,10 @@ do
         if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-builder" then
           return "", 1
         end
-        if command == "git -C /repo worktree add -b dev/mission-architect /codux-worktrees/mission-architect main" then
+        if command == "git -C /repo worktree add -b dev/mission-architect /codux-worktrees/repo/mission-architect main" then
           return "", 0
         end
-        if command == "git -C /repo worktree add -b dev/mission-builder /codux-worktrees/mission-builder main" then
+        if command == "git -C /repo worktree add -b dev/mission-builder /codux-worktrees/repo/mission-builder main" then
           return "", 0
         end
         if command:find("tmux new%-window", 1, false) == 1 then
@@ -386,14 +420,20 @@ do
     assert_true(runtime:create_mission(mission))
 
     local architect =
-      store.state_data().projects["/codux-worktrees/mission-architect"].workspaces["mission-architect"]
-    local builder = store.state_data().projects["/codux-worktrees/mission-builder"].workspaces["mission-builder"]
+      store.state_data().projects["/codux-worktrees/repo/mission-architect"].workspaces["mission-architect"]
+    local builder = store.state_data().projects["/codux-worktrees/repo/mission-builder"].workspaces["mission-builder"]
     assert_equal(architect.permission_profile, "auto")
     assert_equal(builder.permission_profile, "auto")
     assert_equal(architect.mission_id, "mission:mission")
     assert_equal(builder.mission_id, "mission:mission")
     assert_equal(architect.mission_role, "Architect")
     assert_equal(builder.mission_role, "Builder")
+    assert_equal(architect.project_root, "/codux-worktrees/repo/mission-architect")
+    assert_equal(builder.project_root, "/codux-worktrees/repo/mission-builder")
+    assert_equal(architect.worktree_path, "/codux-worktrees/repo/mission-architect")
+    assert_equal(builder.worktree_path, "/codux-worktrees/repo/mission-builder")
+    assert_equal(architect.target_path, "/codux-worktrees/repo/mission-architect/file.lua")
+    assert_equal(builder.target_path, "/codux-worktrees/repo/mission-builder/file.lua")
     assert_equal(architect.mission_objective, "Build it")
     assert_equal(builder.mission_objective, "Build it")
     assert_contains(architect.mission_focus_packet, "# Mission Focus Packet")
@@ -435,7 +475,7 @@ do
         if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/long-builder" then
           return "", 1
         end
-        if command == "git -C /repo worktree add -b dev/long-builder /codux-worktrees/long-builder main" then
+        if command == "git -C /repo worktree add -b dev/long-builder /codux-worktrees/repo/long-builder main" then
           return "", 0
         end
         if command:find("tmux new%-window", 1, false) == 1 then

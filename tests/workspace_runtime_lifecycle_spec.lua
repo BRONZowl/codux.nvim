@@ -531,22 +531,22 @@ do
   with_filereadable(0, function()
     local state_data = {
       projects = {
-        ["/codux-worktrees/alpha-builder"] = {
+        ["/codux-worktrees/repo/alpha-builder"] = {
           workspaces = {
             ["alpha-builder"] = review_workspace_record({
               name = "alpha-builder",
               safe_name = "alpha-builder",
-              project_root = "/codux-worktrees/alpha-builder",
+              project_root = "/codux-worktrees/repo/alpha-builder",
               tmux_window = "alpha-builder",
               tmux_target = "session:alpha-builder",
               status = "idle",
               codex_status = "idle",
               workspace_kind = "worktree",
               git_common_dir = "/repo/.git",
-              worktree_path = "/codux-worktrees/alpha-builder",
+              worktree_path = "/codux-worktrees/repo/alpha-builder",
               worktree_branch = "dev/alpha-builder",
               git_branch = "dev/alpha-builder",
-              target_path = "/codux-worktrees/alpha-builder/lua/init.lua",
+              target_path = "/codux-worktrees/repo/alpha-builder/lua/init.lua",
               mission_id = "mission:alpha",
               mission_name = "Alpha",
               mission_role = "Builder",
@@ -577,8 +577,8 @@ do
         workspace = {
           name = "alpha-builder",
           safe_name = "alpha-builder",
-          project_root = "/codux-worktrees/alpha-builder",
-          worktree_path = "/codux-worktrees/alpha-builder",
+          project_root = "/codux-worktrees/repo/alpha-builder",
+          worktree_path = "/codux-worktrees/repo/alpha-builder",
           worktree_branch = "dev/alpha-builder",
           tmux_target = "session:alpha-builder",
           mission_role = "Builder",
@@ -590,17 +590,17 @@ do
         table.insert(commands, command)
         if
           command
-          == "git -C /codux-worktrees/alpha-builder show-ref --verify --quiet refs/heads/dev/alpha-build-lead"
+          == "git -C /codux-worktrees/repo/alpha-builder show-ref --verify --quiet refs/heads/dev/alpha-build-lead"
         then
           return "", 1
         end
         if
           command
-          == "git -C /codux-worktrees/alpha-builder worktree move /codux-worktrees/alpha-builder /codux-worktrees/alpha-build-lead"
+          == "git -C /codux-worktrees/repo/alpha-builder worktree move /codux-worktrees/repo/alpha-builder /codux-worktrees/repo/alpha-build-lead"
         then
           return "", 0
         end
-        if command == "git -C /codux-worktrees/alpha-build-lead branch -m dev/alpha-builder dev/alpha-build-lead" then
+        if command == "git -C /codux-worktrees/repo/alpha-build-lead branch -m dev/alpha-builder dev/alpha-build-lead" then
           return "", 0
         end
         if command == "tmux rename-window -t @1 alpha-build-lead" then
@@ -649,7 +649,7 @@ do
           {
             name = "alpha-builder",
             safe_name = "alpha-builder",
-            project_root = "/codux-worktrees/alpha-builder",
+            project_root = "/codux-worktrees/repo/alpha-builder",
             mission_role = "Builder",
           },
         },
@@ -659,39 +659,39 @@ do
     assert_true(runtime:rename_mission_role({
       name = "alpha-builder",
       safe_name = "alpha-builder",
-      project_root = "/codux-worktrees/alpha-builder",
+      project_root = "/codux-worktrees/repo/alpha-builder",
       window_id = "@1",
       window_name = "alpha-builder",
       mission_name = "Alpha",
     }, "Build Lead", { project_root = "/repo" }))
-    assert_nil(state_data.projects["/codux-worktrees/alpha-builder"].workspaces["alpha-builder"])
-    local record = state_data.projects["/codux-worktrees/alpha-build-lead"].workspaces["alpha-build-lead"]
+    assert_nil(state_data.projects["/codux-worktrees/repo/alpha-builder"].workspaces["alpha-builder"])
+    local record = state_data.projects["/codux-worktrees/repo/alpha-build-lead"].workspaces["alpha-build-lead"]
     assert_equal(record.name, "alpha-build-lead")
     assert_equal(record.safe_name, "alpha-build-lead")
-    assert_equal(record.project_root, "/codux-worktrees/alpha-build-lead")
-    assert_equal(record.worktree_path, "/codux-worktrees/alpha-build-lead")
+    assert_equal(record.project_root, "/codux-worktrees/repo/alpha-build-lead")
+    assert_equal(record.worktree_path, "/codux-worktrees/repo/alpha-build-lead")
     assert_equal(record.worktree_branch, "dev/alpha-build-lead")
     assert_equal(record.git_branch, "dev/alpha-build-lead")
-    assert_equal(record.target_path, "/codux-worktrees/alpha-build-lead/lua/init.lua")
+    assert_equal(record.target_path, "/codux-worktrees/repo/alpha-build-lead/lua/init.lua")
     assert_equal(record.tmux_window, "alpha-build-lead")
     assert_equal(record.tmux_target, "session:alpha-build-lead")
     assert_equal(record.mission_role, "Build Lead")
     assert_contains(record.resolved_instruction, "You are the Build Lead")
     assert_contains(record.resolved_instruction, "Role focus:\nKeep the implementation focused.")
-    assert_equal(written_instruction.root, "/codux-worktrees/alpha-build-lead")
+    assert_equal(written_instruction.root, "/codux-worktrees/repo/alpha-build-lead")
     assert_equal(written_instruction.safe_name, "alpha-build-lead")
     assert_equal(written_instruction.instruction, record.resolved_instruction)
     assert_equal(runtime.state.workspace.name, "alpha-build-lead")
     assert_equal(runtime.state.workspace.safe_name, "alpha-build-lead")
-    assert_equal(runtime.state.workspace.project_root, "/codux-worktrees/alpha-build-lead")
+    assert_equal(runtime.state.workspace.project_root, "/codux-worktrees/repo/alpha-build-lead")
     assert_equal(runtime.state.workspace.worktree_branch, "dev/alpha-build-lead")
     assert_equal(runtime.state.workspace.mission_role, "Build Lead")
     local command_text = table.concat(commands, "\n")
     assert_contains(
       command_text,
-      "git -C /codux-worktrees/alpha-builder worktree move /codux-worktrees/alpha-builder /codux-worktrees/alpha-build-lead"
+      "git -C /codux-worktrees/repo/alpha-builder worktree move /codux-worktrees/repo/alpha-builder /codux-worktrees/repo/alpha-build-lead"
     )
-    assert_contains(command_text, "git -C /codux-worktrees/alpha-build-lead branch -m dev/alpha-builder dev/alpha-build-lead")
+    assert_contains(command_text, "git -C /codux-worktrees/repo/alpha-build-lead branch -m dev/alpha-builder dev/alpha-build-lead")
     assert_contains(command_text, "tmux rename-window -t @1 alpha-build-lead")
   end)
   end)

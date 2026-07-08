@@ -166,7 +166,9 @@ function M.with_workspace_prepare_env(callback)
     return path == "/repo" and 1 or 0
   end
   vim.fn.filereadable = function(path)
-    return (path == "/repo/file.lua" or path == "/codux-worktrees/review/file.lua") and 1 or 0
+    return (path == "/repo/file.lua" or path == "/codux-worktrees/review/file.lua" or path:match("^/codux%-worktrees/repo/.+/file%.lua$"))
+        and 1
+      or 0
   end
   vim.fn.getcwd = function()
     return "/repo"

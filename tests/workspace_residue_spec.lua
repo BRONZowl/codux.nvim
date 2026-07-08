@@ -137,6 +137,45 @@ end
 
 do
   local fs = {
+    ["/codux-worktrees"] = dir({ repo = true }),
+    ["/codux-worktrees/repo"] = dir({
+      ["empty-shell"] = true,
+      ["orphan-worktree"] = true,
+      ["real-worktree"] = true,
+    }),
+    ["/codux-worktrees/repo/empty-shell"] = dir(),
+    ["/codux-worktrees/repo/orphan-worktree"] = dir(),
+    ["/codux-worktrees/repo/real-worktree"] = dir(),
+  }
+  with_fs(fs, function()
+    local rt = runtime({
+      git_dirs = {
+        ["/codux-worktrees/repo/orphan-worktree"] = true,
+        ["/codux-worktrees/repo/real-worktree"] = true,
+      },
+      state_data = {
+        projects = {
+          ["/codux-worktrees/repo/empty-bucket"] = { workspaces = {} },
+          ["/codux-worktrees/repo/real-worktree"] = { workspaces = { real = { name = "real" } } },
+        },
+      },
+    })
+
+    local found = residue.inspect(rt, "/repo")
+    assert_equal(found.count, 3)
+    assert_equal(#found.empty_project_buckets, 1)
+    assert_equal(found.empty_project_buckets[1].path, "/codux-worktrees/repo/empty-bucket")
+    assert_equal(#found.leftover_directories, 2)
+    assert_equal(found.leftover_directories[1].path, "/codux-worktrees/repo/empty-shell")
+    assert_true(found.leftover_directories[1].cleanable)
+    assert_equal(found.leftover_directories[2].path, "/codux-worktrees/repo/orphan-worktree")
+    assert_equal(found.leftover_directories[2].kind, "orphaned_worktree")
+    assert_false(found.leftover_directories[2].cleanable)
+  end)
+end
+
+do
+  local fs = {
     ["/codux-worktrees"] = dir({ ["debug-builder"] = true, ["debug-reviewer"] = true }),
     ["/codux-worktrees/debug-builder"] = dir({ [".agents"] = true }),
     ["/codux-worktrees/debug-builder/.agents"] = dir({ codux = true }),

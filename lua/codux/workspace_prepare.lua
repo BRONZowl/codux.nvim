@@ -61,7 +61,7 @@ function M.prepare(runtime, name, opts)
     if not created_worktree_branch then
       return nil, branch_error
     end
-    created_worktree_path = runtime:worktree_path(base_root, safe_name_or_error)
+    created_worktree_path = opts.worktree_path or runtime:worktree_path(base_root, safe_name_or_error)
     worktree_base = runtime:git_current_ref(base_root)
     worktree_base_commit = runtime:git_rev_parse(base_root, worktree_base)
     if not worktree_base_commit then
@@ -401,7 +401,7 @@ function M.preflight_mission(runtime, mission)
     end
     seen[safe_name_or_error] = true
 
-    local worktree_path = runtime:worktree_path(base_root, safe_name_or_error)
+    local worktree_path = runtime:mission_worktree_path(base_root, safe_name_or_error)
     local project = type(projects[worktree_path]) == "table" and projects[worktree_path] or nil
     local workspaces = type(project) == "table" and type(project.workspaces) == "table" and project.workspaces or nil
     if type(workspaces) == "table" and type(workspaces[safe_name_or_error]) == "table" then
@@ -445,13 +445,17 @@ function M.create_mission(runtime, mission_or_name, objective, opts)
   end
 
   local created = {}
+  local context = runtime:target_context()
+  local base_root = context.root
   for _, role in ipairs(mission.roles) do
+    local _, safe_name_or_error = runtime.sanitize_workspace_name(role.workspace_name)
     local workspace, workspace_error = runtime:prepare_workspace(role.workspace_name, {
       custom_instruction = role.instruction,
       resolved_instruction = role.instruction,
       initial_prompt = role.initial_prompt,
       initial_mode = "plan",
       permission_profile = "auto",
+      worktree_path = runtime:mission_worktree_path(base_root, safe_name_or_error),
       mission_id = mission.mission_id,
       mission_name = mission.name,
       mission_role = role.name,
