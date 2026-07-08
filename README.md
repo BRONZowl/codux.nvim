@@ -201,21 +201,24 @@ The default crew is:
 - Agent: creates the requested outcome accurately, keeps context focused,
   validates cheaply, and asks only high-impact questions.
 
-Each role gets a clean Git worktree workspace under
-`../codux-worktrees/<project>/<workspace>`, mission metadata in Codux workspace
-state, workspace-auto permissions, and an initial plan-mode prompt. If Codux
-cannot confirm plan mode for a newly created mission role, it rolls back the new
-role workspaces.
+Each role gets a clean Git worktree workspace under the project-scoped
+`../codux-worktrees/<project>/<workspace>` directory, mission metadata in Codux
+workspace state, workspace-auto permissions, and an initial plan-mode prompt. If
+Codux cannot confirm plan mode for a newly created mission role, it rolls back
+the new role workspaces.
 
-Each mission also carries a short focus packet. The packet is separate from the
-stable workspace instruction and captures the current intent, direction,
-preferences, active scope, and next action. Mission startup and dashboard-sent
-role prompts include the current packet so iteration stays narrow without
-turning the workspace instruction into a transcript.
+Each mission also carries a short focus packet. The packet is separate from each
+role's stable workspace instruction and captures the current intent, direction,
+preferences, active scope, and next action. Mission startup and role prompts
+include the current packet so iteration stays narrow without turning the
+workspace instruction into a transcript.
 
 `:CoduxMissions`, `:CoduxMissionDashboard`, and `<leader>zM` open the mission
 dashboard. It shows mission and role rows with status, mode, profile, age, and
-target, plus a live `Output:` panel near the top for the highlighted role.
+target, plus a live `Output:` panel for the highlighted role. Mission rows do
+not control output directly; active role rows preview that role workspace's
+Codex session. When an active role preview is shown, the dashboard gives more
+space to the output panel while keeping the selected row visible.
 
 Dashboard controls:
 
@@ -223,14 +226,21 @@ Dashboard controls:
 - `<Tab>` switches between search and the dashboard list.
 - `<CR>` focuses the highlighted mission or role from search.
 - `j`/`k` moves through selectable mission and role rows.
-- `p` sends a prompt to an open highlighted role workspace.
 - `m` opens the mission menu for mission rows or the workspace menu for role
   rows.
+- `n` creates a mission.
+- `c` cleans empty Mission Control residue.
+- `<C-o>` enters output control for the highlighted active role workspace.
+
+While controlling role output, type directly into the Codex session. `<C-o>`
+returns to the mission dashboard and `<C-q>` closes Mission Control. `Esc`
+continues to belong to Codex inside the output session.
 
 Mission menu actions include start/reopen mission, view objective, edit
-objective, edit focus, close mission, delete mission, and create a mission. Role workspace
-menus include answer question when active, edit instructions, close workspace,
-delete workspace, and create workspace.
+objective, edit focus, close mission, delete mission, and create a mission. Role
+workspace menus include prompt or answer when available, interrupt, switch mode,
+rename role, edit instructions, close workspace, delete workspace, and create
+workspace.
 
 Close and delete are separate operations. Closing a mission only closes role
 windows and preserves worktrees, branches, instructions, saved state, and mission
@@ -267,6 +277,8 @@ Common checks:
 - `:CoduxDoctor` confirms tmux/workspace state for Codux workspaces.
 - `:CoduxWorkspaceRestore` reconciles saved workspace state with tmux after
   restarts.
+- Mission dashboards and output previews reconcile moved mission worktrees before
+  using saved paths.
 
 ## Development
 

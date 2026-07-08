@@ -1,5 +1,20 @@
 # Release Notes
 
+## v0.9.0
+
+Mission Control focus and output control.
+
+codux.nvim v0.9.0 reshapes Mission Control around a focused single-Agent workflow, tighter role context, direct output control, and sturdier mission worktree handling.
+
+- Changed the default Mission Control crew to one focused Agent role that preserves prompt fidelity, keeps context narrow, validates cheaply, and asks only high-impact questions.
+- Added mission focus packets that travel with startup and role prompts while staying separate from stable workspace instructions.
+- Added explicit output-control mode for active role previews with `<C-o>`, removed redundant dashboard prompt commands, and kept `Esc` available for Codex inside output sessions.
+- Moved mission role worktrees into project-scoped `../codux-worktrees/<project>/<workspace>` directories and reconciled manually moved worktrees before dashboard and output preview use.
+- Added role rename support that updates mission/workspace metadata, instruction files, Git worktrees, branches, tmux/session state, and dashboard output paths together.
+- Fixed stale output previews, preview session names, active-preview dashboard resizing, and selected-row highlighting when switching between mission and workspace rows.
+- Refactored mission output cleanup, focus update flows, and worktree reconciliation helpers with expanded regression coverage.
+- Updated the README to document current Mission Control controls, focus packets, output control, project-scoped worktrees, and moved-worktree reconciliation.
+
 ## v0.8.2
 
 Mission dashboard stale-residue cleanup.
