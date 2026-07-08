@@ -36,9 +36,14 @@ function M.workspace_interactive_preview(runtime, entry, opts)
 
   local preview_session = opts.preview_session or runtime:workspace_preview_session_name(workspace)
   runtime:kill_tmux_session(preview_session)
-  local _, create_code = runtime:tmux_system({ "new-session", "-d", "-t", session, "-s", preview_session })
+  local create_output, create_code = runtime:tmux_system({ "new-session", "-d", "-t", session, "-s", preview_session })
   if create_code ~= 0 then
-    return nil, "failed to create Codux preview session"
+    local detail = trim(create_output)
+    local message = "failed to create Codux preview session"
+    if detail ~= "" then
+      message = message .. ": " .. detail
+    end
+    return nil, message
   end
 
   local window_name = workspace.tmux_window

@@ -1,15 +1,35 @@
 local h = require("tests.helpers")
 local assert_equal = h.assert_equal
 local assert_contains = h.assert_contains
+local assert_true = h.assert_true
 
 local workspace_remote = require("codux.workspace_remote")
 
 assert_equal(workspace_remote.server_path("/repo root", "Builder", "/run/codux"), "/run/codux/repo-root-Builder.sock")
 assert_contains(workspace_remote.launch_server_path("/repo root", "Builder Role", "/run/codux"), "/run/codux/ws-Builder-Role-")
-assert_equal(
-  workspace_remote.preview_session_name({ project_root = "/repo root", safe_name = "Builder Role" }),
-  "codux-preview-repo-root-Builder-Role"
-)
+do
+  local name = workspace_remote.preview_session_name({ project_root = "/repo root", safe_name = "Builder Role" })
+  assert_contains(name, "codux-preview-Builder-Role-")
+  assert_true(name:match("^[%w_-]+$") ~= nil)
+end
+
+do
+  local name = workspace_remote.preview_session_name({
+    project_root = "/home/bronz/Projects/codux-worktrees/codux.nvim/mission-agent",
+    safe_name = "mission-agent",
+  })
+  assert_contains(name, "codux-preview-mission-agent-")
+  assert_true(name:match("^[%w_-]+$") ~= nil)
+  assert_true(#name <= 72)
+  assert_equal(name:find(".", 1, true), nil)
+  assert_equal(name:find(":", 1, true), nil)
+end
+
+do
+  local left = workspace_remote.preview_session_name({ project_root = "/repo-a", safe_name = "agent" })
+  local right = workspace_remote.preview_session_name({ project_root = "/repo-b", safe_name = "agent" })
+  assert_true(left ~= right)
+end
 
 do
   local calls = {}

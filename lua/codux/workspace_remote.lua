@@ -7,6 +7,24 @@ local function trim(value)
   return text_util.trim(value)
 end
 
+local function tmux_name_token(value, max_length)
+  max_length = math.max(1, tonumber(max_length) or 48)
+  value = tostring(value or ""):gsub("[^%w_-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
+  if value == "" then
+    value = "workspace"
+  end
+  return value:sub(1, max_length)
+end
+
+local function stable_hash_token(value)
+  local hash = 5381
+  value = tostring(value or "")
+  for index = 1, #value do
+    hash = (hash * 33 + value:byte(index)) % 4294967296
+  end
+  return string.format("%08x", hash)
+end
+
 function M.server_dir()
   local base = nil
   if type(vim.fn.stdpath) == "function" then
@@ -68,10 +86,12 @@ end
 
 function M.preview_session_name(entry)
   entry = type(entry) == "table" and entry or {}
+  local root = entry.project_root or ""
+  local workspace = entry.safe_name or entry.name or entry.window_name or ""
   return "codux-preview-"
-    .. workspace_git.path_token(entry.project_root or "")
+    .. tmux_name_token(workspace, 48)
     .. "-"
-    .. workspace_git.path_token(entry.safe_name or entry.name or entry.window_name or "")
+    .. stable_hash_token(tostring(root) .. "\0" .. tostring(workspace))
 end
 
 return M

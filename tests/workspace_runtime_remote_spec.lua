@@ -414,6 +414,30 @@ end
 
 do
   with_workspace_prepare_env(function()
+    local harness = remote_harness({
+      system = function(_, command)
+        if command == "tmux kill-session -t codux-preview-test" then
+          return "", 1
+        end
+        if command == "tmux new-session -d -t session -s codux-preview-test" then
+          return "bad session name\n", 1
+        end
+      end,
+    })
+    local runtime = harness.runtime
+    local preview, error_message = runtime:workspace_interactive_preview(remote_workspace(), {
+      attempts = 1,
+      preview_session = "codux-preview-test",
+    })
+
+    assert_nil(preview)
+    assert_equal(error_message, "failed to create Codux preview session: bad session name")
+    assert_equal(harness.command_text():find("tmux select-window", 1, true), nil)
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
     local runtime = workspace_prepare_runtime({
       get_config = function()
         local config = default_workspace_config()
