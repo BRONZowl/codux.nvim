@@ -86,6 +86,7 @@ function M.close_dashboard(controller)
   controller.state.mission_dashboard_action_workspace = nil
   controller.state.mission_dashboard_action_kind = nil
   controller.state.mission_dashboard_items = {}
+  controller.state.mission_dashboard_lines = {}
   controller.state.mission_dashboard_selectable_rows = {}
   controller.state.mission_dashboard_query = ""
   controller.state.mission_dashboard_best_match_row = nil
@@ -193,6 +194,7 @@ function M.open_dashboard(controller, root)
   controller.ui.set_lines(bufnr, lines, { modifiable = true })
   controller.state.mission_dashboard_buf = bufnr
   controller.state.mission_dashboard_project_root = root
+  controller.state.mission_dashboard_lines = lines
   controller.state.mission_dashboard_items = items
   controller.state.mission_dashboard_selectable_rows = selectable_rows
   controller.state.mission_dashboard_best_match_row = best_match_row
@@ -213,6 +215,7 @@ function M.open_dashboard(controller, root)
     controller.ui.delete_buffer(bufnr)
     controller.state.mission_dashboard_buf = nil
     controller.state.mission_dashboard_project_root = nil
+    controller.state.mission_dashboard_lines = {}
     controller.state.mission_dashboard_items = {}
     controller.state.mission_dashboard_selectable_rows = {}
     controller.state.mission_dashboard_best_match_row = nil
@@ -256,6 +259,7 @@ function M.open_dashboard(controller, root)
   controller:bind_dashboard_commands(bufnr)
   controller:open_command_bar()
   controller:open_output_panel(controller:selected_output_entry())
+  controller:refresh_dashboard_highlight(lines, items)
   controller:open_command_sink()
   controller:start_monitor_timer()
   vim.schedule(function()

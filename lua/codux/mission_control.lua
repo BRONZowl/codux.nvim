@@ -360,6 +360,19 @@ function M:highlight_dashboard(bufnr, lines, items)
   return mission_dashboard.highlight(self, bufnr, lines, items)
 end
 
+function M:refresh_dashboard_highlight(lines, items)
+  if not self.is_loaded_buf(self.state.mission_dashboard_buf) then
+    return false
+  end
+  lines = type(lines) == "table" and lines or self.state.mission_dashboard_lines
+  items = type(items) == "table" and items or self.state.mission_dashboard_items
+  if type(lines) ~= "table" then
+    return false
+  end
+  self:highlight_dashboard(self.state.mission_dashboard_buf, lines, items or {})
+  return true
+end
+
 function M:highlight_command_bar(bufnr, lines)
   return dashboard_command_bar.highlight(self, bufnr, lines, dashboard_command_items)
 end
@@ -390,6 +403,7 @@ function M:render_dashboard(opts)
     query = query,
     selected_item = selected,
   })
+  self.state.mission_dashboard_lines = lines
   self.state.mission_dashboard_items = items
   self.state.mission_dashboard_selectable_rows = selectable_rows
   self.state.mission_dashboard_best_match_row = best_match_row
@@ -399,15 +413,15 @@ function M:render_dashboard(opts)
   local preview_anchor = self:capture_output_preview_anchor()
   self:resize_dashboard_stack(#lines, { selected_item = selected_item, dashboard_min_height = dashboard_min_height })
   self.ui.set_lines(self.state.mission_dashboard_buf, lines, { modifiable = true })
-  self:highlight_dashboard(self.state.mission_dashboard_buf, lines, items)
   self:render_command_bar()
   self:render_output_panel(self:dashboard_output_entry(selected_item))
   if
     not self:restore_stationary_output_preview_anchor(opts.stationary_preview_anchor)
     and not self:restore_output_preview_anchor(preview_anchor)
   then
-    self:reveal_output_preview_row()
+    self:reveal_selected_dashboard_row()
   end
+  self:refresh_dashboard_highlight(lines, items)
   self.state.mission_dashboard_focus_match = false
 
   return true
@@ -483,6 +497,10 @@ end
 
 function M:reveal_output_preview_row()
   return dashboard_viewport.reveal_output_preview_row(self)
+end
+
+function M:reveal_selected_dashboard_row()
+  return dashboard_viewport.reveal_selected_dashboard_row(self)
 end
 
 function M:open_search_input(opts)

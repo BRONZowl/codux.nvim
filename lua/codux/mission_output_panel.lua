@@ -168,6 +168,7 @@ function Output:enter_output_control()
     self:exit_output_control()
     return false
   end
+  self:refresh_dashboard_highlight()
   return true
 end
 
@@ -182,6 +183,7 @@ function Output:exit_output_control()
   self:set_output_window_focusable(false)
   self:close_output_preview()
   self:render_output_panel(entry)
+  self:refresh_dashboard_highlight()
   self:start_monitor_timer()
   self:focus_mission_list()
   return true

@@ -454,4 +454,154 @@ do
   assert_equal(controller.state.mission_dashboard_selected_row, 7)
 end
 
+do
+  local items = {
+    [4] = { kind = "mission", mission = { name = "Alpha" } },
+    [7] = {
+      kind = "role",
+      mission = { name = "Alpha" },
+      entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
+    },
+  }
+  local revealed
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_buf = 90,
+      mission_dashboard_win = 91,
+      mission_dashboard_command_bar_win = 92,
+      mission_dashboard_output_win = 93,
+      mission_dashboard_items = items,
+      mission_dashboard_selectable_rows = { 4, 7 },
+      mission_dashboard_selected_row = 4,
+    },
+    is_loaded_buf = function(bufnr)
+      return bufnr == 90
+    end,
+    is_valid_win = function(win)
+      return win == 91 or win == 92 or win == 93
+    end,
+    get_window_config = function()
+      return { relative = "editor", row = 0, col = 0, width = 80, height = 1 }
+    end,
+    get_window_height = function()
+      return 1
+    end,
+    get_window_width = function()
+      return 80
+    end,
+    set_window_config = function()
+      return true
+    end,
+    reveal_window_row = function(win, row)
+      revealed = { win = win, row = row }
+      return true
+    end,
+    ui = {
+      set_lines = function()
+        return true
+      end,
+    },
+  })
+  function controller:dashboard_lines()
+    return { "Mission", "", "roles", "", "", "", "  Builder" }, items, { 4, 7 }, nil
+  end
+  function controller:highlight_dashboard()
+    return true
+  end
+  function controller:render_command_bar()
+    return true
+  end
+  function controller:render_output_panel(entry)
+    self.state.mission_dashboard_output_entry = entry
+    return true
+  end
+  function controller:output_preview_running()
+    return false
+  end
+
+  assert_true(controller:move_mission_selection(1))
+  assert_equal(controller.state.mission_dashboard_selected_row, 7)
+  assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-builder")
+  assert_equal(revealed.win, 91)
+  assert_equal(revealed.row, 7)
+end
+
+do
+  local order = {}
+  local items = {
+    [3] = { kind = "role", entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" } },
+  }
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_buf = 90,
+      mission_dashboard_win = 91,
+      mission_dashboard_command_bar_win = 92,
+      mission_dashboard_output_win = 93,
+      mission_dashboard_items = items,
+      mission_dashboard_selectable_rows = { 3 },
+      mission_dashboard_selected_row = 3,
+      mission_dashboard_output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
+    },
+    is_loaded_buf = function(bufnr)
+      return bufnr == 90
+    end,
+    is_valid_win = function(win)
+      return win == 91 or win == 92 or win == 93
+    end,
+    get_window_config = function()
+      return { relative = "editor", row = 0, col = 0, width = 80, height = 5 }
+    end,
+    get_window_height = function()
+      return 5
+    end,
+    get_window_width = function()
+      return 80
+    end,
+    set_window_config = function()
+      return true
+    end,
+    ui = {
+      set_lines = function()
+        table.insert(order, "set_lines")
+        return true
+      end,
+    },
+  })
+  function controller:resize_dashboard_stack()
+    table.insert(order, "resize")
+    return true
+  end
+  function controller:dashboard_lines()
+    return { "Mission", "", "  Builder" }, items, { 3 }, nil
+  end
+  function controller:highlight_dashboard()
+    table.insert(order, "highlight")
+    return true
+  end
+  function controller:render_command_bar()
+    table.insert(order, "command")
+    return true
+  end
+  function controller:render_output_panel()
+    table.insert(order, "output")
+    return true
+  end
+  function controller:capture_output_preview_anchor()
+    return nil
+  end
+  function controller:restore_stationary_output_preview_anchor()
+    return false
+  end
+  function controller:restore_output_preview_anchor()
+    return false
+  end
+  function controller:reveal_selected_dashboard_row()
+    table.insert(order, "reveal-selected")
+    return true
+  end
+
+  assert_true(controller:render_dashboard())
+  assert_equal(table.concat(order, ","), "resize,set_lines,command,output,reveal-selected,highlight")
+end
+
 print("mission_dashboard_viewport_spec.lua: ok")

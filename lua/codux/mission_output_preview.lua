@@ -122,6 +122,7 @@ function M.start_output_preview(self, entry, opts)
             self.state.mission_dashboard_output_control_key = nil
             self:set_output_window_focusable(false)
             self:render_output_panel(active_entry)
+            self:refresh_dashboard_highlight()
             self:start_monitor_timer()
             self:focus_mission_list()
           else

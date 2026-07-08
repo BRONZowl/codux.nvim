@@ -65,6 +65,7 @@ function M.initial()
     mission_dashboard_action_workspace = nil,
     mission_dashboard_action_kind = nil,
     mission_dashboard_items = {},
+    mission_dashboard_lines = {},
     mission_dashboard_selectable_rows = {},
     mission_dashboard_query = "",
     mission_dashboard_best_match_row = nil,

@@ -488,6 +488,7 @@ if type(vim.api) == "table" then
     local monitor_stopped = false
     local monitor_started = false
     local dashboard_focused = false
+    local highlight_refreshes = 0
     local next_job = 77
     local entry = {
       safe_name = "alpha-reviewer",
@@ -549,6 +550,10 @@ if type(vim.api) == "table" then
       dashboard_focused = true
       return true
     end
+    function controller:refresh_dashboard_highlight()
+      highlight_refreshes = highlight_refreshes + 1
+      return true
+    end
 
     assert_true(controller:enter_output_control())
     assert_true(monitor_stopped)
@@ -559,6 +564,7 @@ if type(vim.api) == "table" then
     assert_equal(focusable_values[1], true)
     assert_equal(focused_win, 13)
     assert_equal(controller.state.mission_dashboard_output_job, 77)
+    assert_equal(highlight_refreshes, 1)
 
     assert_true(controller:exit_output_control())
     assert_false(controller.state.mission_dashboard_output_control)
@@ -568,6 +574,7 @@ if type(vim.api) == "table" then
     assert_true(monitor_started)
     assert_true(dashboard_focused)
     assert_equal(controller.state.mission_dashboard_output_job, 78)
+    assert_equal(highlight_refreshes, 2)
     assert_contains(table.concat(ctx.rendered_lines, "\n"), "Output: Reviewer")
     output_fixtures.delete_buffer(ctx.bufnr)
   end)
@@ -600,6 +607,7 @@ if type(vim.api) == "table" then
   local focusable_values = {}
   local monitor_started = false
   local dashboard_focused = false
+  local highlight_refreshes = 0
   local next_job = 77
   local entry = {
     safe_name = "alpha-reviewer",
@@ -641,6 +649,10 @@ if type(vim.api) == "table" then
     dashboard_focused = true
     return true
   end
+  function controller:refresh_dashboard_highlight()
+    highlight_refreshes = highlight_refreshes + 1
+    return true
+  end
 
   assert_true(controller:start_output_preview(entry, { control = true }))
   assert_true(preview_opts[1].control)
@@ -652,6 +664,7 @@ if type(vim.api) == "table" then
   assert_true(monitor_started)
   assert_true(dashboard_focused)
   assert_equal(controller.state.mission_dashboard_output_job, 78)
+  assert_equal(highlight_refreshes, 1)
   output_fixtures.delete_buffer(ctx.bufnr)
 end
 

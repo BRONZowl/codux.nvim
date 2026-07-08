@@ -183,4 +183,15 @@ function M.reveal_output_preview_row(controller)
   return controller.reveal_window_row(controller.state.mission_dashboard_win, row)
 end
 
+function M.reveal_selected_dashboard_row(controller)
+  local row = tonumber(controller.state.mission_dashboard_selected_row or controller.state.mission_dashboard_best_match_row)
+  if not row or row < 1 then
+    return false
+  end
+  if not controller.is_valid_win(controller.state.mission_dashboard_win) then
+    return false
+  end
+  return controller.reveal_window_row(controller.state.mission_dashboard_win, row)
+end
+
 return M
