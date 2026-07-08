@@ -12,6 +12,7 @@ local workspace_prepare = require("codux.workspace_prepare")
 local workspace_remote = require("codux.workspace_remote")
 local workspace_remote_actions = require("codux.workspace_remote_actions")
 local workspace_registry = require("codux.workspace_registry")
+local workspace_reconcile = require("codux.workspace_reconcile")
 local workspace_residue = require("codux.workspace_residue")
 local workspace_sessions = require("codux.workspace_sessions")
 local workspace_sync = require("codux.workspace_sync")
@@ -290,8 +291,8 @@ function M:git_worktree_list(git_common_dir)
   return workspace_worktree.git_worktree_list(self, git_common_dir)
 end
 
-function M:current_worktree_path(entry)
-  return workspace_worktree.current_worktree_path(self, entry)
+function M:current_worktree_path(entry, opts)
+  return workspace_worktree.current_worktree_path(self, entry, opts)
 end
 
 function M:worktree_branch(safe_name)
@@ -847,11 +848,11 @@ function M:close_all_saved_workspace_windows(root)
 end
 
 function M:reconcile_moved_worktree(entry, opts)
-  return workspace_lifecycle_actions.reconcile_moved_worktree(self, entry, opts)
+  return workspace_reconcile.reconcile_moved_worktree(self, entry, opts)
 end
 
 function M:reconcile_moved_worktrees_for_project(root, opts)
-  return workspace_lifecycle_actions.reconcile_moved_worktrees_for_project(self, root, opts)
+  return workspace_reconcile.reconcile_moved_worktrees_for_project(self, root, opts)
 end
 
 function M:mission_dirty_roles(name, opts)

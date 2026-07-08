@@ -220,7 +220,8 @@ local function matching_sibling_worktree(runtime, entry, git_common_dir, branch)
   return nil
 end
 
-function M.current_worktree_path(runtime, entry)
+function M.current_worktree_path(runtime, entry, opts)
+  opts = type(opts) == "table" and opts or {}
   entry = type(entry) == "table" and entry or {}
   if entry.workspace_kind ~= "worktree" then
     return nil, nil
@@ -240,7 +241,17 @@ function M.current_worktree_path(runtime, entry)
     return nil, nil
   end
 
-  local worktrees = runtime:git_worktree_list(git_common_dir)
+  local worktrees = nil
+  local worktree_lists = type(opts.worktree_lists) == "table" and opts.worktree_lists or nil
+  if worktree_lists then
+    if worktree_lists[git_common_dir] == nil then
+      local listed = runtime:git_worktree_list(git_common_dir)
+      worktree_lists[git_common_dir] = type(listed) == "table" and listed or false
+    end
+    worktrees = type(worktree_lists[git_common_dir]) == "table" and worktree_lists[git_common_dir] or nil
+  else
+    worktrees = runtime:git_worktree_list(git_common_dir)
+  end
   if type(worktrees) == "table" then
     for _, worktree in ipairs(worktrees) do
       if worktree.branch == branch and type(worktree.path) == "string" and worktree.path ~= "" then

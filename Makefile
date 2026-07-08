@@ -42,6 +42,7 @@ TEST_SPECS := \
 	tests/workspace_remote_actions_spec.lua \
 	tests/workspace_remote_spec.lua \
 	tests/workspace_runtime_worktree_spec.lua \
+	tests/workspace_runtime_reconcile_spec.lua \
 	tests/workspace_runtime_lifecycle_spec.lua \
 	tests/workspace_runtime_prepare_spec.lua \
 	tests/workspace_runtime_remote_spec.lua \
