@@ -286,6 +286,14 @@ function M:worktree_directory(root)
   return workspace_worktree.worktree_directory(self, root)
 end
 
+function M:git_worktree_list(git_common_dir)
+  return workspace_worktree.git_worktree_list(self, git_common_dir)
+end
+
+function M:current_worktree_path(entry)
+  return workspace_worktree.current_worktree_path(self, entry)
+end
+
 function M:worktree_branch(safe_name)
   return workspace_worktree.worktree_branch(self, safe_name)
 end
@@ -836,6 +844,14 @@ end
 
 function M:close_all_saved_workspace_windows(root)
   return workspace_lifecycle_actions.close_all_saved_workspace_windows(self, root)
+end
+
+function M:reconcile_moved_worktree(entry, opts)
+  return workspace_lifecycle_actions.reconcile_moved_worktree(self, entry, opts)
+end
+
+function M:reconcile_moved_worktrees_for_project(root, opts)
+  return workspace_lifecycle_actions.reconcile_moved_worktrees_for_project(self, root, opts)
 end
 
 function M:mission_dirty_roles(name, opts)

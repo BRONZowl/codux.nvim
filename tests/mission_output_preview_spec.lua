@@ -52,6 +52,41 @@ if type(vim.api) == "table" then
 end
 
 if type(vim.api) == "table" then
+  local preview_entry
+  local controller, ctx = output_fixtures.controller({
+    controller = {
+      reconcile_workspace_entry = function(entry)
+        local updated = vim.deepcopy(entry)
+        updated.project_root = "/new"
+        updated.worktree_path = "/new"
+        return updated, nil
+      end,
+    },
+    workspace_interactive_preview = function(entry)
+      preview_entry = entry
+      return output_fixtures.preview(), nil
+    end,
+    termopen = function()
+      return 77
+    end,
+  })
+
+  assert_true(controller:render_output_panel({
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+    project_root = "/old",
+    worktree_path = "/old",
+    workspace_kind = "worktree",
+    worktree_branch = "dev/alpha-builder",
+  }))
+  assert_equal(preview_entry.project_root, "/new")
+  assert_equal(controller.state.mission_dashboard_output_entry.project_root, "/new")
+  assert_equal(controller.state.mission_dashboard_output_key, controller:output_entry_key(preview_entry))
+  output_fixtures.delete_buffer(ctx.bufnr)
+end
+
+if type(vim.api) == "table" then
   local preview_called = false
   local controller, ctx = output_fixtures.controller({
     state = output_fixtures.dashboard_state_for_roles({

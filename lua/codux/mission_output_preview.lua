@@ -53,6 +53,19 @@ function M.start_output_preview(self, entry, opts)
     return false
   end
 
+  if type(entry) == "table" and type(self.reconcile_workspace_entry) == "function" then
+    local reconciled, reconcile_error = self.reconcile_workspace_entry(entry)
+    if type(reconciled) == "table" then
+      entry = reconciled
+    elseif reconcile_error then
+      self:close_output_preview()
+      self.state.mission_dashboard_output_entry = entry
+      self.state.mission_dashboard_output_key = self:output_entry_key(entry)
+      self.state.mission_dashboard_output_blocked_key = self.state.mission_dashboard_output_key
+      return self:render_output_status(entry, reconcile_error)
+    end
+  end
+
   self:close_output_preview()
   self.state.mission_dashboard_output_generation = (tonumber(self.state.mission_dashboard_output_generation) or 0) + 1
   local generation = self.state.mission_dashboard_output_generation

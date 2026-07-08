@@ -698,6 +698,176 @@ do
 end
 
 do
+  local root = "/tmp/codux-lifecycle-alpha"
+  local old_path = root .. "/alpha-builder"
+  local new_path = root .. "/alpha-builder-moved"
+  local old_isdirectory = vim.fn.isdirectory
+  vim.fn.isdirectory = function(path)
+    return path == new_path and 1 or 0
+  end
+  local state_data = {
+    projects = {
+      [old_path] = {
+        workspaces = {
+          ["alpha-builder"] = {
+            name = "alpha-builder",
+            safe_name = "alpha-builder",
+            project_root = old_path,
+            target_path = old_path .. "/lua/init.lua",
+            target_type = "file",
+            git_branch = "dev/alpha-builder",
+            workspace_kind = "worktree",
+            git_common_dir = "/repo/.git",
+            worktree_path = old_path,
+            worktree_branch = "dev/alpha-builder",
+            worktree_base = "main",
+            mission_id = "mission:alpha",
+            mission_name = "Alpha",
+            mission_role = "Builder",
+            tmux_window = "alpha-builder",
+            nvim_server = "/tmp/stale-alpha.sock",
+            status = "idle",
+            codex_status = "idle",
+          },
+        },
+      },
+    },
+  }
+  local runtime = runtime_mod.new({
+    state = {
+      workspace = {
+        safe_name = "alpha-builder",
+        project_root = old_path,
+        worktree_branch = "dev/alpha-builder",
+      },
+    },
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git --git-dir=/repo/.git worktree list --porcelain" then
+        return table.concat({
+          "worktree /repo",
+          "HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "branch refs/heads/main",
+          "",
+          "worktree " .. new_path,
+          "HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "branch refs/heads/dev/alpha-builder",
+        }, "\n"),
+          0
+      end
+      return "", 1
+    end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-07-05T12:00:00Z"
+      end,
+      project_state = project_state,
+    },
+  })
+
+  local updated, changed, error_message = runtime:reconcile_moved_worktree({
+    safe_name = "alpha-builder",
+    project_root = old_path,
+    workspace_kind = "worktree",
+    worktree_path = old_path,
+    git_common_dir = "/repo/.git",
+    worktree_branch = "dev/alpha-builder",
+  })
+  assert_nil(error_message)
+  assert_true(changed)
+  assert_equal(updated.project_root, new_path)
+  assert_equal(updated.worktree_path, new_path)
+  assert_nil(state_data.projects[old_path].workspaces["alpha-builder"])
+  local record = state_data.projects[new_path].workspaces["alpha-builder"]
+  assert_equal(record.project_root, new_path)
+  assert_equal(record.worktree_path, new_path)
+  assert_equal(record.target_path, new_path .. "/lua/init.lua")
+  assert_equal(record.nvim_server, "/tmp/stale-alpha.sock")
+  assert_equal(runtime.state.workspace.project_root, new_path)
+  assert_equal(runtime.state.workspace.worktree_path, new_path)
+  vim.fn.isdirectory = old_isdirectory
+end
+
+do
+  local root = "/tmp/codux-lifecycle-reviewer"
+  local old_path = root .. "/alpha-reviewer"
+  local new_path = root .. "/alpha-reviewer-moved"
+  local old_isdirectory = vim.fn.isdirectory
+  vim.fn.isdirectory = function(path)
+    return path == new_path and 1 or 0
+  end
+  local state_data = {
+    projects = {
+      [old_path] = {
+        workspaces = {
+          ["alpha-reviewer"] = {
+            name = "alpha-reviewer",
+            safe_name = "alpha-reviewer",
+            project_root = old_path,
+            workspace_kind = "worktree",
+            git_common_dir = "/repo/.git",
+            worktree_path = old_path,
+            worktree_branch = "dev/alpha-reviewer",
+            mission_id = "mission:alpha",
+            mission_name = "Alpha",
+            mission_role = "Reviewer",
+            tmux_window = "alpha-reviewer",
+            nvim_server = "/tmp/stale-reviewer.sock",
+            status = "inactive",
+            codex_status = "idle",
+          },
+        },
+      },
+    },
+  }
+  local runtime = runtime_mod.new({
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
+        return "/repo/.git\n", 0
+      end
+      if command == "git --git-dir=/repo/.git worktree list --porcelain" then
+        return table.concat({
+          "worktree " .. new_path,
+          "HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "branch refs/heads/dev/alpha-reviewer",
+        }, "\n"),
+          0
+      end
+      return "", 1
+    end,
+    store = {
+      read_state = function()
+        return state_data, nil
+      end,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      timestamp = function()
+        return "2026-07-05T12:00:00Z"
+      end,
+      project_state = project_state,
+    },
+  })
+
+  local changed, error_message = runtime:reconcile_moved_worktrees_for_project("/repo")
+  assert_nil(error_message)
+  assert_equal(changed, 1)
+  local record = state_data.projects[new_path].workspaces["alpha-reviewer"]
+  assert_equal(record.project_root, new_path)
+  assert_nil(record.nvim_server)
+  vim.fn.isdirectory = old_isdirectory
+end
+
+do
   local commands = {}
   local runtime = runtime_mod.new({
     state = {

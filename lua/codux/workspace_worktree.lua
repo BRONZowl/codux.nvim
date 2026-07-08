@@ -98,7 +98,10 @@ end
 
 function M.worktree_directory(runtime, base_root)
   local config = runtime:worktree_config()
-  local directory = config.directory
+  local directory = type(config.directory) == "string" and config.directory or ""
+  if directory == "" then
+    return nil
+  end
   if directory:sub(1, 1) ~= "/" then
     directory = workspace_git.normalize_absolute_path(base_root, directory)
   end
@@ -116,6 +119,140 @@ function M.mission_worktree_path(runtime, base_root, safe_name)
   local project_name = normalized_root:match("([^/]+)$") or normalized_root
   local project_token = workspace_git.path_token(project_name)
   return workspace_git.normalize_absolute_path(workspace_git.normalize_absolute_path(directory, project_token), safe_name)
+end
+
+function M.parse_worktree_list_porcelain(output)
+  local entries = {}
+  local current = nil
+
+  for line in tostring(output or ""):gmatch("[^\r\n]+") do
+    local path = line:match("^worktree%s+(.+)$")
+    if path then
+      current = {
+        path = workspace_git.strip_trailing_slashes(path),
+      }
+      table.insert(entries, current)
+    elseif current then
+      local head = line:match("^HEAD%s+(.+)$")
+      local branch = line:match("^branch%s+(.+)$")
+      if head then
+        current.head = head
+      elseif branch then
+        current.branch_ref = branch
+        current.branch = branch:gsub("^refs/heads/", "")
+      elseif line == "detached" then
+        current.detached = true
+      elseif line == "bare" then
+        current.bare = true
+      elseif line:match("^prunable") then
+        current.prunable = true
+      end
+    end
+  end
+
+  return entries
+end
+
+function M.git_worktree_list(runtime, git_common_dir)
+  if type(git_common_dir) ~= "string" or git_common_dir == "" then
+    return nil, "Git common directory is required"
+  end
+
+  local output, code = runtime.system({ "git", "--git-dir=" .. git_common_dir, "worktree", "list", "--porcelain" })
+  if code ~= 0 then
+    local detail = trim(output)
+    return nil, detail ~= "" and detail or "failed to list Git worktrees"
+  end
+
+  return M.parse_worktree_list_porcelain(output), nil
+end
+
+local function path_is_directory(path)
+  if type(path) ~= "string" or path == "" then
+    return false
+  end
+  local ok, result = pcall(vim.fn.isdirectory, path)
+  return ok and result == 1
+end
+
+local function sibling_directories(path)
+  if type(path) ~= "string" or path == "" then
+    return {}
+  end
+
+  local parent = path:match("^(.*)/[^/]+$")
+  if type(parent) ~= "string" or parent == "" or not path_is_directory(parent) then
+    return {}
+  end
+
+  local ok, files = pcall(vim.fn.globpath, parent, "*", false, true)
+  if not ok or type(files) ~= "table" then
+    return {}
+  end
+
+  local directories = {}
+  for _, candidate in ipairs(files) do
+    if path_is_directory(candidate) then
+      table.insert(directories, workspace_git.strip_trailing_slashes(candidate))
+    end
+  end
+  return directories
+end
+
+local function matching_sibling_worktree(runtime, entry, git_common_dir, branch)
+  local old_path = entry.worktree_path or entry.project_root
+  local matches = {}
+  for _, candidate in ipairs(sibling_directories(old_path)) do
+    if candidate ~= old_path then
+      local candidate_common = runtime:git_common_dir(candidate)
+      if candidate_common == git_common_dir then
+        local candidate_branch = runtime:git_current_ref(candidate)
+        if candidate_branch == branch then
+          table.insert(matches, candidate)
+        end
+      end
+    end
+  end
+
+  if #matches == 1 then
+    return matches[1]
+  end
+  return nil
+end
+
+function M.current_worktree_path(runtime, entry)
+  entry = type(entry) == "table" and entry or {}
+  if entry.workspace_kind ~= "worktree" then
+    return nil, nil
+  end
+
+  local branch = entry.worktree_branch
+  if type(branch) ~= "string" or branch == "" then
+    return nil, nil
+  end
+
+  local root = entry.worktree_path or entry.project_root
+  local git_common_dir = entry.git_common_dir
+  if type(git_common_dir) ~= "string" or git_common_dir == "" then
+    git_common_dir = type(root) == "string" and root ~= "" and runtime:git_common_dir(root) or nil
+  end
+  if type(git_common_dir) ~= "string" or git_common_dir == "" then
+    return nil, nil
+  end
+
+  local worktrees = runtime:git_worktree_list(git_common_dir)
+  if type(worktrees) == "table" then
+    for _, worktree in ipairs(worktrees) do
+      if worktree.branch == branch and type(worktree.path) == "string" and worktree.path ~= "" then
+        if path_is_directory(worktree.path) then
+          return worktree.path, nil
+        end
+        break
+      end
+    end
+  end
+
+  return matching_sibling_worktree(runtime, entry, git_common_dir, branch), nil
 end
 
 function M.worktree_branch(runtime, safe_name)

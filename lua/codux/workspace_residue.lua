@@ -263,12 +263,4 @@ function M.prune_empty_project_buckets(runtime, state_data, directory)
   return removed
 end
 
-function M.worktree_directory(runtime, root)
-  return worktree_directory(runtime, root)
-end
-
-function M.safe_empty_shell(path)
-  return safe_empty_shell(path)
-end
-
 return M

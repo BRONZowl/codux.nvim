@@ -438,7 +438,7 @@ function M.preflight_mission(runtime, mission)
     end
   end
 
-  return true, nil
+  return true, nil, role_specs
 end
 
 function M.create_mission(runtime, mission_or_name, objective, opts)
@@ -453,7 +453,7 @@ function M.create_mission(runtime, mission_or_name, objective, opts)
     return false
   end
 
-  local preflight_ok, preflight_error = runtime:preflight_mission(mission)
+  local preflight_ok, preflight_error, role_specs = runtime:preflight_mission(mission)
   if not preflight_ok then
     runtime.notify(preflight_error or "Codux mission preflight failed", vim.log.levels.ERROR)
     return false
@@ -462,7 +462,10 @@ function M.create_mission(runtime, mission_or_name, objective, opts)
   local created = {}
   local context = runtime:target_context()
   local base_root = context.root
-  local role_specs, spec_error = mission_role_specs(runtime, mission, base_root)
+  local spec_error = nil
+  if type(role_specs) ~= "table" then
+    role_specs, spec_error = mission_role_specs(runtime, mission, base_root)
+  end
   if not role_specs then
     runtime.notify(spec_error or "Codux mission preflight failed", vim.log.levels.ERROR)
     return false

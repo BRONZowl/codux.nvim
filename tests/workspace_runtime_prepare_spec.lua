@@ -417,6 +417,13 @@ do
       },
     })
     assert_nil(error_message)
+    local preflight_ok, preflight_error, role_specs = runtime:preflight_mission(mission)
+    assert_true(preflight_ok)
+    assert_nil(preflight_error)
+    assert_equal(role_specs[1].safe_name, "mission-architect")
+    assert_equal(role_specs[1].worktree_path, "/codux-worktrees/repo/mission-architect")
+    assert_equal(role_specs[2].safe_name, "mission-builder")
+    assert_equal(role_specs[2].worktree_path, "/codux-worktrees/repo/mission-builder")
     assert_true(runtime:create_mission(mission))
 
     local architect =

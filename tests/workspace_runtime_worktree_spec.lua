@@ -21,6 +21,34 @@ local with_filereadable = fixtures.with_filereadable
 local with_workspace_prepare_env = fixtures.with_workspace_prepare_env
 local workspace_prepare_runtime = fixtures.workspace_prepare_runtime
 local workspace_store = fixtures.workspace_store
+
+do
+  local output = table.concat({
+    "worktree /repo",
+    "HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "branch refs/heads/main",
+    "",
+    "worktree /codux-worktrees/repo/alpha-builder",
+    "HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "branch refs/heads/dev/alpha-builder",
+    "prunable gitdir file points to non-existent location",
+    "",
+    "worktree /tmp/detached",
+    "HEAD cccccccccccccccccccccccccccccccccccccccc",
+    "detached",
+  }, "\n")
+
+  local entries = require("codux.workspace_worktree").parse_worktree_list_porcelain(output)
+  assert_equal(#entries, 3)
+  assert_equal(entries[1].path, "/repo")
+  assert_equal(entries[1].branch, "main")
+  assert_equal(entries[2].path, "/codux-worktrees/repo/alpha-builder")
+  assert_equal(entries[2].branch_ref, "refs/heads/dev/alpha-builder")
+  assert_equal(entries[2].branch, "dev/alpha-builder")
+  assert_true(entries[2].prunable)
+  assert_true(entries[3].detached)
+end
+
 do
   local runtime = runtime_mod.new({
     get_config = default_workspace_config,
@@ -116,6 +144,60 @@ do
   })
 
   assert_equal(runtime:renamed_worktree_branch({ worktree_branch = "dev1/review" }, "search"), "dev1/search")
+end
+
+do
+  local root = "/tmp/codux-test-worktrees"
+  local old_path = root .. "/alpha-builder"
+  local new_path = root .. "/alpha-builder-moved"
+  local old_isdirectory = vim.fn.isdirectory
+  local old_globpath = vim.fn.globpath
+  vim.fn.isdirectory = function(path)
+    return (path == root or path == new_path) and 1 or 0
+  end
+  vim.fn.globpath = function(path)
+    if path == root then
+      return { new_path }
+    end
+    return {}
+  end
+  local runtime = runtime_mod.new({
+    system = function(args)
+      local command = table.concat(args, " ")
+      if command == "git --git-dir=/repo/.git worktree list --porcelain" then
+        return table.concat({
+          "worktree /repo",
+          "HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "branch refs/heads/main",
+          "",
+          "worktree " .. old_path,
+          "HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "branch refs/heads/dev/alpha-builder",
+          "prunable gitdir file points to non-existent location",
+        }, "\n"),
+          0
+      end
+      if command == "git -C " .. new_path .. " rev-parse --path-format=absolute --git-common-dir" then
+        return "/repo/.git\n", 0
+      end
+      if command == "git -C " .. new_path .. " branch --show-current" then
+        return "dev/alpha-builder\n", 0
+      end
+      return "", 1
+    end,
+  })
+
+  local path, error_message = runtime:current_worktree_path({
+    workspace_kind = "worktree",
+    project_root = old_path,
+    worktree_path = old_path,
+    git_common_dir = "/repo/.git",
+    worktree_branch = "dev/alpha-builder",
+  })
+  assert_nil(error_message)
+  assert_equal(path, new_path)
+  vim.fn.isdirectory = old_isdirectory
+  vim.fn.globpath = old_globpath
 end
 
 do

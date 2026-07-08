@@ -57,6 +57,10 @@ function M.new(deps)
       return codux.delete_mission(name, { project_root = root })
     end,
     missions_for_project = function(root)
+      local _, reconcile_error = workspace_runtime:reconcile_moved_worktrees_for_project(root)
+      if reconcile_error then
+        return {}, reconcile_error
+      end
       return workspace_runtime:missions_for_project(root)
     end,
     mission_residue_for_project = function(root)
@@ -73,6 +77,13 @@ function M.new(deps)
     end,
     workspace_interactive_preview = function(entry, opts)
       return workspace_runtime:workspace_interactive_preview(entry, opts)
+    end,
+    reconcile_workspace_entry = function(entry)
+      local updated, _, error_message = workspace_runtime:reconcile_moved_worktree(entry)
+      if error_message then
+        return nil, error_message
+      end
+      return updated or entry, nil
     end,
     close_workspace_interactive_preview = function(preview)
       return workspace_runtime:close_workspace_interactive_preview(preview)

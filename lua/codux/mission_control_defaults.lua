@@ -85,6 +85,7 @@ function M.normalize(opts)
     workspace_interactive_preview = opt_function(opts, "workspace_interactive_preview", function()
       return nil, "workspace preview unavailable"
     end),
+    reconcile_workspace_entry = opt_function(opts, "reconcile_workspace_entry", nil),
     close_workspace_interactive_preview = opt_function(opts, "close_workspace_interactive_preview", noop),
     send_prompt_to_workspace = opt_function(opts, "send_prompt_to_workspace", function()
       return false, "workspace prompt unavailable"
