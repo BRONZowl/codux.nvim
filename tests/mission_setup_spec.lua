@@ -4,7 +4,6 @@ local assert_true = h.assert_true
 local assert_contains = h.assert_contains
 
 local mission_setup = require("codux.mission_setup")
-local ui_mod = require("codux.ui")
 
 do
   local selected
@@ -20,6 +19,15 @@ do
     codux = {
       _v5 = {
         close_saved_workspace_window = function() end,
+        select_keyed_provider_profile = function(opts)
+          assert_equal(opts.provider_filetype, "codux-mission-workspace-provider")
+          assert_equal(opts.profile_filetype, "codux-mission-workspace-profile")
+          return opts.on_select({
+            agent_provider = "grok",
+            profile = "auto",
+            profile_label = "Grok Auto",
+          })
+        end,
       },
     },
     workspace_runtime = {
@@ -76,18 +84,7 @@ do
     return true
   end
 
-  h.with_stubs({
-    {
-      target = ui_mod,
-      key = "key_choice_menu",
-      value = function(opts, callback)
-        assert_equal(opts.filetype, "codux-mission-workspace-profile")
-        return callback(opts.choices[5])
-      end,
-    },
-  }, function()
-    assert_true(controller:switch_selected_workspace_profile(entry))
-  end)
+  assert_true(controller:switch_selected_workspace_profile(entry))
 
   assert_equal(selected.workspace.safe_name, "alpha-builder")
   assert_equal(selected.agent_provider, "grok")

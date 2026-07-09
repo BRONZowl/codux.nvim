@@ -10,7 +10,7 @@ local function trim(value)
 end
 
 local function profile_label(choice)
-  return choice.label or (providers.provider_label(choice.agent_provider) .. " " .. providers.profile_label(choice.profile))
+  return choice.profile_label or (providers.provider_label(choice.agent_provider) .. " " .. providers.profile_label(choice.profile))
 end
 
 local function open_profile_picker(controller, entry)
@@ -20,44 +20,46 @@ local function open_profile_picker(controller, entry)
   end
 
   local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
-  return ui.key_choice_menu({
-    title = " Profile " .. tostring(label) .. " ",
-    filetype = "codux-mission-workspace-profile",
-    zindex = 85,
-    choices = providers.keyed_permission_profile_choices("profile_label"),
-    cancel_desc = "Cancel Codux Profile",
-    create_error = "Failed to create Codux profile menu",
-    open_error = "Failed to open Codux profile menu",
-  }, function(choice)
-    if type(choice) ~= "table" then
-      return false
-    end
-
-    local ok, error_message, restarted = controller.switch_workspace_profile(entry, choice.agent_provider, choice.profile, {
-      restart = true,
-    })
-    if ok then
-      controller.notify(
-        "Switched Codux workspace "
-          .. tostring(label)
-          .. " to "
-          .. profile_label(choice)
-          .. (restarted and " and restarted it" or "")
-      )
-      controller:render_dashboard()
-      return true
-    end
-    controller.notify(error_message or "Failed to switch Codux workspace profile", vim.log.levels.ERROR)
+  if type(controller.select_provider_profile) ~= "function" then
+    controller.notify("Codux profile picker is unavailable", vim.log.levels.ERROR)
     return false
-  end, {
-    notify = controller.notify,
-    create_scratch_buffer = controller.ui.create_scratch_buffer,
-    set_lines = controller.ui.set_lines,
-    set_window_options = controller.ui.set_window_options,
-    close_window = controller.ui.close_window,
-    delete_buffer = controller.ui.delete_buffer,
-    set_buffer_keymap = controller.set_buffer_keymap,
-    bind_close_keys = controller.bind_close_keys,
+  end
+
+  return controller.select_provider_profile({
+    provider_title = " Profile " .. tostring(label) .. " agent ",
+    provider_filetype = "codux-mission-workspace-provider",
+    provider_zindex = 85,
+    provider_cancel_desc = "Cancel Codux Profile",
+    provider_create_error = "Failed to create Codux profile menu",
+    provider_open_error = "Failed to open Codux profile menu",
+    profile_title = " Profile " .. tostring(label) .. " ",
+    profile_filetype = "codux-mission-workspace-profile",
+    profile_zindex = 86,
+    profile_cancel_desc = "Cancel Codux Profile",
+    profile_create_error = "Failed to create Codux profile menu",
+    profile_open_error = "Failed to open Codux profile menu",
+    on_select = function(choice)
+      if type(choice) ~= "table" then
+        return false
+      end
+
+      local ok, error_message, restarted = controller.switch_workspace_profile(entry, choice.agent_provider, choice.profile, {
+        restart = true,
+      })
+      if ok then
+        controller.notify(
+          "Switched Codux workspace "
+            .. tostring(label)
+            .. " to "
+            .. profile_label(choice)
+            .. (restarted and " and restarted it" or "")
+        )
+        controller:render_dashboard()
+        return true
+      end
+      controller.notify(error_message or "Failed to switch Codux workspace profile", vim.log.levels.ERROR)
+      return false
+    end,
   })
 end
 

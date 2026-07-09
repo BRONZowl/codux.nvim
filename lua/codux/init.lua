@@ -494,6 +494,9 @@ workspace_manager_controller = workspace_manager_setup_mod.new({
   close_saved_workspace_window = function(entry)
     return M._v5.close_saved_workspace_window(entry)
   end,
+  select_provider_profile = function(opts)
+    return M._v5.select_keyed_provider_profile(opts)
+  end,
   switch_workspace_profile = function(entry, agent_provider, permission_profile, opts)
     return workspace_runtime:update_workspace_profile(entry, agent_provider, permission_profile, opts)
   end,

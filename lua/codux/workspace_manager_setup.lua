@@ -26,6 +26,7 @@ function M.new(opts)
     edit_saved_workspace_instruction = opts.edit_saved_workspace_instruction,
     delete_saved_workspace = opts.delete_saved_workspace,
     close_saved_workspace_window = opts.close_saved_workspace_window,
+    select_provider_profile = opts.select_provider_profile,
     switch_workspace_profile = opts.switch_workspace_profile,
     close_all_saved_workspace_windows = opts.close_all_saved_workspace_windows,
     doctor = opts.doctor,

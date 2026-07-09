@@ -88,6 +88,7 @@ function M.new(opts)
     close_saved_workspace_window = type(opts.close_saved_workspace_window) == "function"
         and opts.close_saved_workspace_window
       or noop,
+    select_provider_profile = type(opts.select_provider_profile) == "function" and opts.select_provider_profile or nil,
     switch_workspace_profile = type(opts.switch_workspace_profile) == "function" and opts.switch_workspace_profile or noop,
     close_all_saved_workspace_windows = type(opts.close_all_saved_workspace_windows) == "function"
         and opts.close_all_saved_workspace_windows

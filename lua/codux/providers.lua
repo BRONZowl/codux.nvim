@@ -201,6 +201,7 @@ function M.keyed_permission_profile_choices_for_provider(provider, label_key)
     table.insert(choices, {
       key = choice.key,
       label = choice[label_key or "keyed_label"] or choice.keyed_label,
+      profile_label = provider_label .. " " .. choice.profile_label,
       agent_provider = provider,
       profile = choice.profile,
       desc = "Open " .. provider_label .. " " .. choice.desc_label,

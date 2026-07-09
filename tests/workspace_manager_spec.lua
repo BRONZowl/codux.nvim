@@ -362,6 +362,17 @@ do
       close_window = function() end,
       delete_buffer = function() end,
     },
+    select_provider_profile = function(opts)
+      assert_equal(opts.open_provider, nil)
+      assert_equal(opts.open_default, nil)
+      assert_equal(opts.provider_filetype, "codux-workspace-provider")
+      assert_equal(opts.profile_filetype, "codux-workspace-profile")
+      return opts.on_select({
+        agent_provider = "grok",
+        profile = "danger",
+        profile_label = "Grok Full",
+      })
+    end,
     switch_workspace_profile = function(workspace, agent_provider, permission_profile, opts)
       selected = {
         workspace = workspace,
@@ -377,23 +388,11 @@ do
     return true
   end
 
-  h.with_stubs({
-    {
-      target = ui_mod,
-      key = "key_choice_menu",
-      value = function(opts, callback)
-        assert_equal(opts.filetype, "codux-workspace-profile")
-        assert_equal(opts.choices[6].label, "Grok Full")
-        return callback(opts.choices[6])
-      end,
-    },
-  }, function()
-    assert_true(controller:switch_selected_workspace_profile({
-      name = "review",
-      safe_name = "review",
-      project_root = "/repo",
-    }))
-  end)
+  assert_true(controller:switch_selected_workspace_profile({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+  }))
 
   assert_equal(selected.workspace.safe_name, "review")
   assert_equal(selected.agent_provider, "grok")
