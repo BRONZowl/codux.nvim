@@ -218,7 +218,9 @@ dashboard. It shows mission and role rows with status, mode, profile, age, and
 target, plus a live `Output:` panel for the highlighted role. Mission rows do
 not control output directly; active role rows preview that role workspace's
 Codex session. When an active role preview is shown, the dashboard gives more
-space to the output panel while keeping the selected row visible.
+space to the output panel while keeping the selected row visible. The preview
+uses the role's Codux terminal controls, so output control behaves like the
+default `<leader>zc` Codux window while staying inside the dashboard layout.
 
 Dashboard controls:
 
@@ -244,7 +246,10 @@ workspace.
 
 Close and delete are separate operations. Closing a mission only closes role
 windows and preserves worktrees, branches, instructions, saved state, and mission
-metadata. Deleting a mission is destructive cleanup and asks for confirmation.
+metadata. Deleting a mission is destructive cleanup and asks for confirmation;
+it removes each role workspace, closes matching tmux windows, removes role
+worktrees and branches, deletes instruction files, and cleans empty mission
+residue.
 
 ## Token and Status Monitoring
 

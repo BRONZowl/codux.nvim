@@ -1,5 +1,17 @@
 # Release Notes
 
+## v0.9.1
+
+Mission output and cleanup hardening.
+
+codux.nvim v0.9.1 tightens the v0.9 Mission Control workflow with Codux-terminal-backed output previews, cleaner startup behavior, and reliable destructive cleanup for project-scoped mission worktrees.
+
+- Reworked mission output previews to use Codux terminal controls so active role previews behave like the default Codux window while preserving dashboard layout and output scale.
+- Reduced output preview flicker during role startup and while viewing previews outside output-control mode.
+- Hardened mission startup sends so role sessions clear stale prompt input before submitting startup instructions.
+- Fixed mission deletion from the dashboard so project-scoped role worktrees are resolved from saved state, matching tmux windows are closed by pane cwd when needed, Git worktrees are removed, and role branches are deleted.
+- Expanded regression coverage for Mission Control output previews, terminal startup, project-scoped worktree launch, remote workspace actions, and mission worktree deletion rollback.
+
 ## v0.9.0
 
 Mission Control focus and output control.
