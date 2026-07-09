@@ -341,6 +341,7 @@ do
       },
     })
     assert_nil(error_message)
+    mission.permission_profile = "danger"
     local preflight_ok, preflight_error, role_specs = runtime:preflight_mission(mission)
     assert_true(preflight_ok)
     assert_nil(preflight_error)
@@ -353,8 +354,8 @@ do
     local architect =
       store.state_data().projects["/codux-worktrees/repo/mission-architect"].workspaces["mission-architect"]
     local builder = store.state_data().projects["/codux-worktrees/repo/mission-builder"].workspaces["mission-builder"]
-    assert_equal(architect.permission_profile, "auto")
-    assert_equal(builder.permission_profile, "auto")
+    assert_equal(architect.permission_profile, "danger")
+    assert_equal(builder.permission_profile, "danger")
     assert_equal(architect.mission_id, "mission:mission")
     assert_equal(builder.mission_id, "mission:mission")
     assert_equal(architect.mission_role, "Architect")

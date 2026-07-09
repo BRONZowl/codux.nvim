@@ -486,7 +486,10 @@ function M.create_mission(runtime, mission_or_name, objective, opts)
       agent_provider = providers.normalize_provider(role.agent_provider)
         or providers.normalize_provider(mission.agent_provider)
         or (type(runtime.agent_provider) == "function" and runtime:agent_provider() or "codex"),
-      permission_profile = "auto",
+      permission_profile = providers.normalize_profile(role.permission_profile)
+        or providers.normalize_profile(mission.permission_profile)
+        or providers.normalize_profile(opts.permission_profile)
+        or "auto",
       worktree_path = spec.worktree_path,
       mission_id = mission.mission_id,
       mission_name = mission.name,

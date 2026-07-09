@@ -122,6 +122,17 @@ do
 end
 
 do
+  local preview_text = table.concat(mission_mod.preview_lines({
+    name = "Alpha",
+    objective = "Build it",
+    agent_provider = "grok",
+    permission_profile = "danger",
+  }), "\n")
+  assert_contains(preview_text, "Agent: grok")
+  assert_contains(preview_text, "Profile: full")
+end
+
+do
   local preview = mission_mod.preview_lines({
     name = "Alpha",
     objective = string.rep("long objective ", 8) .. "\nsecond line\nthird line",

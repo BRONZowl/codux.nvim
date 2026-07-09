@@ -23,7 +23,7 @@ function M.create(codux, deps)
       notify(error_message, vim.log.levels.ERROR)
       return
     end
-    codux._v5.open_custom_workspace_instruction_prompt(name, { agent_provider = agent_provider })
+    codux._v5.open_workspace_provider_profile_menu(name, { agent_provider = agent_provider })
   end
 
   vim.api.nvim_create_user_command("Codux", function()
@@ -132,7 +132,7 @@ function M.create(codux, deps)
   vim.api.nvim_create_user_command("CoduxMissionCreateGrok", function(opts)
     if type(opts.args) == "string" and opts.args ~= "" then
       if mission_controller then
-        mission_controller:open_objective_editor(opts.args, nil, { agent_provider = "grok" })
+        mission_controller:open_mission_provider_menu(opts.args, { agent_provider = "grok" })
       end
       return
     end

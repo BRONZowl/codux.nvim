@@ -98,6 +98,7 @@ function M.open(controller, mission)
     return defer_preview_action(function()
       return controller:open_objective_editor(mission.name, mission.objective, {
         agent_provider = mission.agent_provider,
+        permission_profile = mission.permission_profile,
       })
     end)
   end

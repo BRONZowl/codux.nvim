@@ -42,6 +42,14 @@ function M.install(api, deps)
     return providers.keyed_permission_profile_choices()
   end
 
+  function api.keyed_agent_provider_choices()
+    return providers.provider_choices()
+  end
+
+  function api.keyed_permission_profile_choices_for_provider(provider)
+    return providers.keyed_permission_profile_choices_for_provider(provider)
+  end
+
   function api.should_select_permission_profile(job_id)
     return job_id == nil
   end
@@ -108,6 +116,74 @@ function M.install(api, deps)
     }, function(choice)
       return api.open_permission_profile_choice(choice, opts)
     end)
+  end
+
+  function api.select_keyed_provider_profile(opts)
+    opts = type(opts) == "table" and opts or {}
+    local menu = opts.menu or ui.key_choice_menu
+    if type(menu) ~= "function" then
+      return false
+    end
+
+    local function select_profile(agent_provider)
+      agent_provider = providers.normalize_provider(agent_provider) or providers.default_provider(opts.config)
+      local provider_label = providers.provider_label(agent_provider)
+      return menu({
+        title = opts.profile_title or (" Codux " .. provider_label .. " profile "),
+        choices = api.keyed_permission_profile_choices_for_provider(agent_provider),
+        filetype = opts.profile_filetype or "codux-agent-profile",
+        zindex = opts.profile_zindex,
+        cancel_desc = opts.profile_cancel_desc or "Cancel Codux Profile",
+        create_error = opts.profile_create_error or "Failed to create Codux profile menu",
+        open_error = opts.profile_open_error or "Failed to open Codux profile menu",
+      }, function(choice)
+        if type(choice) ~= "table" then
+          return false
+        end
+        choice.agent_provider = agent_provider
+        if type(opts.on_select) == "function" then
+          return opts.on_select(choice)
+        end
+        return choice
+      end)
+    end
+
+    local forced_provider = providers.normalize_provider(opts.agent_provider)
+    if forced_provider then
+      return select_profile(forced_provider)
+    end
+
+    return menu({
+      title = opts.provider_title or " Codux agent provider ",
+      choices = api.keyed_agent_provider_choices(),
+      filetype = opts.provider_filetype or "codux-agent-provider",
+      zindex = opts.provider_zindex,
+      cancel_desc = opts.provider_cancel_desc or "Cancel Codux Provider",
+      create_error = opts.provider_create_error or "Failed to create Codux provider menu",
+      open_error = opts.provider_open_error or "Failed to open Codux provider menu",
+    }, function(choice)
+      if type(choice) ~= "table" then
+        return false
+      end
+      return select_profile(choice.agent_provider)
+    end)
+  end
+
+  function api.select_keyed_provider_profile_open(opts)
+    opts = type(opts) == "table" and opts or {}
+    local menu = opts.menu or ui.key_choice_menu
+    if type(menu) ~= "function" then
+      if type(opts.open_default) == "function" then
+        return opts.open_default(opts.initial_prompt, opts.open_opts)
+      end
+      return false
+    end
+
+    opts.menu = menu
+    opts.on_select = function(choice)
+      return api.open_permission_profile_choice(choice, opts)
+    end
+    return api.select_keyed_provider_profile(opts)
   end
 
   api.filter_completion = filter_completion

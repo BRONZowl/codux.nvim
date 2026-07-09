@@ -1,6 +1,7 @@
 local h = require("tests.helpers")
 local assert_equal = h.assert_equal
 local assert_false = h.assert_false
+local assert_nil = h.assert_nil
 
 if type(vim.api) == "table" then
   local codux = require("codux")
@@ -191,6 +192,113 @@ if type(vim.api) == "table" then
     end,
   }), "selected")
   assert_equal(selected_open_opts.initial_mode, "plan")
+
+  local provider_profile_open
+  local provider_profile_menus = {}
+  assert_equal(codux._v5.select_keyed_provider_profile_open({
+    initial_prompt = "hello",
+    open_opts = { initial_mode = "plan" },
+    menu = function(opts, callback)
+      table.insert(provider_profile_menus, opts)
+      if opts.filetype == "codux-agent-provider" then
+        assert_equal(opts.title, " Codux agent provider ")
+        assert_equal(opts.choices[1].agent_provider, "grok")
+        return callback(opts.choices[1])
+      end
+      assert_equal(opts.title, " Codux Grok profile ")
+      assert_equal(opts.filetype, "codux-agent-profile")
+      assert_equal(opts.choices[2].profile, "auto")
+      return callback(opts.choices[2])
+    end,
+    open_provider = function(provider, profile, prompt, open_opts)
+      provider_profile_open = { provider = provider, profile = profile, prompt = prompt, open_opts = open_opts }
+      return provider .. ":" .. profile
+    end,
+  }), "grok:auto")
+  assert_equal(#provider_profile_menus, 2)
+  assert_equal(provider_profile_open.prompt, "hello")
+  assert_equal(provider_profile_open.open_opts.initial_mode, "plan")
+
+  assert_equal(codux._v5.select_keyed_provider_profile_open({
+    menu = function(opts, callback)
+      if opts.filetype == "codux-agent-provider" then
+        return callback(opts.choices[2])
+      end
+      return callback(opts.choices[3])
+    end,
+    open_provider = function(provider, profile)
+      return provider .. ":" .. profile
+    end,
+  }), "codex:danger")
+
+  local canceled_profile_opened = false
+  assert_equal(codux._v5.select_keyed_provider_profile_open({
+    menu = function(opts, callback)
+      if opts.filetype == "codux-agent-provider" then
+        return callback(nil)
+      end
+      canceled_profile_opened = true
+      return callback(opts.choices[1])
+    end,
+    open_provider = function()
+      return "opened"
+    end,
+  }), false)
+  assert_false(canceled_profile_opened)
+
+  local canceled_open
+  assert_equal(codux._v5.select_keyed_provider_profile_open({
+    menu = function(opts, callback)
+      if opts.filetype == "codux-agent-provider" then
+        return callback(opts.choices[1])
+      end
+      return callback(nil)
+    end,
+    open_provider = function()
+      canceled_open = true
+      return "opened"
+    end,
+  }), false)
+  assert_nil(canceled_open)
+
+  local forced_menus = {}
+  assert_equal(codux._v5.select_keyed_provider_profile_open({
+    agent_provider = "grok",
+    menu = function(opts, callback)
+      table.insert(forced_menus, opts)
+      return callback(opts.choices[3])
+    end,
+    open_provider = function(provider, profile)
+      return provider .. ":" .. profile
+    end,
+  }), "grok:danger")
+  assert_equal(#forced_menus, 1)
+  assert_equal(forced_menus[1].filetype, "codux-agent-profile")
+
+  local selected_only
+  assert_equal(codux._v5.select_keyed_provider_profile({
+    menu = function(opts, callback)
+      if opts.filetype == "codux-agent-provider" then
+        return callback(opts.choices[1])
+      end
+      return callback(opts.choices[2])
+    end,
+    open_provider = function()
+      error("selection-only picker must not open an agent")
+    end,
+    open_default = function()
+      error("selection-only picker must not open default")
+    end,
+    on_select = function(choice)
+      selected_only = {
+        agent_provider = choice.agent_provider,
+        profile = choice.profile,
+      }
+      return "selected-only"
+    end,
+  }), "selected-only")
+  assert_equal(selected_only.agent_provider, "grok")
+  assert_equal(selected_only.profile, "auto")
 
   local opened_opts
   local old_open_with_keyed_profile_menu = codux.open_with_keyed_profile_menu

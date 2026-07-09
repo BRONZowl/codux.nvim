@@ -109,11 +109,7 @@ function M:open_prompt(opts)
     if name == "" then
       return
     end
-    if type(opts.agent_provider) == "string" and opts.agent_provider ~= "" then
-      self:open_objective_editor(name, nil, { agent_provider = opts.agent_provider })
-      return
-    end
-    self:open_mission_provider_menu(name)
+    self:open_mission_provider_menu(name, opts)
   end, {
     notify = self.notify,
     set_buffer_keymap = self.set_buffer_keymap,
@@ -121,7 +117,35 @@ function M:open_prompt(opts)
   })
 end
 
-function M:open_mission_provider_menu(name)
+function M:open_mission_provider_menu(name, opts)
+  opts = type(opts) == "table" and opts or {}
+  if type(self.select_provider_profile) == "function" then
+    return self.select_provider_profile({
+      agent_provider = opts.agent_provider,
+      provider_title = " Codux mission agent ",
+      provider_filetype = "codux-mission-provider",
+      provider_zindex = 81,
+      provider_cancel_desc = "Cancel Codux Mission Provider",
+      provider_create_error = "Failed to create Codux mission provider menu",
+      provider_open_error = "Failed to open Codux mission provider menu",
+      profile_title = " Codux mission profile ",
+      profile_filetype = "codux-mission-profile",
+      profile_zindex = 82,
+      profile_cancel_desc = "Cancel Codux Mission Profile",
+      profile_create_error = "Failed to create Codux mission profile menu",
+      profile_open_error = "Failed to open Codux mission profile menu",
+      on_select = function(choice)
+        if type(choice) ~= "table" then
+          return false
+        end
+        return self:open_objective_editor(name, nil, {
+          agent_provider = choice.agent_provider,
+          permission_profile = choice.profile,
+        })
+      end,
+    })
+  end
+
   return ui.key_choice_menu({
     title = " Codux mission agent ",
     filetype = "codux-mission-provider",

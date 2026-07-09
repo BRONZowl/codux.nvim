@@ -28,8 +28,8 @@ local codux = {
       end
       return args[1], false, nil
     end,
-    open_custom_workspace_instruction_prompt = function(name)
-      table.insert(calls, "custom:" .. tostring(name))
+    open_workspace_provider_profile_menu = function(name)
+      table.insert(calls, "workspace_profile:" .. tostring(name))
     end,
   },
 }
@@ -76,8 +76,9 @@ commands.create(codux, {
     return "/repo"
   end,
   mission_controller = {
-    open_mission_provider_menu = function(_, name)
-      table.insert(calls, "mission_provider:" .. tostring(name))
+    open_mission_provider_menu = function(_, name, opts)
+      opts = type(opts) == "table" and opts or {}
+      table.insert(calls, "mission_provider:" .. tostring(name) .. ":" .. tostring(opts.agent_provider or ""))
     end,
     open_objective_editor = function(_, name)
       table.insert(calls, "mission_editor:" .. tostring(name))
@@ -91,7 +92,7 @@ assert_equal(created.CoduxMissionEdit.opts.nargs, 1)
 assert_equal(created.CoduxMissionFocus.opts.nargs, 1)
 
 created.CoduxWorkspace.callback({ fargs = { "alpha" } })
-assert_equal(calls[#calls], "custom:alpha")
+assert_equal(calls[#calls], "workspace_profile:alpha")
 
 created.CoduxWorkspace.callback({ fargs = { "bad" } })
 assert_equal(notifications[#notifications], "bad workspace")
@@ -103,7 +104,10 @@ created.CoduxWorkspaceRename.callback({ fargs = { "old", "new" } })
 assert_equal(calls[#calls], "rename_workspace:old")
 
 created.CoduxMissionCreate.callback({ args = "Mission" })
-assert_equal(calls[#calls], "mission_provider:Mission")
+assert_equal(calls[#calls], "mission_provider:Mission:")
+
+created.CoduxMissionCreateGrok.callback({ args = "Mission" })
+assert_equal(calls[#calls], "mission_provider:Mission:grok")
 
 vim.api.nvim_create_user_command = original_create_user_command
 if original_api == nil then

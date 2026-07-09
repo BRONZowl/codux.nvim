@@ -133,24 +133,32 @@ do
 end
 
 do
-  local old_key_choice_menu = ui_mod.key_choice_menu
   local opened
-  ui_mod.key_choice_menu = function(opts, callback)
-    assert_equal(opts.title, " Codux mission agent ")
-    assert_equal(opts.filetype, "codux-mission-provider")
-    return callback(opts.choices[2])
-  end
-
-  local controller = mission_control_mod.new({})
+  local selected_opts
+  local controller = mission_control_mod.new({
+    select_provider_profile = function(opts)
+      selected_opts = opts
+      assert_equal(opts.open_provider, nil)
+      assert_equal(opts.open_default, nil)
+      assert_equal(opts.open_auto, nil)
+      assert_equal(opts.open_danger, nil)
+      return opts.on_select({
+        agent_provider = "grok",
+        profile = "auto",
+      })
+    end,
+  })
   function controller:open_objective_editor(name, _, opts)
-    opened = { name = name, agent_provider = opts.agent_provider }
+    opened = { name = name, agent_provider = opts.agent_provider, permission_profile = opts.permission_profile }
     return true
   end
 
   assert_true(controller:open_mission_provider_menu("Alpha"))
+  assert_equal(selected_opts.provider_filetype, "codux-mission-provider")
+  assert_equal(selected_opts.profile_filetype, "codux-mission-profile")
   assert_equal(opened.name, "Alpha")
   assert_equal(opened.agent_provider, "grok")
-  ui_mod.key_choice_menu = old_key_choice_menu
+  assert_equal(opened.permission_profile, "auto")
 end
 
 do
@@ -164,6 +172,7 @@ do
         mission_id = "mission:alpha",
         mission_name = "Alpha",
         mission_objective = "Build it",
+        permission_profile = "danger",
       },
     },
     create_workspace_prompt = function(opts)
@@ -180,6 +189,7 @@ do
   assert_equal(context.mission_id, "mission:alpha")
   assert_equal(context.mission_name, "Alpha")
   assert_equal(context.mission_objective, "Build it")
+  assert_equal(context.permission_profile, "danger")
 end
 
 do

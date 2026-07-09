@@ -136,6 +136,7 @@ function M.mission_context_for_workspace(_, entry)
     mission_objective = entry.mission_objective,
     mission_focus_packet = entry.mission_focus_packet,
     agent_provider = entry.agent_provider,
+    permission_profile = entry.permission_profile,
   }
 end
 

@@ -23,6 +23,7 @@ local function mission_context(opts)
     mission_objective = context.mission_objective,
     mission_focus_packet = context.mission_focus_packet,
     agent_provider = context.agent_provider,
+    permission_profile = context.permission_profile,
   }
 end
 
@@ -47,6 +48,7 @@ function M.new(opts)
     has_tmux_session = type(opts.has_tmux_session) == "function" and opts.has_tmux_session or function()
       return false
     end,
+    select_provider_profile = type(opts.select_provider_profile) == "function" and opts.select_provider_profile or nil,
     create_workspace = type(opts.create_workspace) == "function" and opts.create_workspace or noop,
     namespace = opts.namespace or vim.api.nvim_create_namespace("codux.workspace_create"),
   }
@@ -66,6 +68,9 @@ function M:preview_lines(request)
   end
   if type(request.agent_provider) == "string" and request.agent_provider ~= "" then
     table.insert(lines, "Agent: " .. tostring(request.agent_provider))
+  end
+  if type(request.permission_profile) == "string" and request.permission_profile ~= "" then
+    table.insert(lines, "Profile: " .. tostring(request.permission_profile == "danger" and "full" or request.permission_profile))
   end
   table.insert(lines, "")
   table.insert(lines, "Instruction:")
@@ -379,6 +384,7 @@ function M:open_create_preview(request)
       custom_instruction = custom_instruction,
       resolved_instruction = resolved_instruction,
       agent_provider = request.agent_provider,
+      permission_profile = request.permission_profile,
       mission_id = request.mission_id,
       mission_name = request.mission_name,
       mission_role = mission_role,
@@ -406,6 +412,7 @@ function M:open_create_preview(request)
 end
 
 function M:open_custom_instruction_prompt(name, opts)
+  opts = type(opts) == "table" and opts or {}
   if not self.has_tmux_session() then
     self.notify("no tmux session running", vim.log.levels.ERROR)
     return false
@@ -421,14 +428,50 @@ function M:open_custom_instruction_prompt(name, opts)
     request.mission_objective = context.mission_objective
     request.mission_focus_packet = context.mission_focus_packet
     request.agent_provider = context.agent_provider
+    request.permission_profile = context.permission_profile
   end
   if type(opts.agent_provider) == "string" and opts.agent_provider ~= "" then
     request.agent_provider = opts.agent_provider
+  end
+  if type(opts.permission_profile) == "string" and opts.permission_profile ~= "" then
+    request.permission_profile = opts.permission_profile
   end
 
   return self:open_instruction_editor(request, {
     on_save = function(request)
       self:open_create_preview(request)
+    end,
+  })
+end
+
+function M:open_provider_profile_menu(name, opts)
+  opts = type(opts) == "table" and opts or {}
+  if type(self.select_provider_profile) ~= "function" then
+    return self:open_custom_instruction_prompt(name, opts)
+  end
+
+  return self.select_provider_profile({
+    agent_provider = opts.agent_provider,
+    provider_title = " Codux workspace agent ",
+    provider_filetype = "codux-workspace-provider",
+    provider_zindex = 81,
+    provider_cancel_desc = "Cancel Codux Workspace Provider",
+    provider_create_error = "Failed to create Codux workspace provider menu",
+    provider_open_error = "Failed to open Codux workspace provider menu",
+    profile_title = " Codux workspace profile ",
+    profile_filetype = "codux-workspace-profile",
+    profile_zindex = 82,
+    profile_cancel_desc = "Cancel Codux Workspace Profile",
+    profile_create_error = "Failed to create Codux workspace profile menu",
+    profile_open_error = "Failed to open Codux workspace profile menu",
+    on_select = function(choice)
+      if type(choice) ~= "table" then
+        return false
+      end
+      local next_opts = vim.deepcopy(opts)
+      next_opts.agent_provider = choice.agent_provider
+      next_opts.permission_profile = choice.profile
+      return self:open_custom_instruction_prompt(name, next_opts)
     end,
   })
 end
@@ -446,7 +489,7 @@ function M:open_prompt(opts)
       return
     end
 
-    self:open_custom_instruction_prompt(name, context)
+    self:open_provider_profile_menu(name, context)
   end)
   return true
 end

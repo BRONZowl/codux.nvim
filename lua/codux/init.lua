@@ -604,7 +604,7 @@ function M.open_with_keyed_profile_menu(opts)
     return terminal:open(opts)
   end
 
-  return M._v5.select_keyed_permission_profile_open({
+  return M._v5.select_keyed_provider_profile_open({
     initial_prompt = opts.initial_prompt,
     open_opts = opts.open_opts,
     open_default = M.open_default,
@@ -774,6 +774,9 @@ workspace_create_controller = workspace_create_mod.new({
   single_line_prompt = M._v5.single_line_prompt,
   has_tmux_session = function()
     return current_tmux_session() ~= nil
+  end,
+  select_provider_profile = function(opts)
+    return M._v5.select_keyed_provider_profile(opts)
   end,
   create_workspace = function(name, opts)
     return M.create_workspace(name, opts)

@@ -23,10 +23,10 @@ assert_equal(providers.command(config, "grok", "danger"), "grok --sandbox off --
 
 do
   local provider_choices = providers.provider_choices()
-  assert_equal(provider_choices[1].key, "c")
-  assert_equal(provider_choices[1].agent_provider, "codex")
-  assert_equal(provider_choices[2].key, "g")
-  assert_equal(provider_choices[2].agent_provider, "grok")
+  assert_equal(provider_choices[1].key, "g")
+  assert_equal(provider_choices[1].agent_provider, "grok")
+  assert_equal(provider_choices[2].key, "c")
+  assert_equal(provider_choices[2].agent_provider, "codex")
 
   local profile_choices = providers.keyed_permission_profile_choices("profile_label")
   assert_equal(profile_choices[1].label, "Codex Default")
@@ -34,6 +34,15 @@ do
   assert_equal(profile_choices[5].key, "G")
   assert_equal(profile_choices[5].agent_provider, "grok")
   assert_equal(profile_choices[5].profile, "auto")
+
+  local grok_profiles = providers.keyed_permission_profile_choices_for_provider("grok")
+  assert_equal(grok_profiles[1].key, "d")
+  assert_equal(grok_profiles[1].label, "default")
+  assert_equal(grok_profiles[1].agent_provider, "grok")
+  assert_equal(grok_profiles[2].profile, "auto")
+  assert_equal(grok_profiles[3].key, "f")
+  assert_equal(grok_profiles[3].label, "full")
+  assert_equal(grok_profiles[3].profile, "danger")
 end
 
 assert_equal(

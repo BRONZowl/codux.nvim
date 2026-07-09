@@ -385,6 +385,12 @@ function M.preview_lines(mission, opts)
   if type(mission.agent_provider) == "string" and mission.agent_provider ~= "" then
     table.insert(result, "Agent: " .. tostring(mission.agent_provider))
   end
+  if type(mission.permission_profile) == "string" and mission.permission_profile ~= "" then
+    table.insert(
+      result,
+      "Profile: " .. tostring(mission.permission_profile == "danger" and "full" or mission.permission_profile)
+    )
+  end
   table.insert(result, "")
   table.insert(result, "Objective:")
   for _, line in ipairs(lines(mission.objective)) do

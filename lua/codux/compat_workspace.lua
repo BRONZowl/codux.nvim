@@ -247,8 +247,12 @@ function M.install_workspace_create(api, deps)
     return controller:open_create_preview(request)
   end
 
-  function api.open_custom_workspace_instruction_prompt(name)
-    return controller:open_custom_instruction_prompt(name)
+  function api.open_workspace_provider_profile_menu(name, opts)
+    return controller:open_provider_profile_menu(name, opts)
+  end
+
+  function api.open_custom_workspace_instruction_prompt(name, opts)
+    return controller:open_custom_instruction_prompt(name, opts)
   end
 
   return api

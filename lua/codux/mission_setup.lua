@@ -26,6 +26,9 @@ function M.new(deps)
     create_workspace_prompt = function(opts)
       return codux.open_workspace_prompt(opts)
     end,
+    select_provider_profile = function(opts)
+      return codux._v5.select_keyed_provider_profile(opts)
+    end,
     update_mission_objective = function(name, objective, root)
       return codux.update_mission_objective(name, objective, { project_root = root })
     end,

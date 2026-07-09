@@ -72,8 +72,32 @@ local PROFILE_CHOICES = {
 }
 
 local PROVIDER_CHOICES = {
-  { key = "c", agent_provider = "codex", label = "Codex", desc = "Use Codex" },
   { key = "g", agent_provider = "grok", label = "Grok", desc = "Use Grok" },
+  { key = "c", agent_provider = "codex", label = "Codex", desc = "Use Codex" },
+}
+
+local PROVIDER_PROFILE_CHOICES = {
+  {
+    key = "d",
+    profile = "default",
+    keyed_label = "default",
+    profile_label = "Default",
+    desc_label = "Default",
+  },
+  {
+    key = "a",
+    profile = "auto",
+    keyed_label = "auto",
+    profile_label = "Auto",
+    desc_label = "Auto",
+  },
+  {
+    key = "f",
+    profile = "danger",
+    keyed_label = "full",
+    profile_label = "Full",
+    desc_label = "Full Access",
+  },
 }
 
 local function copy_choice(choice, label_key)
@@ -165,6 +189,22 @@ function M.keyed_permission_profile_choices(label_key)
   local choices = {}
   for _, choice in ipairs(PROFILE_CHOICES) do
     table.insert(choices, copy_choice(choice, label_key or "keyed_label"))
+  end
+  return choices
+end
+
+function M.keyed_permission_profile_choices_for_provider(provider, label_key)
+  provider = M.normalize_provider(provider) or "codex"
+  local provider_label = M.provider_label(provider)
+  local choices = {}
+  for _, choice in ipairs(PROVIDER_PROFILE_CHOICES) do
+    table.insert(choices, {
+      key = choice.key,
+      label = choice[label_key or "keyed_label"] or choice.keyed_label,
+      agent_provider = provider,
+      profile = choice.profile,
+      desc = "Open " .. provider_label .. " " .. choice.desc_label,
+    })
   end
   return choices
 end

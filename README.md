@@ -69,14 +69,10 @@ Restart Neovim, open a project, then verify Codux:
 stops the agent process.
 
 The default open mapping is `<leader>zc`. When no agent is running, it opens a
-small provider/profile picker:
+two-step provider/profile picker:
 
-- `d` starts the default Codex command.
-- `a` starts the workspace-auto command.
-- `f` starts the danger/full-access command.
-- `g` starts the default Grok command.
-- `G` starts the Grok auto command.
-- `!` starts the Grok full-access command.
+- first choose `g` for Grok or `c` for Codex
+- then choose `d` for default, `a` for auto, or `f` for full access
 
 Use full access only in repositories you trust. `:CoduxOpenDanger` starts Codex
 with no approval prompts and no sandbox.
@@ -98,12 +94,12 @@ Codux can send editor context to the active agent session:
 | Toggle agent popup | none | `:CoduxToggle` |
 | Hide the popup | `<C-q>` in popup | `:CoduxClose` |
 | Stop agent | none | `:CoduxExit` |
-| Open Codex with auto profile | picker key `a` | `:CoduxOpenAuto` |
-| Open Codex with full access | picker key `f` | `:CoduxOpenDanger` |
+| Open Codex with auto profile | picker keys `c`, `a` | `:CoduxOpenAuto` |
+| Open Codex with full access | picker keys `c`, `f` | `:CoduxOpenDanger` |
 | Open a specific provider | none | `:CoduxOpenProvider <codex\|grok> <default\|auto\|danger>` |
-| Open Grok | picker key `g` | `:CoduxOpenGrok` |
-| Open Grok with auto profile | picker key `G` | `:CoduxOpenGrokAuto` |
-| Open Grok with full access | none | `:CoduxOpenGrokDanger` |
+| Open Grok | picker keys `g`, `d` | `:CoduxOpenGrok` |
+| Open Grok with auto profile | picker keys `g`, `a` | `:CoduxOpenGrokAuto` |
+| Open Grok with full access | picker keys `g`, `f` | `:CoduxOpenGrokDanger` |
 | Send file, folder, or explorer node | `<leader>zf` | `:CoduxReview` |
 | Send visual selection | `<leader>zs` | `:CoduxReviewSelection` |
 | Send diagnostics and health output | `<leader>zd` | `:CoduxDiagnostics` |
@@ -196,6 +192,8 @@ Run `:CoduxWorkspaceCreate` inside tmux to create a guided workspace. Add
 `--grok` or `--codex` to force a provider for that workspace. Codux:
 
 - prompts for a workspace name
+- prompts for Grok or Codex, unless the provider was forced
+- prompts for default, auto, or full profile
 - opens a Vim-like instruction editor
 - previews the instruction before launch
 - requires the current checkout to be clean
@@ -234,7 +232,8 @@ Outside tmux, workspace creation stops with `no tmux session running`.
 
 Mission Control launches one or more Codux agent workspaces around a shared
 objective. Run `:CoduxMissionCreate`, enter the mission name, choose Codex or
-Grok, enter the objective, review the preview, and launch.
+Grok, choose default, auto, or full profile, enter the objective, review the
+preview, and launch.
 
 New missions start with one default agent:
 
