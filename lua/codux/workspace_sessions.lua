@@ -107,23 +107,6 @@ function M.schedule_capture(runtime, workspace, min_mtime)
 
   local agent_provider = providers.normalize_provider(workspace.agent_provider) or "codex"
   if agent_provider == "grok" then
-    workspace.agent_session_id = type(workspace.agent_session_id) == "string" and workspace.agent_session_id ~= ""
-        and workspace.agent_session_id
-      or providers.generate_session_id()
-    workspace.agent_session_captured_at = runtime:timestamp()
-    local root = workspace.project_root
-    local safe_name = workspace.safe_name
-    local state_data = runtime:read_state()
-    local project = type(state_data) == "table" and type(state_data.projects) == "table" and state_data.projects[root] or nil
-    local record = type(project) == "table" and type(project.workspaces) == "table" and project.workspaces[safe_name] or nil
-    if type(record) == "table" then
-      record.agent_provider = "grok"
-      record.agent_session_id = workspace.agent_session_id
-      record.agent_session_path = workspace.agent_session_path
-      record.agent_session_captured_at = workspace.agent_session_captured_at
-      project.updated_at = workspace.agent_session_captured_at
-      runtime:write_state(state_data)
-    end
     return
   end
 

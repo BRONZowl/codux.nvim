@@ -32,6 +32,36 @@ do
 end
 
 do
+  local lua = workspace_launch.bootstrap_lua({
+    name = "grok-review",
+    safe_name = "grok-review",
+    project_root = "/repo",
+    agent_provider = "grok",
+    codex_session_id = "codex-session",
+    codex_session_path = "/codex/session.jsonl",
+    codex_session_captured_at = "2026-07-09T12:00:00Z",
+  })
+
+  assert_contains(lua, 'agent_provider="grok"')
+  assert_contains(lua, 'agent_session_id=""')
+  assert_contains(lua, 'agent_session_path=""')
+  assert_contains(lua, 'agent_session_captured_at=""')
+  assert_contains(lua, "resume_agent_session=false")
+end
+
+do
+  local lua = workspace_launch.bootstrap_lua({
+    name = "grok-review",
+    safe_name = "grok-review",
+    project_root = "/repo",
+    agent_provider = "grok",
+    resume_agent_session = true,
+  })
+
+  assert_contains(lua, "resume_agent_session=true")
+end
+
+do
   local runtime = {
     command_util = {
       shell = function(value)

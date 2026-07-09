@@ -120,26 +120,40 @@ end
 
 function M.command_with_resume(command, provider, session_id)
   session_id = type(session_id) == "string" and trim(session_id) or ""
-  if session_id == "" then
-    return command
-  end
   provider = M.normalize_provider(provider) or "codex"
   if provider == "grok" then
+    if session_id == "" then
+      return command_util.with_args(command, { "--resume" })
+    end
     return command_util.with_args(command, { "--resume", session_id })
+  end
+  if session_id == "" then
+    return command
   end
   return command_util.with_args(command, { "resume", session_id })
 end
 
-function M.command_with_session_id(command, provider, session_id)
-  session_id = type(session_id) == "string" and trim(session_id) or ""
-  if session_id == "" then
-    return command
+function M.workspace_command(config, workspace, initial_prompt, opts)
+  opts = type(opts) == "table" and opts or {}
+  workspace = type(workspace) == "table" and workspace or nil
+  local profile = workspace and workspace.permission_profile or opts.permission_profile or "default"
+  local agent_provider = M.normalize_provider(workspace and workspace.agent_provider)
+    or M.normalize_provider(opts.agent_provider)
+    or M.default_provider(config)
+  profile = M.normalize_profile(profile) or "default"
+
+  local command = M.command(config, agent_provider, profile)
+  command = M.command_with_instructions(command, agent_provider, workspace and workspace.resolved_instruction or nil)
+
+  local resume_session_id = workspace and (workspace.agent_session_id or workspace.codex_session_id) or nil
+  local has_initial_prompt = type(initial_prompt) == "string" and initial_prompt ~= ""
+  if agent_provider == "grok" and workspace and workspace.resume_agent_session == true then
+    command = M.command_with_resume(command, agent_provider, workspace.agent_session_id)
+  elseif agent_provider ~= "grok" and resume_session_id and not has_initial_prompt then
+    command = M.command_with_resume(command, agent_provider, resume_session_id)
   end
-  provider = M.normalize_provider(provider) or "codex"
-  if provider == "grok" then
-    return command_util.with_args(command, { "--session-id", session_id })
-  end
-  return command
+
+  return command, agent_provider, profile
 end
 
 function M.prompt_must_be_pasted(provider)
@@ -148,14 +162,6 @@ end
 
 function M.token_usage_supported(provider)
   return (M.normalize_provider(provider) or "codex") == "codex"
-end
-
-function M.generate_session_id()
-  local template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
-  return (template:gsub("[xy]", function(char)
-    local value = char == "x" and math.random(0, 15) or math.random(8, 11)
-    return string.format("%x", value)
-  end))
 end
 
 return M

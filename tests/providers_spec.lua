@@ -26,7 +26,50 @@ assert_equal(
   "grok '--rules' 'Use repo rules.'"
 )
 assert_equal(providers.command_with_prompt("grok", "grok", "hello"), "grok")
-assert_equal(providers.command_with_session_id("grok", "grok", "session-1"), "grok '--session-id' 'session-1'")
+assert_equal(providers.command_with_resume("grok", "grok"), "grok '--resume'")
 assert_equal(providers.command_with_resume("grok", "grok", "session-1"), "grok '--resume' 'session-1'")
+
+assert_equal(
+  providers.workspace_command(config, {
+    agent_provider = "grok",
+    permission_profile = "auto",
+    resolved_instruction = "Mission rules",
+  }, "start now"),
+  "grok --sandbox workspace --always-approve '--rules' 'Mission rules'"
+)
+assert_equal(
+  providers.workspace_command(config, {
+    agent_provider = "grok",
+    permission_profile = "auto",
+    resolved_instruction = "Mission rules",
+    agent_session_id = "generated-id",
+  }, "start now"),
+  "grok --sandbox workspace --always-approve '--rules' 'Mission rules'"
+)
+assert_equal(
+  providers.workspace_command(config, {
+    agent_provider = "grok",
+    permission_profile = "default",
+    resume_agent_session = true,
+  }),
+  "grok --sandbox workspace '--resume'"
+)
+assert_equal(
+  providers.workspace_command(config, {
+    agent_provider = "grok",
+    permission_profile = "default",
+    resume_agent_session = true,
+    agent_session_id = "session-1",
+  }),
+  "grok --sandbox workspace '--resume' 'session-1'"
+)
+assert_equal(
+  providers.workspace_command(config, {
+    agent_provider = "codex",
+    permission_profile = "default",
+    codex_session_id = "codex-session",
+  }),
+  "codex-default 'resume' 'codex-session'"
+)
 
 print("providers_spec.lua: ok")

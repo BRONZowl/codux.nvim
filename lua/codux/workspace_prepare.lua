@@ -212,9 +212,6 @@ function M.prepare(runtime, name, opts)
   end
   workspace.permission_profile = permission_profile
   workspace.agent_provider = agent_provider
-  if agent_provider == "grok" and (type(workspace.agent_session_id) ~= "string" or workspace.agent_session_id == "") then
-    workspace.agent_session_id = providers.generate_session_id()
-  end
   workspace.mission_id = opts.mission_id or workspace.mission_id
   workspace.mission_name = opts.mission_name or workspace.mission_name
   workspace.mission_role = opts.mission_role or workspace.mission_role
@@ -227,6 +224,7 @@ function M.prepare(runtime, name, opts)
   workspace.initial_mode = initial_mode or workspace.initial_mode
   local saved_workspace = type(existing) == "table" or (opts.require_existing and file_instruction ~= nil)
   workspace.open_visible = not saved_workspace
+  workspace.resume_agent_session = saved_workspace
 
   if not resolved_instruction and file_instruction then
     resolved_instruction = file_instruction

@@ -198,4 +198,56 @@ do
   assert_equal(record.last_target_at, "2026-07-05T11:00:00Z")
 end
 
+do
+  local store = workspace_store_mod.new({})
+  local normalized = store:normalize_record({
+    name = "grok-review",
+    safe_name = "grok-review",
+    project_root = "/repo",
+    agent_provider = "grok",
+    codex_session_id = "codex-session",
+    codex_session_path = "/codex/session.jsonl",
+    codex_session_captured_at = "2026-07-09T12:00:00Z",
+  }, "grok-review", "/repo")
+
+  assert_equal(normalized.agent_provider, "grok")
+  assert_nil(normalized.agent_session_id)
+  assert_nil(normalized.agent_session_path)
+  assert_nil(normalized.agent_session_captured_at)
+
+  local workspace = store.workspace_from_state({
+    name = "grok-review",
+    safe_name = "grok-review",
+    project_root = "/repo",
+    agent_provider = "grok",
+    codex_session_id = "codex-session",
+    codex_session_path = "/codex/session.jsonl",
+    codex_session_captured_at = "2026-07-09T12:00:00Z",
+  }, {
+    agent_session_id = "fallback-session",
+    agent_session_path = "/fallback/session.jsonl",
+    agent_session_captured_at = "2026-07-09T13:00:00Z",
+  })
+
+  assert_equal(workspace.agent_session_id, "fallback-session")
+  assert_equal(workspace.agent_session_path, "/fallback/session.jsonl")
+  assert_equal(workspace.agent_session_captured_at, "2026-07-09T13:00:00Z")
+
+  local state_record = store:state_record({
+    name = "grok-review",
+    safe_name = "grok-review",
+    project_root = "/repo",
+    window_name = "grok-review",
+    status = "idle",
+    agent_provider = "grok",
+    codex_session_id = "codex-session",
+    codex_session_path = "/codex/session.jsonl",
+    codex_session_captured_at = "2026-07-09T12:00:00Z",
+  })
+
+  assert_nil(state_record.agent_session_id)
+  assert_nil(state_record.agent_session_path)
+  assert_nil(state_record.agent_session_captured_at)
+end
+
 print("workspace_store_spec.lua: ok")

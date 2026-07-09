@@ -205,6 +205,11 @@ Run `:CoduxWorkspaceCreate` inside tmux to create a guided workspace. Add
 - opens a tmux window named for the workspace
 - starts the workspace agent session in plan mode
 
+For Grok workspaces, Codux keeps first-launch CLI arguments minimal: it starts
+the configured Grok profile command, adds `--rules` only when workspace or
+mission instructions exist, and pastes any initial prompt after the Grok TUI is
+ready instead of passing it as an argv argument.
+
 Workspace state is stored per project in
 `stdpath("data")/codux/workspaces.json`. Instruction files are project-local; if
 a non-empty `.agents/codux/<workspace>.md` exists, Codux uses it over the saved

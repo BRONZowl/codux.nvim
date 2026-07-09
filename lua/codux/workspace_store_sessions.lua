@@ -120,15 +120,16 @@ function M.resolve_resume(store, workspace)
   end
 
   if workspace.agent_provider == "grok" then
-    if type(workspace.agent_session_id) ~= "string" or workspace.agent_session_id == "" then
-      workspace.agent_session_id = workspace_store_state.normalize_session_id(workspace.codex_session_id)
+    local session_id = type(workspace.agent_session_id) == "string" and trim(workspace.agent_session_id) or ""
+    if session_id == "" then
+      return nil
     end
-    return workspace.agent_session_id and {
+    return {
       session_id = workspace.agent_session_id,
       cwd = workspace.project_root,
       path = workspace.agent_session_path,
       timestamp = workspace.agent_session_captured_at,
-    } or nil
+    }
   end
 
   local session_id = workspace_store_state.normalize_session_id(workspace.codex_session_id)

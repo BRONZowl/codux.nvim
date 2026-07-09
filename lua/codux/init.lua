@@ -626,22 +626,7 @@ compat_mod.install_prompt_open(M._v5, {
 function M.open_workspace_session(workspace, initial_prompt, opts)
   opts = opts or {}
   workspace = type(workspace) == "table" and workspace or nil
-  local profile = workspace and workspace.permission_profile or opts.permission_profile or "default"
-  local agent_provider = providers.normalize_provider(workspace and workspace.agent_provider)
-    or providers.normalize_provider(opts.agent_provider)
-    or providers.default_provider(config)
-  profile = providers.normalize_profile(profile) or "default"
-  local command = providers.command(config, agent_provider, profile)
-
-  local developer_instructions = workspace and workspace.resolved_instruction or nil
-  command = providers.command_with_instructions(command, agent_provider, developer_instructions)
-
-  local resume_session_id = workspace and (workspace.agent_session_id or workspace.codex_session_id) or nil
-  if resume_session_id and agent_provider == "grok" and (type(initial_prompt) == "string" and initial_prompt ~= "") then
-    command = providers.command_with_session_id(command, agent_provider, resume_session_id)
-  elseif resume_session_id and (type(initial_prompt) ~= "string" or initial_prompt == "") then
-    command = providers.command_with_resume(command, agent_provider, resume_session_id)
-  end
+  local command, agent_provider, profile = providers.workspace_command(config, workspace, initial_prompt, opts)
 
   local visible = opts.visible == true
   return terminal:start_terminal(visible, initial_prompt, command, workspace, profile, {
