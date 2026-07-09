@@ -1,18 +1,11 @@
 local terminal_mod = require("codux.terminal")
 local terminal_keymaps = require("codux.terminal_keymaps")
+local output_mouse = require("codux.mission_output_mouse")
 local ui = require("codux.ui")
 
 local M = {}
 
 local function noop() end
-
-local function clamp_coordinate(value)
-  value = tonumber(value) or 1
-  if value < 1 then
-    return 1
-  end
-  return math.floor(value)
-end
 
 local function output_terminal_state(parent)
   local state = parent.state.mission_dashboard_output_terminal_state
@@ -169,13 +162,7 @@ function M.bind_output_terminal_commands(self, bufnr)
     nowait = true,
   })
 
-  local scroll_keys = {
-    ["<ScrollWheelUp>"] = 64,
-    ["<ScrollWheelDown>"] = 65,
-    ["<ScrollWheelLeft>"] = 66,
-    ["<ScrollWheelRight>"] = 67,
-  }
-  for key, button in pairs(scroll_keys) do
+  for key, button in pairs(output_mouse.scroll_buttons) do
     self.set_buffer_keymap(bufnr, { "n", "t" }, key, function()
       return self:send_output_terminal_mouse(button)
     end, "Scroll Codux Output", {
@@ -200,51 +187,12 @@ function M.attach_output_terminal_activity(self)
   return true
 end
 
-function M.output_terminal_mouse_position(self)
-  local win = self.state.mission_dashboard_output_win
-  local row = nil
-  local col = nil
-
-  if type(vim.fn.getmousepos) == "function" then
-    local ok, mouse = pcall(vim.fn.getmousepos)
-    if ok and type(mouse) == "table" then
-      if mouse.winid == win then
-        row = mouse.winrow
-        col = mouse.wincol
-      end
-    end
-  end
-
-  if row == nil or col == nil then
-    local cursor_ok, cursor = pcall(vim.api.nvim_win_get_cursor, win)
-    if cursor_ok and type(cursor) == "table" then
-      row = cursor[1]
-      col = (tonumber(cursor[2]) or 0) + 1
-    end
-  end
-
-  return clamp_coordinate(row), clamp_coordinate(col)
-end
-
 function M.output_terminal_mouse_sequence(self, button)
-  local row, col = self:output_terminal_mouse_position()
-  return "\27[<" .. tostring(button) .. ";" .. tostring(col) .. ";" .. tostring(row) .. "M"
+  return output_mouse.sequence(self, button)
 end
 
 function M.send_output_terminal_mouse(self, button)
-  if not self.state.mission_dashboard_output_control then
-    return false
-  end
-
-  local controller = self:output_terminal_controller()
-  local state = controller:sync_output_terminal_state()
-  if not controller:terminal_running() or type(state.job_id) ~= "number" or state.job_id <= 0 then
-    return false
-  end
-
-  local sequence = self:output_terminal_mouse_sequence(button)
-  local send_ok, sent = pcall(vim.fn.chansend, state.job_id, sequence)
-  return send_ok and sent ~= 0
+  return output_mouse.send(self, self:output_terminal_controller(), button)
 end
 
 return M

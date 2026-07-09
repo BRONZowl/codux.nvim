@@ -122,10 +122,7 @@ function M.start_output_preview(self, entry, opts)
             pcall(self.close_workspace_interactive_preview, active_preview)
           end
           if was_control then
-            self.state.mission_dashboard_output_control = false
-            self.state.mission_dashboard_output_control_key = nil
-            self:relock_output_control_mouse()
-            self:set_output_window_focusable(false)
+            self:reset_output_control_state()
             self:render_output_panel(active_entry)
             self:refresh_dashboard_highlight()
             self:start_monitor_timer()

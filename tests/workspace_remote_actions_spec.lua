@@ -130,4 +130,28 @@ do
   assert_nil(err)
 end
 
+do
+  local rt = runtime({
+    window_ids = { review = "@1" },
+    window_statuses = { ["@1"] = "active" },
+    remote = function(_, expression)
+      if expression:find("remote_workspace_status", 1, true) then
+        return "not_running", nil
+      end
+      return "ok", nil
+    end,
+  })
+  local ok, err = workspace_remote_actions.verify_workspace_launch(rt, {
+    safe_name = "review",
+    project_root = "/repo",
+    window_name = "review",
+  }, {
+    require_codex = true,
+    attempts = 1,
+  })
+
+  assert_false(ok)
+  assert_equal(err, "workspace Codex session is not running")
+end
+
 print("workspace_remote_actions_spec.lua: ok")

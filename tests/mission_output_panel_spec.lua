@@ -132,26 +132,10 @@ do
 end
 
 if type(vim.api) == "table" then
-  local bound = {}
+  local _, set_buffer_keymap, has_mapping = output_fixtures.keymap_capture()
   local controller, ctx = output_fixtures.controller({
-    set_buffer_keymap = function(_, mode, lhs, rhs, desc)
-      table.insert(bound, {
-        mode = type(mode) == "table" and table.concat(mode, ",") or mode,
-        lhs = lhs,
-        rhs = rhs,
-        desc = desc,
-      })
-    end,
+    set_buffer_keymap = set_buffer_keymap,
   })
-
-  local function has_mapping(lhs, desc)
-    for _, mapping in ipairs(bound) do
-      if mapping.lhs == lhs and mapping.desc == desc then
-        return true
-      end
-    end
-    return false
-  end
 
   assert_true(controller:prepare_output_terminal_buffer())
   assert_equal(vim.api.nvim_get_option_value("filetype", { buf = controller.state.mission_dashboard_output_buf }), "codux")
@@ -167,6 +151,8 @@ if type(vim.api) == "table" then
 end
 
 if type(vim.api) == "table" then
+  local sent_job
+  local sent_sequence
   h.with_stubs({
     {
       target = vim.fn,
@@ -190,8 +176,8 @@ if type(vim.api) == "table" then
       target = vim.fn,
       key = "chansend",
       value = function(job_id, sequence)
-        vim.g.codux_output_scroll_job = job_id
-        vim.g.codux_output_scroll_sequence = sequence
+        sent_job = job_id
+        sent_sequence = sequence
         return 1
       end,
     },
@@ -205,10 +191,8 @@ if type(vim.api) == "table" then
     })
 
     assert_true(controller:send_output_terminal_mouse(65))
-    assert_equal(vim.g.codux_output_scroll_job, 77)
-    assert_equal(vim.g.codux_output_scroll_sequence, "\27[<65;9;4M")
-    vim.g.codux_output_scroll_job = nil
-    vim.g.codux_output_scroll_sequence = nil
+    assert_equal(sent_job, 77)
+    assert_equal(sent_sequence, "\27[<65;9;4M")
     output_fixtures.delete_buffer(ctx.bufnr)
   end)
 end

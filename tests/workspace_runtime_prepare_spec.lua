@@ -169,14 +169,6 @@ do
           killed = true
           return "", 0
         end
-        if command == "git -C /repo worktree remove --force /codux-worktrees/mission-builder" then
-          removed_worktree = true
-          return "", 0
-        end
-        if command == "git -C /repo branch -D dev/mission-builder" then
-          deleted_branch = true
-          return "", 0
-        end
         return "", 1
       end,
     })
@@ -202,6 +194,76 @@ do
     assert_equal(record.permission_profile, "auto")
     assert_equal(record.mission_id, "mission:mission")
     assert_equal(record.codex_mode, "plan")
+  end)
+end
+
+do
+  with_workspace_prepare_env(function()
+    local created = false
+    local killed = false
+    local removed_worktree = false
+    local deleted_branch = false
+    local harness = prepare_harness({
+      system = function(_, command)
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-builder" then
+          return "", 1
+        end
+        if command == "git -C /repo worktree add -b dev/mission-builder /codux-worktrees/mission-builder main" then
+          return "", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          if created then
+            return "@1\tmission-builder\n", 0
+          end
+          return "", 0
+        end
+        if command:find("tmux new%-window", 1, false) == 1 then
+          created = true
+          return "", 0
+        end
+        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+          return "nvim\n", 0
+        end
+        if command:find("remote_workspace_status", 1, true) then
+          return "not_running\n", 0
+        end
+        if command == "tmux kill-window -t @1" then
+          killed = true
+          return "", 0
+        end
+        if command == "git -C /repo worktree remove --force /codux-worktrees/mission-builder" then
+          removed_worktree = true
+          return "", 0
+        end
+        if command == "git -C /repo branch -D dev/mission-builder" then
+          deleted_branch = true
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+    local runtime = harness.runtime
+
+    local workspace, error_message = runtime:prepare_workspace("mission-builder", {
+      resolved_instruction = "builder instructions",
+      initial_prompt = "start building",
+      initial_mode = "plan",
+      permission_profile = "auto",
+      mission_id = "mission:mission",
+      mission_name = "Mission",
+      mission_role = "Builder",
+      launch_verify_attempts = 1,
+      require_codex_ready = true,
+    })
+
+    assert_nil(workspace)
+    assert_equal(error_message, "workspace Codex session is not running")
+    assert_true(killed)
+    assert_true(removed_worktree)
+    assert_true(deleted_branch)
   end)
 end
 

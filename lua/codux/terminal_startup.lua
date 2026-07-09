@@ -50,15 +50,45 @@ function M.startup_plan_command_busy(controller)
   return false
 end
 
+local function startup_send_error(label, detail)
+  local message = "Failed to send " .. label .. " to Codex"
+  if detail ~= nil and tostring(detail) ~= "" then
+    message = message .. ": " .. tostring(detail)
+  end
+  return message
+end
+
+function M.send_startup_input(controller, label, input)
+  if type(controller) ~= "table" or type(controller.state) ~= "table" then
+    return false, startup_send_error(label, "terminal is not available")
+  end
+  if not controller:terminal_running() or type(controller.state.job_id) ~= "number" then
+    local message = startup_send_error(label, "terminal is not running")
+    controller.state.last_startup_send_error = message
+    return false, message
+  end
+
+  local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, input)
+  if send_ok and sent ~= 0 then
+    controller.state.last_startup_send_error = nil
+    return true, nil
+  end
+
+  local detail = send_ok and "broken pipe" or sent
+  local message = startup_send_error(label, detail)
+  controller.state.last_startup_send_error = message
+  return false, message
+end
+
 function M.send_startup_plan_toggle(controller)
-  local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, "\27[200~/plan\27[201~\r")
-  return send_ok and sent ~= 0
+  local ok = M.send_startup_input(controller, "startup plan command", "\27[200~/plan\27[201~\r")
+  return ok
 end
 
 function M.paste_startup_prompt(controller, initial_prompt)
   local paste = "\27[200~" .. initial_prompt .. "\27[201~\r"
-  local paste_ok, pasted = pcall(vim.fn.chansend, controller.state.job_id, paste)
-  if paste_ok and pasted ~= 0 then
+  local paste_ok = M.send_startup_input(controller, "startup prompt", paste)
+  if paste_ok then
     controller:mark_terminal_prompt_submission()
     controller:invalidate_terminal_prompt_tracking()
     controller:set_codex_working(true)

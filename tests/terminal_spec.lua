@@ -156,7 +156,7 @@ do
     vim.fn.termopen = function()
       return 42
     end
-    vim.fn.chansend = function(_, value)
+    vim.fn.chansend = opts.chansend or function(_, value)
       table.insert(env.sent, value)
       return #tostring(value or "")
     end
@@ -268,6 +268,27 @@ do
     assert_nil(env.command_prompt)
     assert_equal(#env.sent, 0)
     assert_false(controller.state.codex_working)
+  end)
+
+  with_terminal_start_env({
+    chansend = function()
+      error("EPIPE", 0)
+    end,
+  }, function(controller)
+    controller.state.job_id = 42
+    assert_false(controller:send_startup_plan_toggle())
+    assert_equal(controller.state.last_startup_send_error, "Failed to send startup plan command to Codex: EPIPE")
+  end)
+
+  with_terminal_start_env({
+    chansend = function()
+      return 0
+    end,
+  }, function(controller)
+    controller.state.job_id = 42
+    assert_false(controller:paste_startup_prompt("hello"))
+    assert_equal(controller.state.last_startup_send_error, "Failed to send startup prompt to Codex: broken pipe")
+    assert_nil(controller.state.marked_prompt_submission)
   end)
 
   with_terminal_start_env({

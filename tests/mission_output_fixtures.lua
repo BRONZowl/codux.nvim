@@ -150,6 +150,28 @@ function M.controller(opts)
   return mission_control_mod.new(controller_opts), ctx
 end
 
+function M.keymap_capture()
+  local bound = {}
+  local function set_buffer_keymap(_, mode, lhs, rhs, desc, opts)
+    table.insert(bound, {
+      mode = type(mode) == "table" and table.concat(mode, ",") or mode,
+      lhs = lhs,
+      rhs = rhs,
+      desc = desc,
+      opts = opts,
+    })
+  end
+  local function has_mapping(lhs, desc)
+    for _, mapping in ipairs(bound) do
+      if mapping.lhs == lhs and mapping.desc == desc then
+        return true
+      end
+    end
+    return false
+  end
+  return bound, set_buffer_keymap, has_mapping
+end
+
 function M.delete_buffer(bufnr)
   if type(vim.api) == "table" and vim.api.nvim_buf_is_valid(bufnr) then
     vim.api.nvim_buf_delete(bufnr, { force = true })

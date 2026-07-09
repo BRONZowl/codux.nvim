@@ -140,6 +140,14 @@ function Output:set_output_window_focusable(focusable)
   return self.set_window_config(win, config)
 end
 
+function Output:reset_output_control_state()
+  self.state.mission_dashboard_output_control = false
+  self.state.mission_dashboard_output_control_key = nil
+  self:relock_output_control_mouse()
+  self:set_output_window_focusable(false)
+  return true
+end
+
 function Output:enter_output_control()
   local entry = self:selected_output_entry()
   if type(entry) ~= "table" then
@@ -162,10 +170,7 @@ function Output:enter_output_control()
   self:set_output_window_focusable(true)
 
   if not self:start_output_preview(entry, { control = true }) then
-    self.state.mission_dashboard_output_control = false
-    self.state.mission_dashboard_output_control_key = nil
-    self:set_output_window_focusable(false)
-    self:relock_output_control_mouse()
+    self:reset_output_control_state()
     self:start_monitor_timer()
     return false
   end
@@ -184,10 +189,7 @@ function Output:exit_output_control()
   end
 
   local entry = self:selected_output_entry() or self.state.mission_dashboard_output_entry
-  self.state.mission_dashboard_output_control = false
-  self.state.mission_dashboard_output_control_key = nil
-  self:relock_output_control_mouse()
-  self:set_output_window_focusable(false)
+  self:reset_output_control_state()
   self:close_output_preview()
   self:render_output_panel(entry)
   self:refresh_dashboard_highlight()
