@@ -47,7 +47,7 @@ function M.role_column_widths(dashboard_width)
     role = 9,
     status = 8,
     mode = 7,
-    profile = 12,
+    profile = 13,
     age = 4,
     review = 6,
     cleanup = 9,

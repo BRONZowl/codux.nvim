@@ -13,6 +13,19 @@ local workspace_ui = require("codux.workspace_ui")
 local mission_role_entry = fixtures.mission_role_entry
 
 do
+  local controller = mission_control_mod.new({})
+  assert_equal(controller:permission_profile_label({ permission_profile = "default" }), "Codex Default")
+  assert_equal(controller:permission_profile_label({ permission_profile = "auto" }), "Codex Auto")
+  assert_equal(controller:permission_profile_label({ permission_profile = "danger" }), "Codex Full")
+  assert_equal(
+    controller:permission_profile_label({ agent_provider = "grok", permission_profile = "default" }),
+    "Grok Default"
+  )
+  assert_equal(controller:permission_profile_label({ agent_provider = "grok", permission_profile = "auto" }), "Grok Auto")
+  assert_equal(controller:permission_profile_label({ agent_provider = "grok", permission_profile = "danger" }), "Grok Full")
+end
+
+do
   local controller = mission_control_mod.new({
     missions_for_project = function(root)
       assert_equal(root, "/repo")
@@ -161,7 +174,7 @@ do
   assert_contains(table.concat(lines, "\n"), "cleanup")
   assert_equal(table.concat(lines, "\n"):find("cleanup status", 1, true), nil)
   assert_contains(table.concat(lines, "\n"), "target")
-  assert_contains(table.concat(lines, "\n"), "Autopilot")
+  assert_contains(table.concat(lines, "\n"), "Codex Auto")
   assert_contains(table.concat(lines, "\n"), "execute")
   assert_contains(table.concat(lines, "\n"), "1m")
   assert_contains(table.concat(lines, "\n"), "yes")

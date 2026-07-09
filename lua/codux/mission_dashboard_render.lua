@@ -219,18 +219,18 @@ end
 function M.permission_profile_label(_, entry)
   entry = type(entry) == "table" and entry or {}
   local is_grok = entry.agent_provider == "grok"
-  local provider = is_grok and "Grok" or ""
+  local provider = is_grok and "Grok" or "Codex"
   local profile = entry.permission_profile or "default"
   if profile == "default" then
-    return is_grok and (provider .. " Default") or "Default"
+    return provider .. " Default"
   end
   if profile == "auto" then
-    return is_grok and (provider .. " Auto") or "Autopilot"
+    return provider .. " Auto"
   end
   if profile == "danger" then
-    return is_grok and (provider .. " Full") or "Full Access"
+    return provider .. " Full"
   end
-  return is_grok and (provider .. " " .. tostring(profile)) or tostring(profile)
+  return provider .. " " .. tostring(profile)
 end
 
 function M.mission_mode_label(_, entry)
