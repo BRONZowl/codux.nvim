@@ -14,6 +14,7 @@ local dashboard_viewport = require("codux.mission_dashboard_viewport")
 local dashboard_windows = require("codux.mission_dashboard_windows")
 local mission_objective_editor = require("codux.mission_objective_editor")
 local mission_preview = require("codux.mission_preview")
+local providers = require("codux.providers")
 local text_util = require("codux.text")
 local ui = require("codux.ui")
 local output_panel = require("codux.mission_output_panel")
@@ -108,9 +109,39 @@ function M:open_prompt(opts)
     if name == "" then
       return
     end
-    self:open_objective_editor(name, nil, { agent_provider = opts.agent_provider })
+    if type(opts.agent_provider) == "string" and opts.agent_provider ~= "" then
+      self:open_objective_editor(name, nil, { agent_provider = opts.agent_provider })
+      return
+    end
+    self:open_mission_provider_menu(name)
   end, {
     notify = self.notify,
+    set_buffer_keymap = self.set_buffer_keymap,
+    bind_close_keys = self.bind_close_keys,
+  })
+end
+
+function M:open_mission_provider_menu(name)
+  return ui.key_choice_menu({
+    title = " Codux mission agent ",
+    filetype = "codux-mission-provider",
+    zindex = 81,
+    choices = providers.provider_choices(),
+    cancel_desc = "Cancel Codux Mission Provider",
+    create_error = "Failed to create Codux mission provider menu",
+    open_error = "Failed to open Codux mission provider menu",
+  }, function(choice)
+    if type(choice) ~= "table" then
+      return false
+    end
+    return self:open_objective_editor(name, nil, { agent_provider = choice.agent_provider })
+  end, {
+    notify = self.notify,
+    create_scratch_buffer = self.ui.create_scratch_buffer,
+    set_lines = self.ui.set_lines,
+    set_window_options = self.ui.set_window_options,
+    close_window = self.ui.close_window,
+    delete_buffer = self.ui.delete_buffer,
     set_buffer_keymap = self.set_buffer_keymap,
     bind_close_keys = self.bind_close_keys,
   })
@@ -650,6 +681,7 @@ for _, method in ipairs({
   "interrupt_workspace_action",
   "interrupt_selected_workspace",
   "switch_selected_workspace_mode",
+  "switch_selected_workspace_profile",
   "rename_selected_role",
   "delete_role_workspace",
   "open_action_palette",

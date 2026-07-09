@@ -6,6 +6,7 @@ local assert_false = h.assert_false
 local assert_contains = h.assert_contains
 
 local manager_mod = require("codux.workspace_manager")
+local ui_mod = require("codux.ui")
 local workspace_ui = require("codux.workspace_ui")
 
 if type(vim.api) == "table" then
@@ -343,6 +344,63 @@ do
   assert_equal(configs[11].win, 10)
   assert_equal(configs[11].row, 8)
   assert_equal(configs[11].width, 84)
+end
+
+do
+  local selected
+  local rendered = false
+  local notifications = {}
+  local controller = manager_mod.new({
+    state = {},
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    ui = {
+      create_scratch_buffer = function() end,
+      set_lines = function() end,
+      set_window_options = function() end,
+      close_window = function() end,
+      delete_buffer = function() end,
+    },
+    switch_workspace_profile = function(workspace, agent_provider, permission_profile, opts)
+      selected = {
+        workspace = workspace,
+        agent_provider = agent_provider,
+        permission_profile = permission_profile,
+        restart = opts and opts.restart,
+      }
+      return true, nil, true
+    end,
+  })
+  function controller:render()
+    rendered = true
+    return true
+  end
+
+  h.with_stubs({
+    {
+      target = ui_mod,
+      key = "key_choice_menu",
+      value = function(opts, callback)
+        assert_equal(opts.filetype, "codux-workspace-profile")
+        assert_equal(opts.choices[6].label, "Grok Full")
+        return callback(opts.choices[6])
+      end,
+    },
+  }, function()
+    assert_true(controller:switch_selected_workspace_profile({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+    }))
+  end)
+
+  assert_equal(selected.workspace.safe_name, "review")
+  assert_equal(selected.agent_provider, "grok")
+  assert_equal(selected.permission_profile, "danger")
+  assert_true(selected.restart)
+  assert_true(rendered)
+  assert_contains(notifications[#notifications], "Grok Full")
 end
 
 print("workspace_manager_spec.lua: ok")

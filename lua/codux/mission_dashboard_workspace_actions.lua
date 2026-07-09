@@ -1,11 +1,64 @@
 local text_util = require("codux.text")
 local mission_mod = require("codux.mission")
+local providers = require("codux.providers")
 local ui = require("codux.ui")
 
 local M = {}
 
 local function trim(value)
   return text_util.trim(value)
+end
+
+local function profile_label(choice)
+  return choice.label or (providers.provider_label(choice.agent_provider) .. " " .. providers.profile_label(choice.profile))
+end
+
+local function open_profile_picker(controller, entry)
+  entry = type(entry) == "table" and entry or nil
+  if not entry then
+    return false
+  end
+
+  local label = entry.mission_role or entry.name or entry.safe_name or "workspace"
+  return ui.key_choice_menu({
+    title = " Profile " .. tostring(label) .. " ",
+    filetype = "codux-mission-workspace-profile",
+    zindex = 85,
+    choices = providers.keyed_permission_profile_choices("profile_label"),
+    cancel_desc = "Cancel Codux Profile",
+    create_error = "Failed to create Codux profile menu",
+    open_error = "Failed to open Codux profile menu",
+  }, function(choice)
+    if type(choice) ~= "table" then
+      return false
+    end
+
+    local ok, error_message, restarted = controller.switch_workspace_profile(entry, choice.agent_provider, choice.profile, {
+      restart = true,
+    })
+    if ok then
+      controller.notify(
+        "Switched Codux workspace "
+          .. tostring(label)
+          .. " to "
+          .. profile_label(choice)
+          .. (restarted and " and restarted it" or "")
+      )
+      controller:render_dashboard()
+      return true
+    end
+    controller.notify(error_message or "Failed to switch Codux workspace profile", vim.log.levels.ERROR)
+    return false
+  end, {
+    notify = controller.notify,
+    create_scratch_buffer = controller.ui.create_scratch_buffer,
+    set_lines = controller.ui.set_lines,
+    set_window_options = controller.ui.set_window_options,
+    close_window = controller.ui.close_window,
+    delete_buffer = controller.ui.delete_buffer,
+    set_buffer_keymap = controller.set_buffer_keymap,
+    bind_close_keys = controller.bind_close_keys,
+  })
 end
 
 function M.run_workspace_action(controller, action, target)
@@ -25,6 +78,14 @@ function M.run_workspace_action(controller, action, target)
     end
     controller:close_action_palette()
     return controller.edit_saved_workspace_instruction(workspace)
+  end
+  if action == "switch_profile" then
+    workspace = workspace or controller:selected_role_workspace_or_notify()
+    if not workspace then
+      return false
+    end
+    controller:close_action_palette()
+    return controller:switch_selected_workspace_profile(workspace)
   end
   if action == "close_workspace" then
     workspace = workspace or controller:selected_role_workspace_or_notify()
@@ -322,6 +383,14 @@ function M.switch_selected_workspace_mode(controller, entry)
 
   controller.notify(error_message or "Failed to switch workspace mode", vim.log.levels.ERROR)
   return false
+end
+
+function M.switch_selected_workspace_profile(controller, entry)
+  entry = type(entry) == "table" and entry or controller:selected_role_workspace_or_notify()
+  if not entry then
+    return false
+  end
+  return open_profile_picker(controller, entry)
 end
 
 function M.rename_selected_role(controller, entry)

@@ -170,7 +170,7 @@ do
     )
 
     assert_nil(workspace)
-    assert_equal(error_message, "workspace Codex session is not running")
+    assert_equal(error_message, "workspace agent session is not running")
     assert_true(flags.killed)
     assert_true(flags.removed_worktree)
     assert_true(flags.deleted_branch)

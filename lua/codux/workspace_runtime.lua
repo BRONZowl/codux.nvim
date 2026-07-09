@@ -810,6 +810,10 @@ function M:names_for_project(root)
   return workspace_registry.names_for_project(self, root)
 end
 
+function M:update_workspace_profile(entry, agent_provider, permission_profile, opts)
+  return workspace_registry.update_workspace_profile(self, entry, agent_provider, permission_profile, opts)
+end
+
 function M:reconcile_project(root)
   return workspace_registry.reconcile_project(self, root)
 end

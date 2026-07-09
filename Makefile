@@ -12,6 +12,7 @@ TEST_SPECS := \
 	tests/dashboard_search_spec.lua \
 	tests/filetypes_spec.lua \
 	tests/mission_spec.lua \
+	tests/mission_setup_spec.lua \
 	tests/mission_dashboard_layout_spec.lua \
 	tests/mission_dashboard_spec.lua \
 	tests/mission_dashboard_viewport_spec.lua \

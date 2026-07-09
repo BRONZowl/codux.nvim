@@ -21,6 +21,21 @@ assert_equal(providers.command(config, "codex", "auto"), "codex-auto")
 assert_equal(providers.command(config, "grok", "default"), "grok --sandbox workspace")
 assert_equal(providers.command(config, "grok", "danger"), "grok --sandbox off --always-approve")
 
+do
+  local provider_choices = providers.provider_choices()
+  assert_equal(provider_choices[1].key, "c")
+  assert_equal(provider_choices[1].agent_provider, "codex")
+  assert_equal(provider_choices[2].key, "g")
+  assert_equal(provider_choices[2].agent_provider, "grok")
+
+  local profile_choices = providers.keyed_permission_profile_choices("profile_label")
+  assert_equal(profile_choices[1].label, "Codex Default")
+  assert_equal(profile_choices[4].label, "Grok Default")
+  assert_equal(profile_choices[5].key, "G")
+  assert_equal(profile_choices[5].agent_provider, "grok")
+  assert_equal(profile_choices[5].profile, "auto")
+end
+
 assert_equal(
   providers.command_with_instructions("grok", "grok", "Use repo rules."),
   "grok '--rules' 'Use repo rules.'"
@@ -52,7 +67,25 @@ assert_equal(
     permission_profile = "default",
     resume_agent_session = true,
   }),
-  "grok --sandbox workspace '--resume'"
+  "grok --sandbox workspace"
+)
+assert_equal(
+  providers.workspace_command(config, {
+    agent_provider = "grok",
+    permission_profile = "default",
+    resume_agent_session = true,
+    agent_session_id = "",
+  }),
+  "grok --sandbox workspace"
+)
+assert_equal(
+  providers.workspace_command(config, {
+    agent_provider = "grok",
+    permission_profile = "default",
+    resolved_instruction = "Mission rules",
+    resume_agent_session = true,
+  }),
+  "grok --sandbox workspace '--rules' 'Mission rules'"
 )
 assert_equal(
   providers.workspace_command(config, {

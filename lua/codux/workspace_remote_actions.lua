@@ -19,14 +19,14 @@ function M.workspace_interactive_preview(runtime, entry, opts)
   local server = workspace.nvim_server or runtime:workspace_server_path(workspace.project_root, workspace.safe_name or workspace.name)
   local output, remote_error = runtime:remote_luaeval(
     server,
-    "require('codux')._v5.remote_show_existing_codex_terminal()",
+    "require('codux')._v5.remote_show_existing_agent_terminal()",
     { attempts = opts.attempts or 15, sleep_ms = opts.sleep_ms or 120 }
   )
   if output ~= "ok" then
     if output == "not_running" then
-      return nil, "workspace Codex session is not running"
+      return nil, "workspace agent session is not running"
     end
-    return nil, remote_error or output or "workspace Codex session is not reachable"
+    return nil, remote_error or output or "workspace agent session is not reachable"
   end
 
   local session = runtime:current_tmux_session()
@@ -290,7 +290,7 @@ function M.verify_workspace_launch(runtime, workspace, opts)
           if not require_codex then
             return true, nil
           end
-          last_error = "workspace Codex session is not running"
+          last_error = "workspace agent session is not running"
         else
           last_error = remote_error or output or "workspace Neovim server is not reachable"
         end

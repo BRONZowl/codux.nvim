@@ -48,13 +48,14 @@ do
   end
 
   assert_nil(by_key.o)
+  assert_equal(by_key.p, "switch_profile")
   assert_equal(by_key.r, "rename")
   assert_equal(by_key.e, "edit_instructions")
   assert_equal(by_key.x, "close_window")
   assert_equal(by_key.X, "close_all_windows")
   assert_equal(by_key.d, "delete")
   assert_nil(by_key.h)
-  assert_contains(workspace_ui.manager_action_line(actions[1], 40), "Rename Workspace")
+  assert_contains(workspace_ui.manager_action_line(actions[1], 40), "Switch Profile")
   assert_equal(labels_by_key.X, "Close All Workspaces")
 end
 
@@ -140,13 +141,13 @@ do
   assert_equal(by_key.x, "close_workspace")
   assert_equal(by_key.d, "delete_workspace")
   assert_equal(by_key.w, "create_workspace")
-  assert_nil(by_key.p)
+  assert_equal(by_key.p, "switch_profile")
   assert_nil(by_key.i)
   assert_nil(by_key.s)
   assert_nil(by_key.a)
   assert_nil(by_key.X)
-  assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Rename Role")
-  assert_nil(labels_by_key.p)
+  assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Switch Profile")
+  assert_equal(labels_by_key.p, "Switch Profile")
   assert_nil(labels_by_key.i)
   assert_nil(labels_by_key.s)
   assert_nil(labels_by_key.a)
@@ -169,7 +170,7 @@ do
     assert_nil(labels_by_key.a)
     assert_equal(by_key.r, "rename_role")
     assert_equal(by_key.e, "edit_instructions")
-    assert_contains(workspace_ui.role_workspace_action_line(status_actions[1], 40), "Rename Role")
+    assert_contains(workspace_ui.role_workspace_action_line(status_actions[1], 40), "Switch Profile")
   end
 end
 

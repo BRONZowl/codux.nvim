@@ -1,4 +1,5 @@
 local mission_mod = require("codux.mission")
+local providers = require("codux.providers")
 local text_util = require("codux.text")
 local workspace_git = require("codux.workspace_git")
 
@@ -386,6 +387,115 @@ function M.names_for_project(runtime, root)
     return tostring(left):lower() < tostring(right):lower()
   end)
   return names
+end
+
+local function update_active_workspace_profile(runtime, root, safe_name, agent_provider, permission_profile, provider_changed)
+  local workspace = runtime.state.workspace
+  if type(workspace) ~= "table" or workspace.project_root ~= root or workspace.safe_name ~= safe_name then
+    return
+  end
+  workspace.agent_provider = agent_provider
+  workspace.permission_profile = permission_profile
+  if provider_changed then
+    workspace.agent_session_id = nil
+    workspace.agent_session_path = nil
+    workspace.agent_session_captured_at = nil
+    workspace.codex_session_id = nil
+    workspace.codex_session_path = nil
+    workspace.codex_session_captured_at = nil
+  end
+end
+
+function M.update_workspace_profile(runtime, entry, agent_provider, permission_profile, opts)
+  opts = type(opts) == "table" and opts or {}
+  entry = type(entry) == "table" and entry or nil
+  if not entry then
+    return false, "workspace not found"
+  end
+
+  agent_provider = providers.normalize_provider(agent_provider)
+  if not agent_provider then
+    return false, "agent provider is required"
+  end
+  permission_profile = providers.normalize_profile(permission_profile) or "default"
+
+  local root = opts.project_root or entry.project_root or runtime.state.workspace_manager_project_root or runtime:project_root()
+  local safe_name = entry.safe_name
+  if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
+    return false, "workspace not found"
+  end
+
+  local state_data, state_error = runtime:read_state()
+  if state_error then
+    return false, state_error
+  end
+
+  local project = runtime:project_state(state_data, root)
+  local record = project.workspaces[safe_name]
+  if type(record) ~= "table" then
+    return false, "workspace not found"
+  end
+
+  local previous_provider = providers.normalize_provider(record.agent_provider) or "codex"
+  local provider_changed = previous_provider ~= agent_provider
+  local session = runtime:current_tmux_session()
+  local window_name = record.tmux_window or record.window_name or entry.window_name or safe_name
+  local window_id = entry.window_id or (session and runtime:tmux_window_id(session, window_name)) or nil
+  local live_status = type(window_id) == "string" and window_id ~= "" and runtime:status_for_window(window_id) or "inactive"
+  local restart = opts.restart == true and live_status == "active"
+  local now = runtime:timestamp()
+
+  if restart and not runtime:kill_tmux_window(window_id) then
+    return false, "Failed to close tmux window " .. tostring(window_name)
+  end
+
+  record.agent_provider = agent_provider
+  record.permission_profile = permission_profile
+  if provider_changed then
+    record.agent_session_id = nil
+    record.agent_session_path = nil
+    record.agent_session_captured_at = nil
+    record.codex_session_id = nil
+    record.codex_session_path = nil
+    record.codex_session_captured_at = nil
+  end
+  if restart then
+    record.status = "inactive"
+    record.codex_status = "idle"
+    record.codex_mode = nil
+    record.tmux_target = nil
+    record.tmux_window = window_name
+    record.last_reconciled_at = now
+  end
+  project.updated_at = now
+
+  local write_ok, write_error = runtime:write_state(state_data)
+  if not write_ok then
+    return false, write_error
+  end
+
+  update_active_workspace_profile(runtime, root, safe_name, agent_provider, permission_profile, provider_changed)
+
+  if restart then
+    local workspace, workspace_error = runtime:prepare_workspace(record.name or entry.name or safe_name, {
+      allow_existing = true,
+      require_existing = true,
+      project_root = root,
+      restart_inactive = true,
+      initial_mode = "plan",
+      agent_provider = agent_provider,
+      permission_profile = permission_profile,
+    })
+    if not workspace then
+      return false, workspace_error or "Failed to restart Codux workspace"
+    end
+  end
+
+  if runtime.state.workspace_manager_project_root then
+    runtime.render_workspace_manager()
+  end
+
+  return true, nil, restart or nil
 end
 
 function M.reconcile_project(runtime, root)

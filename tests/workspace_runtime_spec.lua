@@ -611,3 +611,166 @@ do
   assert_equal(record.codex_mode, nil)
   assert_equal(writes, 1)
 end
+
+do
+  local state_data = workspace_state({
+    review = review_workspace_record({
+      agent_provider = "codex",
+      permission_profile = "default",
+      codex_session_id = "codex-session",
+      codex_session_path = "/codex/session.jsonl",
+      codex_session_captured_at = "2026-07-09T12:00:00Z",
+    }),
+  })
+  local store = workspace_store({ state_data = state_data })
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    store = store.store,
+    render_workspace_manager = function() end,
+  })
+
+  local ok, err, restarted = runtime:update_workspace_profile({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+  }, "codex", "danger", { restart = true })
+
+  assert_true(ok)
+  assert_nil(err)
+  assert_nil(restarted)
+  local record = store.state_data().projects["/repo"].workspaces.review
+  assert_equal(record.agent_provider, "codex")
+  assert_equal(record.permission_profile, "danger")
+  assert_equal(record.codex_session_id, "codex-session")
+end
+
+do
+  local killed = false
+  local prepared = false
+  local state_data = workspace_state({
+    review = review_workspace_record({
+      agent_provider = "codex",
+      permission_profile = "default",
+      codex_session_id = "codex-session",
+      codex_session_path = "/codex/session.jsonl",
+      codex_session_captured_at = "2026-07-09T12:00:00Z",
+      status = "inactive",
+      codex_status = "idle",
+      codex_mode = "plan",
+    }),
+  })
+  local store = workspace_store({ state_data = state_data })
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    store = store.store,
+    render_workspace_manager = function() end,
+  })
+  function runtime:status_for_window(window_id)
+    assert_equal(window_id, "@1")
+    return "inactive"
+  end
+  function runtime:kill_tmux_window()
+    killed = true
+    return true
+  end
+  function runtime:prepare_workspace()
+    prepared = true
+    return { name = "review" }, nil
+  end
+
+  local ok, err, restarted = runtime:update_workspace_profile({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    window_id = "@1",
+  }, "grok", "auto", { restart = true })
+
+  assert_true(ok)
+  assert_nil(err)
+  assert_nil(restarted)
+  assert_false(killed)
+  assert_false(prepared)
+  local record = store.state_data().projects["/repo"].workspaces.review
+  assert_equal(record.agent_provider, "grok")
+  assert_equal(record.permission_profile, "auto")
+  assert_nil(record.codex_session_id)
+  assert_nil(record.agent_session_id)
+end
+
+do
+  local prepared
+  local killed
+  local state_data = workspace_state({
+    review = review_workspace_record({
+      agent_provider = "codex",
+      permission_profile = "default",
+      codex_session_id = "codex-session",
+      codex_session_path = "/codex/session.jsonl",
+      codex_session_captured_at = "2026-07-09T12:00:00Z",
+      agent_session_id = "agent-session",
+      agent_session_path = "/agent/session",
+      agent_session_captured_at = "2026-07-09T12:01:00Z",
+      status = "idle",
+      codex_status = "idle",
+      codex_mode = "plan",
+    }),
+  })
+  local store = workspace_store({ state_data = state_data })
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+      workspace = {
+        project_root = "/repo",
+        safe_name = "review",
+      },
+    },
+    store = store.store,
+    render_workspace_manager = function() end,
+  })
+  function runtime:current_tmux_session()
+    return "session"
+  end
+  function runtime:status_for_window(window_id)
+    assert_equal(window_id, "@1")
+    return "active"
+  end
+  function runtime:kill_tmux_window(window_id)
+    killed = window_id
+    return true
+  end
+  function runtime:prepare_workspace(name, opts)
+    prepared = { name = name, opts = opts }
+    return { name = name, safe_name = "review", project_root = "/repo" }, nil
+  end
+
+  local ok, err, restarted = runtime:update_workspace_profile({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    window_id = "@1",
+  }, "grok", "auto", { restart = true })
+
+  assert_true(ok)
+  assert_nil(err)
+  assert_true(restarted)
+  assert_equal(killed, "@1")
+  assert_equal(prepared.name, "review")
+  assert_true(prepared.opts.allow_existing)
+  assert_true(prepared.opts.require_existing)
+  assert_true(prepared.opts.restart_inactive)
+  assert_equal(prepared.opts.agent_provider, "grok")
+  assert_equal(prepared.opts.permission_profile, "auto")
+
+  local record = store.state_data().projects["/repo"].workspaces.review
+  assert_equal(record.agent_provider, "grok")
+  assert_equal(record.permission_profile, "auto")
+  assert_nil(record.codex_session_id)
+  assert_nil(record.agent_session_id)
+  assert_equal(runtime.state.workspace.agent_provider, "grok")
+  assert_equal(runtime.state.workspace.permission_profile, "auto")
+  assert_nil(runtime.state.workspace.codex_session_id)
+end

@@ -102,6 +102,9 @@ function M.normalize(opts)
     switch_workspace_mode = opt_function(opts, "switch_workspace_mode", function()
       return false, "workspace mode switch unavailable"
     end),
+    switch_workspace_profile = opt_function(opts, "switch_workspace_profile", function()
+      return false, "workspace profile switch unavailable"
+    end),
     update_mission_objective = opt_function(opts, "update_mission_objective", noop),
     update_mission_focus_packet = opt_function(opts, "update_mission_focus_packet", noop),
     rename_mission_role = opt_function(opts, "rename_mission_role", function()

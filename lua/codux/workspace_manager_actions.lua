@@ -1,4 +1,62 @@
+local providers = require("codux.providers")
+local ui = require("codux.ui")
+
 local M = {}
+
+local function profile_label(choice)
+  return choice.label or (providers.provider_label(choice.agent_provider) .. " " .. providers.profile_label(choice.profile))
+end
+
+local function open_profile_picker(controller, item, opts)
+  opts = type(opts) == "table" and opts or {}
+  item = type(item) == "table" and item or nil
+  if not item then
+    return false
+  end
+
+  local label = item.mission_role or item.name or item.safe_name or "workspace"
+  return ui.key_choice_menu({
+    title = " Profile " .. tostring(label) .. " ",
+    filetype = opts.filetype or "codux-workspace-profile",
+    zindex = opts.zindex or 75,
+    choices = providers.keyed_permission_profile_choices("profile_label"),
+    cancel_desc = "Cancel Codux Profile",
+    create_error = "Failed to create Codux profile menu",
+    open_error = "Failed to open Codux profile menu",
+  }, function(choice)
+    if type(choice) ~= "table" then
+      return false
+    end
+
+    local ok, error_message, restarted = controller.switch_workspace_profile(item, choice.agent_provider, choice.profile, {
+      restart = true,
+    })
+    if ok then
+      controller.notify(
+        "Switched Codux workspace "
+          .. tostring(label)
+          .. " to "
+          .. profile_label(choice)
+          .. (restarted and " and restarted it" or "")
+      )
+      if type(controller.render) == "function" then
+        controller:render()
+      end
+      return true
+    end
+    controller.notify(error_message or "Failed to switch Codux workspace profile", vim.log.levels.ERROR)
+    return false
+  end, {
+    notify = controller.notify,
+    create_scratch_buffer = controller.ui.create_scratch_buffer,
+    set_lines = controller.ui.set_lines,
+    set_window_options = controller.ui.set_window_options,
+    close_window = controller.ui.close_window,
+    delete_buffer = controller.ui.delete_buffer,
+    set_buffer_keymap = controller.set_buffer_keymap,
+    bind_close_keys = controller.bind_close_keys,
+  })
+end
 
 function M.selected_or_notify(controller)
   local item = controller:selected_item()
@@ -63,6 +121,10 @@ function M.run_action(controller, action, item)
     controller:close_action_palette()
     return controller.edit_saved_workspace_instruction(item)
   end
+  if action == "switch_profile" then
+    controller:close_action_palette()
+    return controller:switch_selected_workspace_profile(item)
+  end
   if action == "close_window" then
     controller:close_action_palette()
     return controller.close_saved_workspace_window(item)
@@ -117,6 +179,14 @@ function M.rename_selected_workspace(controller, item)
     end
     controller.rename_saved_workspace(item, new_name)
   end)
+end
+
+function M.switch_selected_workspace_profile(controller, item)
+  item = item or controller:selected_or_notify()
+  if not item then
+    return false
+  end
+  return open_profile_picker(controller, item)
 end
 
 function M.delete_selected_workspace(controller, item)

@@ -123,6 +123,7 @@ function M.new(deps)
       end
       return ok
     end,
+    switch_workspace_profile = deps.switch_workspace_profile,
     project_root = deps.project_root,
     set_buffer_keymap = deps.set_buffer_keymap,
     bind_close_keys = deps.bind_close_keys,

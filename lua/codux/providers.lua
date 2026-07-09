@@ -14,6 +14,78 @@ local PROFILES = {
   danger = true,
 }
 
+local PROFILE_CHOICES = {
+  {
+    key = "d",
+    agent_provider = "codex",
+    profile = "default",
+    selector_label = "Default",
+    keyed_label = "default",
+    profile_label = "Codex Default",
+    desc = "Open Codex Default",
+  },
+  {
+    key = "a",
+    agent_provider = "codex",
+    profile = "auto",
+    selector_label = "Autopilot",
+    keyed_label = "auto",
+    profile_label = "Codex Auto",
+    desc = "Open Codex Auto",
+  },
+  {
+    key = "f",
+    agent_provider = "codex",
+    profile = "danger",
+    selector_label = "Full Access",
+    keyed_label = "full",
+    profile_label = "Codex Full",
+    desc = "Open Codex Full Access",
+  },
+  {
+    key = "g",
+    agent_provider = "grok",
+    profile = "default",
+    selector_label = "Grok",
+    keyed_label = "grok",
+    profile_label = "Grok Default",
+    desc = "Open Grok",
+  },
+  {
+    key = "G",
+    agent_provider = "grok",
+    profile = "auto",
+    selector_label = "Grok Autopilot",
+    keyed_label = "grok auto",
+    profile_label = "Grok Auto",
+    desc = "Open Grok Auto",
+  },
+  {
+    key = "!",
+    agent_provider = "grok",
+    profile = "danger",
+    selector_label = "Grok Full Access",
+    keyed_label = "grok full",
+    profile_label = "Grok Full",
+    desc = "Open Grok Full Access",
+  },
+}
+
+local PROVIDER_CHOICES = {
+  { key = "c", agent_provider = "codex", label = "Codex", desc = "Use Codex" },
+  { key = "g", agent_provider = "grok", label = "Grok", desc = "Use Grok" },
+}
+
+local function copy_choice(choice, label_key)
+  return {
+    key = choice.key,
+    label = choice[label_key or "label"] or choice.label,
+    agent_provider = choice.agent_provider,
+    profile = choice.profile,
+    desc = choice.desc,
+  }
+end
+
 local function trim(value)
   return text_util.trim(value)
 end
@@ -67,6 +139,34 @@ function M.profile_label(profile)
     return "Full Access"
   end
   return "Default"
+end
+
+function M.provider_choices()
+  local choices = {}
+  for _, choice in ipairs(PROVIDER_CHOICES) do
+    table.insert(choices, copy_choice(choice))
+  end
+  return choices
+end
+
+function M.permission_profile_choices()
+  local choices = {}
+  for _, choice in ipairs(PROFILE_CHOICES) do
+    table.insert(choices, {
+      label = choice.selector_label,
+      profile = choice.profile,
+      agent_provider = choice.agent_provider,
+    })
+  end
+  return choices
+end
+
+function M.keyed_permission_profile_choices(label_key)
+  local choices = {}
+  for _, choice in ipairs(PROFILE_CHOICES) do
+    table.insert(choices, copy_choice(choice, label_key or "keyed_label"))
+  end
+  return choices
 end
 
 local function provider_config(config, provider)
@@ -146,9 +246,10 @@ function M.workspace_command(config, workspace, initial_prompt, opts)
   command = M.command_with_instructions(command, agent_provider, workspace and workspace.resolved_instruction or nil)
 
   local resume_session_id = workspace and (workspace.agent_session_id or workspace.codex_session_id) or nil
+  local grok_session_id = workspace and type(workspace.agent_session_id) == "string" and trim(workspace.agent_session_id) or ""
   local has_initial_prompt = type(initial_prompt) == "string" and initial_prompt ~= ""
-  if agent_provider == "grok" and workspace and workspace.resume_agent_session == true then
-    command = M.command_with_resume(command, agent_provider, workspace.agent_session_id)
+  if agent_provider == "grok" and workspace and workspace.resume_agent_session == true and grok_session_id ~= "" then
+    command = M.command_with_resume(command, agent_provider, grok_session_id)
   elseif agent_provider ~= "grok" and resume_session_id and not has_initial_prompt then
     command = M.command_with_resume(command, agent_provider, resume_session_id)
   end

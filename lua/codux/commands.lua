@@ -118,7 +118,11 @@ function M.create(codux, deps)
   vim.api.nvim_create_user_command("CoduxMissionCreate", function(opts)
     if type(opts.args) == "string" and opts.args ~= "" then
       if mission_controller then
-        mission_controller:open_objective_editor(opts.args)
+        if type(mission_controller.open_mission_provider_menu) == "function" then
+          mission_controller:open_mission_provider_menu(opts.args)
+        else
+          mission_controller:open_objective_editor(opts.args)
+        end
       end
       return
     end

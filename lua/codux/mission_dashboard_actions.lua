@@ -232,6 +232,7 @@ M.open_workspace_prompt_input = workspace_actions.open_workspace_prompt_input
 M.interrupt_workspace_action = workspace_actions.interrupt_workspace_action
 M.interrupt_selected_workspace = workspace_actions.interrupt_selected_workspace
 M.switch_selected_workspace_mode = workspace_actions.switch_selected_workspace_mode
+M.switch_selected_workspace_profile = workspace_actions.switch_selected_workspace_profile
 M.rename_selected_role = workspace_actions.rename_selected_role
 M.delete_role_workspace = workspace_actions.delete_role_workspace
 

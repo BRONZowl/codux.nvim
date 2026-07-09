@@ -76,6 +76,9 @@ commands.create(codux, {
     return "/repo"
   end,
   mission_controller = {
+    open_mission_provider_menu = function(_, name)
+      table.insert(calls, "mission_provider:" .. tostring(name))
+    end,
     open_objective_editor = function(_, name)
       table.insert(calls, "mission_editor:" .. tostring(name))
     end,
@@ -100,7 +103,7 @@ created.CoduxWorkspaceRename.callback({ fargs = { "old", "new" } })
 assert_equal(calls[#calls], "rename_workspace:old")
 
 created.CoduxMissionCreate.callback({ args = "Mission" })
-assert_equal(calls[#calls], "mission_editor:Mission")
+assert_equal(calls[#calls], "mission_provider:Mission")
 
 vim.api.nvim_create_user_command = original_create_user_command
 if original_api == nil then

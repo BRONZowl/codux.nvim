@@ -120,7 +120,7 @@ do
   end
 
   local controller = mission_control_mod.new({})
-  function controller:open_objective_editor(name)
+  function controller:open_mission_provider_menu(name)
     opened_name = name
     return true
   end
@@ -130,6 +130,27 @@ do
   assert_equal(prompt_opts.zindex, 80)
   assert_equal(opened_name, "Alpha")
   ui_mod.single_line_prompt = old_single_line_prompt
+end
+
+do
+  local old_key_choice_menu = ui_mod.key_choice_menu
+  local opened
+  ui_mod.key_choice_menu = function(opts, callback)
+    assert_equal(opts.title, " Codux mission agent ")
+    assert_equal(opts.filetype, "codux-mission-provider")
+    return callback(opts.choices[2])
+  end
+
+  local controller = mission_control_mod.new({})
+  function controller:open_objective_editor(name, _, opts)
+    opened = { name = name, agent_provider = opts.agent_provider }
+    return true
+  end
+
+  assert_true(controller:open_mission_provider_menu("Alpha"))
+  assert_equal(opened.name, "Alpha")
+  assert_equal(opened.agent_provider, "grok")
+  ui_mod.key_choice_menu = old_key_choice_menu
 end
 
 do

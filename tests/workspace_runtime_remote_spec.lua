@@ -374,7 +374,7 @@ do
     assert_equal(preview_command:find("ignore-size", 1, true), nil)
     assert_equal(preview.preview_session, "codux-preview-test")
     local command_text = harness.command_text()
-    assert_contains(command_text, "remote_show_existing_codex_terminal")
+    assert_contains(command_text, "remote_show_existing_agent_terminal")
     assert_contains(command_text, expected_server)
     assert_contains(command_text, "tmux new-session -d -t session -s codux-preview-test")
     assert_contains(command_text, "tmux select-window -t codux-preview-test:review")
@@ -460,7 +460,7 @@ do
         if command == "/usr/bin/tmux list-panes -t @1 -F #{pane_current_command}" then
           return "nvim\n", 0
         end
-        if command:find("nvim --server ", 1, true) and command:find("remote_show_existing_codex_terminal", 1, true) then
+        if command:find("nvim --server ", 1, true) and command:find("remote_show_existing_agent_terminal", 1, true) then
           return "ok\n", 0
         end
         if command == "/usr/bin/tmux kill-session -t codux-preview-test" then
@@ -517,9 +517,9 @@ do
       project_root = "/repo",
     }, { attempts = 1, preview_session = "codux-preview-test" })
     assert_nil(preview)
-    assert_equal(error_message, "workspace Codex session is not running")
+    assert_equal(error_message, "workspace agent session is not running")
     local command_text = table.concat(commands, "\n")
-    assert_contains(command_text, "remote_show_existing_codex_terminal")
+    assert_contains(command_text, "remote_show_existing_agent_terminal")
     assert_equal(command_text:find("tmux new-session", 1, true), nil)
   end)
 end

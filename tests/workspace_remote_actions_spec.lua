@@ -151,7 +151,7 @@ do
   })
 
   assert_false(ok)
-  assert_equal(err, "workspace Codex session is not running")
+  assert_equal(err, "workspace agent session is not running")
 end
 
 print("workspace_remote_actions_spec.lua: ok")

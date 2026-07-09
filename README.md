@@ -76,6 +76,7 @@ small provider/profile picker:
 - `f` starts the danger/full-access command.
 - `g` starts the default Grok command.
 - `G` starts the Grok auto command.
+- `!` starts the Grok full-access command.
 
 Use full access only in repositories you trust. `:CoduxOpenDanger` starts Codex
 with no approval prompts and no sandbox.
@@ -218,7 +219,9 @@ JSON copy.
 Use `:CoduxWorkspaces` to open the workspace dashboard. It includes fuzzy search,
 `<Tab>` search/list switching, `j`/`k` movement, `<CR>` open, `h` Doctor, and
 `m` for the selected-workspace menu. The menu supports rename, edit
-instructions, close workspace, close all workspaces, and delete workspace.
+instructions, switch provider/profile, close workspace, close all workspaces,
+and delete workspace. Switching the profile of an active workspace restarts that
+workspace with the selected Codex or Grok command.
 
 Deleting a workspace removes saved state and the matching instruction file,
 closes the tmux window, removes the worktree, and deletes the workspace branch.
@@ -230,8 +233,8 @@ Outside tmux, workspace creation stops with `no tmux session running`.
 ## Mission Control
 
 Mission Control launches one or more Codux agent workspaces around a shared
-objective. Run `:CoduxMissionCreate`, enter the objective, review the preview,
-and launch.
+objective. Run `:CoduxMissionCreate`, enter the mission name, choose Codex or
+Grok, enter the objective, review the preview, and launch.
 
 New missions start with one default agent:
 
@@ -282,8 +285,8 @@ continues to belong to the agent inside the output session.
 Mission menu actions include start/reopen mission, view objective, edit
 objective, edit focus, close mission, delete mission, and create a mission. Role
 workspace menus include prompt or answer when available, interrupt, switch mode,
-rename role, edit instructions, close workspace, delete workspace, and create
-workspace.
+switch provider/profile, rename role, edit instructions, close workspace, delete
+workspace, and create workspace.
 
 Close and delete are separate operations. Closing a mission only closes role
 windows and preserves worktrees, branches, instructions, saved state, and mission

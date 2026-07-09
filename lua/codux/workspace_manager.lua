@@ -88,6 +88,7 @@ function M.new(opts)
     close_saved_workspace_window = type(opts.close_saved_workspace_window) == "function"
         and opts.close_saved_workspace_window
       or noop,
+    switch_workspace_profile = type(opts.switch_workspace_profile) == "function" and opts.switch_workspace_profile or noop,
     close_all_saved_workspace_windows = type(opts.close_all_saved_workspace_windows) == "function"
         and opts.close_all_saved_workspace_windows
       or noop,
@@ -470,6 +471,10 @@ end
 
 function M:close_selected_workspace_window(item)
   return manager_actions.close_selected_workspace_window(self, item)
+end
+
+function M:switch_selected_workspace_profile(item)
+  return manager_actions.switch_selected_workspace_profile(self, item)
 end
 
 function M:close_all_workspace_windows()
