@@ -1,4 +1,5 @@
 local ui = require("codux.ui")
+local terminal_keymaps = require("codux.terminal_keymaps")
 
 local M = {}
 
@@ -106,61 +107,12 @@ function M.ensure_buffer(controller)
 
   controller.state.buf = bufnr
   pcall(vim.api.nvim_buf_set_name, bufnr, "codux://codex")
-  controller.ui.set_keymap(bufnr, { "n", "t" }, "<C-q>", function()
-    return controller:close()
-  end, "Hide Codux Popup")
-  controller.ui.set_keymap(bufnr, "t", "<CR>", function()
-    return controller:submit_terminal_prompt()
-  end, "Submit Codux Prompt", {
-    nowait = true,
+  terminal_keymaps.bind_prompt_controls(controller, bufnr, {
+    close = function()
+      return controller:close()
+    end,
+    close_desc = "Hide Codux Popup",
   })
-  controller.ui.set_keymap(bufnr, { "n", "t" }, "<C-c>", function()
-    return controller:interrupt_terminal_prompt()
-  end, "Interrupt Codex", {
-    nowait = true,
-  })
-  controller.update_terminal_mode_mapping()
-  for _, key in ipairs(controller.ui.printable_prompt_keys()) do
-    controller.ui.set_keymap(bufnr, "t", key[1], controller:terminal_input_key(key[2]), "Type in Codux Prompt", {
-      nowait = true,
-    })
-  end
-  controller.ui.set_keymap(
-    bufnr,
-    "t",
-    "<BS>",
-    controller:terminal_input_key("\b", { delete_previous = true }),
-    "Delete Codux Prompt Character",
-    {
-      nowait = true,
-    }
-  )
-  controller.ui.set_keymap(
-    bufnr,
-    "t",
-    "<C-h>",
-    controller:terminal_input_key("\b", { delete_previous = true }),
-    "Delete Codux Prompt Character",
-    {
-      nowait = true,
-    }
-  )
-  controller.ui.set_keymap(bufnr, { "n", "t" }, "<S-Tab>", function()
-    return controller:send_shift_tab_mode_toggle()
-  end, "Switch Codex Mode", {
-    nowait = true,
-  })
-  controller.ui.set_keymap(bufnr, "n", "<CR>", function()
-    return controller:focus_terminal_prompt()
-  end, "Return to Codux Prompt")
-  for _, key in ipairs(controller.ui.printable_prompt_keys()) do
-    local lhs = key[1]
-    local input = key[2]
-    controller.ui.set_keymap(bufnr, "n", lhs, controller:terminal_prompt_key(input), "Type in Codux Prompt")
-  end
-  controller.ui.set_keymap(bufnr, "n", "q", function()
-    return controller:close()
-  end, "Hide Codux Popup")
 
   pcall(vim.api.nvim_create_autocmd, { "BufUnload", "BufDelete", "BufWipeout" }, {
     group = controller.augroup,

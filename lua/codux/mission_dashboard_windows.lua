@@ -34,8 +34,23 @@ end
 function M.restore_dashboard_mouse(controller)
   local saved = controller.state.mission_dashboard_saved_mouse
   controller.state.mission_dashboard_saved_mouse = nil
+  controller.state.mission_dashboard_output_control_mouse = nil
   if saved ~= nil then
     vim.o.mouse = saved
+  end
+  return true
+end
+
+function M.enable_output_control_mouse(controller)
+  vim.o.mouse = "a"
+  controller.state.mission_dashboard_output_control_mouse = true
+  return true
+end
+
+function M.relock_output_control_mouse(controller)
+  if controller.state.mission_dashboard_output_control_mouse then
+    vim.o.mouse = ""
+    controller.state.mission_dashboard_output_control_mouse = nil
   end
   return true
 end

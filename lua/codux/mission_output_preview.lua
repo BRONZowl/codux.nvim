@@ -37,6 +37,9 @@ end
 function M.close_output_preview(self)
   local job_id = self.state.mission_dashboard_output_job
   self.state.mission_dashboard_output_job = nil
+  if self.state.mission_dashboard_output_control then
+    self:relock_output_control_mouse()
+  end
   if type(job_id) == "number" and job_id > 0 then
     pcall(self.jobstop, job_id)
   end
@@ -45,6 +48,7 @@ function M.close_output_preview(self)
   if preview then
     pcall(self.close_workspace_interactive_preview, preview)
   end
+  self:clear_output_terminal_state()
 end
 
 function M.start_output_preview(self, entry, opts)
@@ -120,6 +124,7 @@ function M.start_output_preview(self, entry, opts)
           if was_control then
             self.state.mission_dashboard_output_control = false
             self.state.mission_dashboard_output_control_key = nil
+            self:relock_output_control_mouse()
             self:set_output_window_focusable(false)
             self:render_output_panel(active_entry)
             self:refresh_dashboard_highlight()
@@ -142,7 +147,9 @@ function M.start_output_preview(self, entry, opts)
 
   self.state.mission_dashboard_output_job = term_error
   self.state.mission_dashboard_output_preview = preview
-  pcall(vim.api.nvim_set_option_value, "filetype", "codux-missions-output", { buf = preview_buf })
+  self:sync_output_terminal_state()
+  self:attach_output_terminal_activity()
+  pcall(vim.api.nvim_set_option_value, "filetype", "codux", { buf = preview_buf })
   return true
 end
 

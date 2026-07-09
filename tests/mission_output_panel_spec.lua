@@ -50,7 +50,7 @@ if type(vim.api) == "table" then
     end,
     termopen = function(command)
       term_command = command
-      modified_at_termopen = vim.api.nvim_get_option_value("modified", { buf = bufnr })
+      modified_at_termopen = vim.api.nvim_get_option_value("modified", { buf = vim.api.nvim_get_current_buf() })
       return 77
     end,
   })
@@ -64,6 +64,7 @@ if type(vim.api) == "table" then
   assert_equal(command_text:find("ignore-size", 1, true), nil)
   assert_false(modified_at_termopen)
   assert_equal(controller.state.mission_dashboard_output_job, 77)
+  assert_equal(vim.api.nvim_get_option_value("filetype", { buf = controller.state.mission_dashboard_output_buf }), "codux")
   assert_contains(table.concat(ctx.rendered_lines, "\n"), "Output: Reviewer")
   assert_equal(table.concat(ctx.rendered_lines, "\n"):find("Ctrl-o workspace", 1, true), nil)
   assert_equal(table.concat(ctx.rendered_lines, "\n"):find("Ctrl-q", 1, true), nil)
@@ -128,6 +129,88 @@ do
   controller.state.mission_dashboard_output_control = true
   assert_true(bound["<C-o>"].rhs())
   assert_true(exited)
+end
+
+if type(vim.api) == "table" then
+  local bound = {}
+  local controller, ctx = output_fixtures.controller({
+    set_buffer_keymap = function(_, mode, lhs, rhs, desc)
+      table.insert(bound, {
+        mode = type(mode) == "table" and table.concat(mode, ",") or mode,
+        lhs = lhs,
+        rhs = rhs,
+        desc = desc,
+      })
+    end,
+  })
+
+  local function has_mapping(lhs, desc)
+    for _, mapping in ipairs(bound) do
+      if mapping.lhs == lhs and mapping.desc == desc then
+        return true
+      end
+    end
+    return false
+  end
+
+  assert_true(controller:prepare_output_terminal_buffer())
+  assert_equal(vim.api.nvim_get_option_value("filetype", { buf = controller.state.mission_dashboard_output_buf }), "codux")
+  assert_true(has_mapping("<CR>", "Submit Codux Prompt"))
+  assert_true(has_mapping("<C-c>", "Interrupt Codex"))
+  assert_true(has_mapping("<S-Tab>", "Switch Codex Mode"))
+  assert_true(has_mapping("<C-o>", "Return to Codux Missions"))
+  assert_true(has_mapping("<ScrollWheelDown>", "Scroll Codux Output"))
+  assert_true(has_mapping("<ScrollWheelUp>", "Scroll Codux Output"))
+  assert_false(has_mapping("q", "Close Codux Missions"))
+  output_fixtures.delete_buffer(controller.state.mission_dashboard_output_buf)
+  output_fixtures.delete_buffer(ctx.bufnr)
+end
+
+if type(vim.api) == "table" then
+  h.with_stubs({
+    {
+      target = vim.fn,
+      key = "jobwait",
+      value = function()
+        return { -1 }
+      end,
+    },
+    {
+      target = vim.fn,
+      key = "getmousepos",
+      value = function()
+        return {
+          winid = 13,
+          winrow = 4,
+          wincol = 9,
+        }
+      end,
+    },
+    {
+      target = vim.fn,
+      key = "chansend",
+      value = function(job_id, sequence)
+        vim.g.codux_output_scroll_job = job_id
+        vim.g.codux_output_scroll_sequence = sequence
+        return 1
+      end,
+    },
+  }, function()
+    local controller, ctx = output_fixtures.controller({
+      state = {
+        mission_dashboard_output_control = true,
+        mission_dashboard_output_job = 77,
+        mission_dashboard_output_win = 13,
+      },
+    })
+
+    assert_true(controller:send_output_terminal_mouse(65))
+    assert_equal(vim.g.codux_output_scroll_job, 77)
+    assert_equal(vim.g.codux_output_scroll_sequence, "\27[<65;9;4M")
+    vim.g.codux_output_scroll_job = nil
+    vim.g.codux_output_scroll_sequence = nil
+    output_fixtures.delete_buffer(ctx.bufnr)
+  end)
 end
 
 do

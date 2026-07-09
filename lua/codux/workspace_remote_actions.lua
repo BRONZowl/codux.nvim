@@ -55,6 +55,10 @@ function M.workspace_interactive_preview(runtime, entry, opts)
     return nil, "failed to select Codux workspace preview window"
   end
 
+  if opts.control == true then
+    runtime:tmux_system({ "set-option", "-t", preview_session, "mouse", "on" })
+  end
+
   local command = { "env", "-u", "TMUX", runtime:tmux_cmd(), "attach-session" }
   if opts.control ~= true then
     table.insert(command, "-f")

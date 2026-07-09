@@ -80,14 +80,40 @@ function M.controller(opts)
     namespace = opts.namespace,
     state = controller_state,
     is_loaded_buf = function(target)
-      return (target == ctx.bufnr and vim.api.nvim_buf_is_loaded(target)) or target == controller_state.mission_dashboard_buf
+      return (type(target) == "number" and vim.api.nvim_buf_is_loaded(target)) or target == controller_state.mission_dashboard_buf
     end,
     is_valid_win = function(win)
-      return win == controller_state.mission_dashboard_win or win == controller_state.mission_dashboard_output_win
+      return win == controller_state.mission_dashboard_win
+        or win == controller_state.mission_dashboard_output_win
+        or (type(win) == "number" and vim.api.nvim_win_is_valid(win))
     end,
     ui = {
+      create_scratch_buffer = function(options)
+        options = type(options) == "table" and options or {}
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        for key, value in pairs(options) do
+          pcall(vim.api.nvim_set_option_value, key, value, { buf = bufnr })
+        end
+        return bufnr
+      end,
       set_lines = function(_, lines)
         ctx.rendered_lines = lines
+        return true
+      end,
+      close_window = function(win)
+        if vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_win_close(win, true)
+        end
+      end,
+      delete_buffer = function(bufnr)
+        if vim.api.nvim_buf_is_valid(bufnr) then
+          vim.api.nvim_buf_delete(bufnr, { force = true })
+        end
+      end,
+      set_window_options = function(win, options)
+        for key, value in pairs(type(options) == "table" and options or {}) do
+          pcall(vim.api.nvim_set_option_value, key, value, { win = win })
+        end
         return true
       end,
     },

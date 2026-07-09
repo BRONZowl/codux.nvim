@@ -515,6 +515,14 @@ function M:restore_dashboard_mouse()
   return dashboard_windows.restore_dashboard_mouse(self)
 end
 
+function M:enable_output_control_mouse()
+  return dashboard_windows.enable_output_control_mouse(self)
+end
+
+function M:relock_output_control_mouse()
+  return dashboard_windows.relock_output_control_mouse(self)
+end
+
 function M:close_dashboard()
   return dashboard_windows.close_dashboard(self)
 end

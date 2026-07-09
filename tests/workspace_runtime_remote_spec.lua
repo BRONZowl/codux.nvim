@@ -378,6 +378,7 @@ do
     assert_contains(command_text, expected_server)
     assert_contains(command_text, "tmux new-session -d -t session -s codux-preview-test")
     assert_contains(command_text, "tmux select-window -t codux-preview-test:review")
+    assert_equal(command_text:find("tmux set-option -t codux-preview-test mouse on", 1, true), nil)
     assert_equal(command_text:find("tmux capture-pane", 1, true), nil)
     assert_equal(command_text:find(runtime:workspace_server_path("/repo", "review"), 1, true), nil)
     assert_equal(command_text:find(" codex ", 1, true), nil)
@@ -397,6 +398,9 @@ do
         if command == "tmux select-window -t codux-preview-test:review" then
           return "", 0
         end
+        if command == "tmux set-option -t codux-preview-test mouse on" then
+          return "", 0
+        end
       end,
     })
     local runtime = harness.runtime
@@ -409,6 +413,7 @@ do
     assert_equal(table.concat(preview.command, " "), "env -u TMUX tmux attach-session -t codux-preview-test")
     assert_true(preview.control)
     assert_equal(preview.preview_session, "codux-preview-test")
+    assert_contains(harness.command_text(), "tmux set-option -t codux-preview-test mouse on")
   end)
 end
 

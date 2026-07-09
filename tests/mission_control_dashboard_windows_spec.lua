@@ -531,9 +531,12 @@ if type(vim.api) == "table" then
 
   assert_true(controller:lock_dashboard_mouse())
   assert_equal(vim.o.mouse, "")
+  assert_true(controller:enable_output_control_mouse())
+  assert_equal(vim.o.mouse, "a")
   assert_true(controller:close_dashboard())
   assert_equal(vim.o.mouse, "a")
   assert_nil(controller.state.mission_dashboard_saved_mouse)
+  assert_nil(controller.state.mission_dashboard_output_control_mouse)
   vim.o.mouse = old_mouse
 end
 

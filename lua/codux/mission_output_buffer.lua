@@ -41,7 +41,7 @@ function M.create_output_buffer(self, kind, lines)
 
   local bufnr = self.ui.create_scratch_buffer({
     bufhidden = "wipe",
-    filetype = "codux-missions-output",
+    filetype = kind == "terminal" and "codux" or "codux-missions-output",
     buftype = "nofile",
     swapfile = false,
     modifiable = false,
@@ -55,7 +55,11 @@ function M.create_output_buffer(self, kind, lines)
     self.ui.set_lines(bufnr, lines, { modifiable = true })
     self:highlight_output_panel(bufnr, lines)
   end
-  self:bind_output_panel_commands(bufnr)
+  if kind == "terminal" then
+    self:bind_output_terminal_commands(bufnr)
+  else
+    self:bind_output_panel_commands(bufnr)
+  end
   self:attach_output_buffer_autocmd(bufnr)
   return bufnr
 end

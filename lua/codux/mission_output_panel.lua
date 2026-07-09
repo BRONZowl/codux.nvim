@@ -2,6 +2,7 @@ local Output = {}
 
 local output_buffer = require("codux.mission_output_buffer")
 local output_preview = require("codux.mission_output_preview")
+local output_terminal = require("codux.mission_output_terminal")
 
 local function role_cache_key(entry)
   entry = type(entry) == "table" and entry or {}
@@ -79,6 +80,9 @@ function Output:clear_output_panel_state()
   self.state.mission_dashboard_output_buf_kind = nil
   self.state.mission_dashboard_output_control = false
   self.state.mission_dashboard_output_control_key = nil
+  self.state.mission_dashboard_output_control_mouse = nil
+  self.state.mission_dashboard_output_terminal_controller = nil
+  self.state.mission_dashboard_output_terminal_state = nil
 end
 
 function Output:render_output_status(entry, message)
@@ -161,9 +165,11 @@ function Output:enter_output_control()
     self.state.mission_dashboard_output_control = false
     self.state.mission_dashboard_output_control_key = nil
     self:set_output_window_focusable(false)
+    self:relock_output_control_mouse()
     self:start_monitor_timer()
     return false
   end
+  self:enable_output_control_mouse()
   if not self:focus_output_panel() then
     self:exit_output_control()
     return false
@@ -180,6 +186,7 @@ function Output:exit_output_control()
   local entry = self:selected_output_entry() or self.state.mission_dashboard_output_entry
   self.state.mission_dashboard_output_control = false
   self.state.mission_dashboard_output_control_key = nil
+  self:relock_output_control_mouse()
   self:set_output_window_focusable(false)
   self:close_output_preview()
   self:render_output_panel(entry)
@@ -247,6 +254,7 @@ function Output:open_output_panel(entry)
 end
 
 function Output:close_output_panel()
+  self:relock_output_control_mouse()
   self:close_output_preview()
   self.ui.close_window(self.state.mission_dashboard_output_win)
   self.ui.delete_buffer(self.state.mission_dashboard_output_buf)
@@ -259,6 +267,10 @@ for name, fn in pairs(output_buffer) do
 end
 
 for name, fn in pairs(output_preview) do
+  Output[name] = fn
+end
+
+for name, fn in pairs(output_terminal) do
   Output[name] = fn
 end
 

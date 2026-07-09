@@ -479,6 +479,11 @@ if type(vim.api) == "table" then
         assert_equal(command, "startinsert")
       end,
     },
+    {
+      target = vim.o,
+      key = "mouse",
+      value = "",
+    },
   }, function()
     local preview_opts = {}
     local stopped_jobs = {}
@@ -508,6 +513,7 @@ if type(vim.api) == "table" then
         mission_dashboard_selected_row = 5,
         mission_dashboard_output_job = 55,
         mission_dashboard_output_preview = { preview_session = "codux-preview-old" },
+        mission_dashboard_saved_mouse = "n",
       },
       workspace_interactive_preview = function(_, opts)
         table.insert(preview_opts, opts or {})
@@ -564,6 +570,7 @@ if type(vim.api) == "table" then
     assert_equal(focusable_values[1], true)
     assert_equal(focused_win, 13)
     assert_equal(controller.state.mission_dashboard_output_job, 77)
+    assert_equal(vim.o.mouse, "a")
     assert_equal(highlight_refreshes, 1)
 
     assert_true(controller:exit_output_control())
@@ -571,6 +578,7 @@ if type(vim.api) == "table" then
     assert_equal(stopped_jobs[2], 77)
     assert_equal(preview_opts[2].control, nil)
     assert_equal(focusable_values[2], false)
+    assert_equal(vim.o.mouse, "")
     assert_true(monitor_started)
     assert_true(dashboard_focused)
     assert_equal(controller.state.mission_dashboard_output_job, 78)
@@ -602,70 +610,81 @@ if type(vim.api) == "table" then
 end
 
 if type(vim.api) == "table" then
-  local preview_opts = {}
-  local on_exit
-  local focusable_values = {}
-  local monitor_started = false
-  local dashboard_focused = false
-  local highlight_refreshes = 0
-  local next_job = 77
-  local entry = {
-    safe_name = "alpha-reviewer",
-    mission_role = "Reviewer",
-    status = "idle",
-  }
-  local controller, ctx = output_fixtures.controller({
-    state = {
-      mission_dashboard_output_control = true,
+  h.with_stubs({
+    {
+      target = vim.o,
+      key = "mouse",
+      value = "a",
     },
-    workspace_interactive_preview = function(_, opts)
-      table.insert(preview_opts, opts or {})
-      local preview = output_fixtures.preview()
-      preview.control = opts and opts.control == true
-      return preview, nil
-    end,
-    close_workspace_interactive_preview = function()
+  }, function()
+    local preview_opts = {}
+    local on_exit
+    local focusable_values = {}
+    local monitor_started = false
+    local dashboard_focused = false
+    local highlight_refreshes = 0
+    local next_job = 77
+    local entry = {
+      safe_name = "alpha-reviewer",
+      mission_role = "Reviewer",
+      status = "idle",
+    }
+    local controller, ctx = output_fixtures.controller({
+      state = {
+        mission_dashboard_output_control = true,
+        mission_dashboard_output_control_mouse = true,
+        mission_dashboard_saved_mouse = "a",
+      },
+      workspace_interactive_preview = function(_, opts)
+        table.insert(preview_opts, opts or {})
+        local preview = output_fixtures.preview()
+        preview.control = opts and opts.control == true
+        return preview, nil
+      end,
+      close_workspace_interactive_preview = function()
+        return true
+      end,
+      termopen = function(_, opts)
+        on_exit = opts.on_exit
+        local job = next_job
+        next_job = next_job + 1
+        return job
+      end,
+      get_window_config = function()
+        return { relative = "editor", focusable = true }
+      end,
+      set_window_config = function(_, config)
+        table.insert(focusable_values, config.focusable)
+        return true
+      end,
+    })
+    function controller:start_monitor_timer()
+      monitor_started = true
       return true
-    end,
-    termopen = function(_, opts)
-      on_exit = opts.on_exit
-      local job = next_job
-      next_job = next_job + 1
-      return job
-    end,
-    get_window_config = function()
-      return { relative = "editor", focusable = true }
-    end,
-    set_window_config = function(_, config)
-      table.insert(focusable_values, config.focusable)
+    end
+    function controller:focus_mission_list()
+      dashboard_focused = true
       return true
-    end,
-  })
-  function controller:start_monitor_timer()
-    monitor_started = true
-    return true
-  end
-  function controller:focus_mission_list()
-    dashboard_focused = true
-    return true
-  end
-  function controller:refresh_dashboard_highlight()
-    highlight_refreshes = highlight_refreshes + 1
-    return true
-  end
+    end
+    function controller:refresh_dashboard_highlight()
+      highlight_refreshes = highlight_refreshes + 1
+      return true
+    end
 
-  assert_true(controller:start_output_preview(entry, { control = true }))
-  assert_true(preview_opts[1].control)
-  assert_equal(controller.state.mission_dashboard_output_job, 77)
-  on_exit(77, 0)
-  assert_false(controller.state.mission_dashboard_output_control)
-  assert_equal(preview_opts[2].control, nil)
-  assert_equal(focusable_values[1], false)
-  assert_true(monitor_started)
-  assert_true(dashboard_focused)
-  assert_equal(controller.state.mission_dashboard_output_job, 78)
-  assert_equal(highlight_refreshes, 1)
-  output_fixtures.delete_buffer(ctx.bufnr)
+    assert_true(controller:start_output_preview(entry, { control = true }))
+    assert_true(preview_opts[1].control)
+    assert_equal(controller.state.mission_dashboard_output_job, 77)
+    on_exit(77, 0)
+    assert_false(controller.state.mission_dashboard_output_control)
+    assert_equal(preview_opts[2].control, nil)
+    assert_equal(focusable_values[1], false)
+    assert_equal(vim.o.mouse, "")
+    assert_true(monitor_started)
+    assert_true(dashboard_focused)
+    assert_equal(controller.state.mission_dashboard_output_job, 78)
+    assert_equal(highlight_refreshes, 1)
+    output_fixtures.delete_buffer(ctx.bufnr)
+  end)
 end
 
 if type(vim.api) == "table" then
