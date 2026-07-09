@@ -193,19 +193,24 @@ Outside tmux, workspace creation stops with `no tmux session running`.
 
 ## Mission Control
 
-Mission Control launches a small crew of Codux workspaces for one objective. Run
-`:CoduxMissionCreate`, enter the objective, review the preview, and launch.
+Mission Control launches one or more Codux agent workspaces around a shared
+objective. Run `:CoduxMissionCreate`, enter the objective, review the preview,
+and launch.
 
-The default crew is:
+New missions start with one default agent:
 
 - Agent: creates the requested outcome accurately, keeps context focused,
   validates cheaply, and asks only high-impact questions.
 
-Each role gets a clean Git worktree workspace under the project-scoped
+This default is only the starting point. A mission can have as many agents as
+you want: create additional role workspaces from the mission dashboard whenever
+the work needs more focused lanes.
+
+Each agent gets a clean Git worktree workspace under the project-scoped
 `../codux-worktrees/<project>/<workspace>` directory, mission metadata in Codux
 workspace state, workspace-auto permissions, and an initial plan-mode prompt. If
-Codux cannot confirm plan mode for a newly created mission role, it rolls back
-the new role workspaces.
+Codux cannot confirm plan mode for a newly created mission agent, it rolls back
+the new agent workspace.
 
 Each mission also carries a short focus packet. The packet is separate from each
 role's stable workspace instruction and captures the current intent, direction,
