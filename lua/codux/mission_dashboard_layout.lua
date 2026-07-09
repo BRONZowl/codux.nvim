@@ -35,6 +35,87 @@ local function dashboard_window_config(controller)
   return ok and type(config) == "table" and config or {}
 end
 
+local function text_tuple_value(value)
+  if type(value) == "string" then
+    return value
+  end
+  if type(value) == "table" and type(value[1]) == "table" and type(value[1][1]) == "string" then
+    return value[1][1]
+  end
+  return value
+end
+
+local function border_value(value)
+  if type(value) ~= "table" then
+    return value
+  end
+  local rounded = {
+    "\226\149\173",
+    "\226\148\128",
+    "\226\149\174",
+    "\226\148\130",
+    "\226\149\175",
+    "\226\148\128",
+    "\226\149\176",
+    "\226\148\130",
+  }
+  for index, char in ipairs(rounded) do
+    if value[index] ~= char then
+      return value
+    end
+  end
+  return "rounded"
+end
+
+local function config_value(key, value)
+  if key == "title" or key == "footer" then
+    return text_tuple_value(value)
+  end
+  if key == "border" then
+    return border_value(value)
+  end
+  return value
+end
+
+local function values_equal(left, right)
+  if type(left) ~= type(right) then
+    return false
+  end
+  if type(left) ~= "table" then
+    return left == right
+  end
+  for key, value in pairs(left) do
+    if not values_equal(value, right[key]) then
+      return false
+    end
+  end
+  for key in pairs(right) do
+    if left[key] == nil then
+      return false
+    end
+  end
+  return true
+end
+
+local function window_config_matches(current, desired)
+  current = type(current) == "table" and current or {}
+  desired = type(desired) == "table" and desired or {}
+  for key, desired_value in pairs(desired) do
+    if not values_equal(config_value(key, current[key]), config_value(key, desired_value)) then
+      return false
+    end
+  end
+  return true
+end
+
+local function apply_window_config(controller, win, config)
+  local ok, current = pcall(controller.get_window_config, win)
+  if ok and window_config_matches(current, config) then
+    return true
+  end
+  return controller.set_window_config(win, config)
+end
+
 local function dashboard_width(controller, dashboard_config)
   local ok, width = pcall(function()
     return controller:window_width()
@@ -309,23 +390,26 @@ function M.resize_dashboard_stack(controller, line_count, opts)
     preview_mode = opts.preview_mode,
     dashboard_min_height = opts.dashboard_min_height,
   })
-  local ok = controller.set_window_config(controller.state.mission_dashboard_win, dashboard_config)
+  local ok = apply_window_config(controller, controller.state.mission_dashboard_win, dashboard_config)
   if not ok then
     return false
   end
 
   if controller.is_valid_win(controller.state.mission_dashboard_search_win) then
-    ok = controller.set_window_config(controller.state.mission_dashboard_search_win, controller:dashboard_search_config()) and ok
+    ok = apply_window_config(controller, controller.state.mission_dashboard_search_win, controller:dashboard_search_config())
+      and ok
   end
   if controller.is_valid_win(controller.state.mission_dashboard_command_bar_win) then
     local command_lines = controller:dashboard_command_lines(dashboard_config.width)
-    ok = controller.set_window_config(
+    ok = apply_window_config(
+      controller,
       controller.state.mission_dashboard_command_bar_win,
       controller:dashboard_command_config(#command_lines)
     ) and ok
   end
   if controller.is_valid_win(controller.state.mission_dashboard_output_win) then
-    ok = controller.set_window_config(
+    ok = apply_window_config(
+      controller,
       controller.state.mission_dashboard_output_win,
       controller:dashboard_output_config(line_count, {
         selected_item = opts.selected_item,

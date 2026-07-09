@@ -300,6 +300,13 @@ do
     assert_equal(configs[91].height, 2)
     assert_equal(configs[92].height, 1)
     assert_equal(configs[93].height, 14)
+
+    calls = {}
+    assert_true(controller:resize_dashboard_stack(18, {
+      selected_item = { kind = "role", entry = { safe_name = "alpha-builder", status = "active" } },
+      dashboard_min_height = 2,
+    }))
+    assert_equal(table.concat(calls, ","), "")
   end)
 end
 
