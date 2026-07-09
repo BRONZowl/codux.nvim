@@ -2,6 +2,7 @@ local M = {}
 M.__index = M
 
 local token_usage = require("codux.token_usage")
+local providers = require("codux.providers")
 
 local function default_json_encode(value)
   if vim.json and type(vim.json.encode) == "function" then
@@ -39,6 +40,9 @@ function M.new(opts)
     end,
     get_mode = type(opts.get_mode) == "function" and opts.get_mode or function()
       return nil
+    end,
+    get_agent_provider = type(opts.get_agent_provider) == "function" and opts.get_agent_provider or function()
+      return "codex"
     end,
     command_util = type(opts.command_util) == "table" and opts.command_util or require("codux.command"),
     json_encode = type(opts.json_encode) == "function" and opts.json_encode or default_json_encode,
@@ -257,6 +261,13 @@ function M:refresh(force, opts)
   opts = type(opts) == "table" and opts or {}
   local require_running = opts.require_running ~= false
   if not self:enabled() or (require_running and not self.is_running()) then
+    return false
+  end
+
+  if not providers.token_usage_supported(self.get_agent_provider()) then
+    self:clear_usage()
+    self.state.last_error = nil
+    self.on_update()
     return false
   end
 

@@ -381,9 +381,12 @@ function M.preview_lines(mission, opts)
     "Launch Codux mission?",
     "",
     "Mission: " .. tostring(mission.name or ""),
-    "",
-    "Objective:",
   }
+  if type(mission.agent_provider) == "string" and mission.agent_provider ~= "" then
+    table.insert(result, "Agent: " .. tostring(mission.agent_provider))
+  end
+  table.insert(result, "")
+  table.insert(result, "Objective:")
   for _, line in ipairs(lines(mission.objective)) do
     table.insert(result, line)
   end

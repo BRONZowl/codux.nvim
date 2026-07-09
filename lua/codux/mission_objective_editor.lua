@@ -87,6 +87,9 @@ function M.open(controller, name, default_objective, opts)
       controller.notify(plan_error, vim.log.levels.ERROR)
       return
     end
+    if type(opts.agent_provider) == "string" and opts.agent_provider ~= "" then
+      mission.agent_provider = opts.agent_provider
+    end
 
     saved = true
     pcall(vim.api.nvim_set_option_value, "modified", false, { buf = bufnr })

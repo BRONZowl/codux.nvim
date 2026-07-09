@@ -2,10 +2,24 @@ local M = {}
 
 function M.defaults()
   return {
+    default_agent_provider = vim.env.CODUX_AGENT_PROVIDER or "codex",
     codex_cmd = vim.env.CODEX_CMD or 'codex -s workspace-write -a on-request -c approvals_reviewer="user"',
     workspace_auto_cmd = vim.env.CODEX_WORKSPACE_AUTO_CMD
       or 'codex -s workspace-write -a on-request -c approvals_reviewer="auto_review"',
     danger_full_access_cmd = vim.env.CODEX_DANGER_FULL_ACCESS_CMD or "codex -s danger-full-access -a never",
+    providers = {
+      codex = {
+        default_cmd = vim.env.CODEX_CMD or 'codex -s workspace-write -a on-request -c approvals_reviewer="user"',
+        auto_cmd = vim.env.CODEX_WORKSPACE_AUTO_CMD
+          or 'codex -s workspace-write -a on-request -c approvals_reviewer="auto_review"',
+        danger_cmd = vim.env.CODEX_DANGER_FULL_ACCESS_CMD or "codex -s danger-full-access -a never",
+      },
+      grok = {
+        default_cmd = vim.env.GROK_CMD or "grok --sandbox workspace",
+        auto_cmd = vim.env.GROK_WORKSPACE_AUTO_CMD or "grok --sandbox workspace --always-approve",
+        danger_cmd = vim.env.GROK_DANGER_FULL_ACCESS_CMD or "grok --sandbox off --always-approve",
+      },
+    },
     default_initial_mode = "plan",
     auto_open = true,
     auto_focus = true,

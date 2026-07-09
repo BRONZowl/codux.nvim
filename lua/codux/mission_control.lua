@@ -100,14 +100,15 @@ function M:open_preview(mission)
   return mission_preview.open(self, mission)
 end
 
-function M:open_prompt()
+function M:open_prompt(opts)
+  opts = type(opts) == "table" and opts or {}
   local prompt = require("codux.ui").single_line_prompt
   return prompt({ prompt = "Codux mission: ", zindex = 80 }, function(input)
     local name = trim(input)
     if name == "" then
       return
     end
-    self:open_objective_editor(name)
+    self:open_objective_editor(name, nil, { agent_provider = opts.agent_provider })
   end, {
     notify = self.notify,
     set_buffer_keymap = self.set_buffer_keymap,

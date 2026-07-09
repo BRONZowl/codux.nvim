@@ -20,12 +20,40 @@ local permission_profiles = {
   },
   {
     profile = "danger",
+    agent_provider = "codex",
     selector_label = "Full Access",
     keyed_label = "full",
     key = "f",
     desc = "Open Codex Full Access",
   },
+  {
+    profile = "default",
+    agent_provider = "grok",
+    selector_label = "Grok",
+    keyed_label = "grok",
+    key = "g",
+    desc = "Open Grok",
+  },
+  {
+    profile = "auto",
+    agent_provider = "grok",
+    selector_label = "Grok Autopilot",
+    keyed_label = "grok auto",
+    key = "G",
+    desc = "Open Grok Auto",
+  },
+  {
+    profile = "danger",
+    agent_provider = "grok",
+    selector_label = "Grok Full Access",
+    keyed_label = "grok full",
+    key = "!",
+    desc = "Open Grok Full Access",
+  },
 }
+
+permission_profiles[1].agent_provider = "codex"
+permission_profiles[2].agent_provider = "codex"
 
 local function filter_completion(values, arglead)
   local matches = {}
@@ -60,7 +88,7 @@ function M.install(api, deps)
   function api.permission_profile_choices()
     local choices = {}
     for _, spec in ipairs(permission_profiles) do
-      table.insert(choices, { label = spec.selector_label, profile = spec.profile })
+      table.insert(choices, { label = spec.selector_label, profile = spec.profile, agent_provider = spec.agent_provider })
     end
     return choices
   end
@@ -72,6 +100,7 @@ function M.install(api, deps)
         key = spec.key,
         label = spec.keyed_label,
         profile = spec.profile,
+        agent_provider = spec.agent_provider,
         desc = spec.desc,
       })
     end
@@ -86,6 +115,10 @@ function M.install(api, deps)
     opts = type(opts) == "table" and opts or {}
     if type(choice) ~= "table" then
       return false
+    end
+
+    if type(opts.open_provider) == "function" and type(choice.agent_provider) == "string" then
+      return opts.open_provider(choice.agent_provider, choice.profile, opts.initial_prompt, opts.open_opts)
     end
 
     local openers = {
@@ -111,7 +144,7 @@ function M.install(api, deps)
     end
 
     return selector(api.permission_profile_choices(), {
-      prompt = "Codex permission profile:",
+      prompt = "Codux agent profile:",
       format_item = function(item)
         return item.label
       end,
@@ -131,7 +164,7 @@ function M.install(api, deps)
     end
 
     return menu({
-      title = " Codex permission profile ",
+      title = " Codux agent profile ",
       choices = api.keyed_permission_profile_choices(),
       filetype = "codux-open-profile",
       cancel_desc = "Cancel Codux Open",
@@ -153,7 +186,7 @@ function M.install(api, deps)
   end
 
   function api.complete_create(arglead, _cmdline, _cursorpos)
-    return api.filter_completion({ "--custom" }, arglead)
+    return api.filter_completion({ "--custom", "--codex", "--grok" }, arglead)
   end
 
   return api

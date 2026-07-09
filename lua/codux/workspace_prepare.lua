@@ -1,6 +1,7 @@
 local mission_mod = require("codux.mission")
 local text_util = require("codux.text")
 local workspace_git = require("codux.workspace_git")
+local providers = require("codux.providers")
 
 local M = {}
 
@@ -118,6 +119,8 @@ function M.prepare(runtime, name, opts)
     initial_prompt = nil
   end
   local initial_mode = normalize_codex_mode(opts.initial_mode)
+  local runtime_agent_provider = type(runtime.agent_provider) == "function" and runtime:agent_provider() or "codex"
+  local agent_provider = providers.normalize_provider(opts.agent_provider) or runtime_agent_provider
   local permission_profile = opts.permission_profile == "auto" and "auto"
     or opts.permission_profile == "danger" and "danger"
     or opts.permission_profile == "default" and "default"
@@ -192,6 +195,7 @@ function M.prepare(runtime, name, opts)
     custom_instruction = custom_instruction,
     resolved_instruction = resolved_instruction,
     initial_mode = initial_mode,
+    agent_provider = agent_provider,
     permission_profile = permission_profile,
     codex_status = "idle",
     status = "idle",
@@ -207,6 +211,10 @@ function M.prepare(runtime, name, opts)
     workspace.initial_prompt = initial_prompt
   end
   workspace.permission_profile = permission_profile
+  workspace.agent_provider = agent_provider
+  if agent_provider == "grok" and (type(workspace.agent_session_id) ~= "string" or workspace.agent_session_id == "") then
+    workspace.agent_session_id = providers.generate_session_id()
+  end
   workspace.mission_id = opts.mission_id or workspace.mission_id
   workspace.mission_name = opts.mission_name or workspace.mission_name
   workspace.mission_role = opts.mission_role or workspace.mission_role
@@ -477,6 +485,9 @@ function M.create_mission(runtime, mission_or_name, objective, opts)
       resolved_instruction = role.instruction,
       initial_prompt = role.initial_prompt,
       initial_mode = "plan",
+      agent_provider = providers.normalize_provider(role.agent_provider)
+        or providers.normalize_provider(mission.agent_provider)
+        or (type(runtime.agent_provider) == "function" and runtime:agent_provider() or "codex"),
       permission_profile = "auto",
       worktree_path = spec.worktree_path,
       mission_id = mission.mission_id,

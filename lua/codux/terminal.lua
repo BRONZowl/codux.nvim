@@ -196,18 +196,18 @@ end
 
 function M:toggle_mode_state()
   self:set_mode(self.state.mode == "plan" and "execute" or "plan")
-  self.notify("Codex mode: " .. self.state.mode)
+  self.notify("Agent mode: " .. self.state.mode)
 end
 
 function M:send_mode_toggle_sequence(sequence)
   if not self:terminal_running() then
-    self.notify("Codex terminal is not running", vim.log.levels.WARN)
+    self.notify("Codux agent terminal is not running", vim.log.levels.WARN)
     return false
   end
 
   local send_ok, sent = pcall(vim.fn.chansend, self.state.job_id, sequence)
   if not send_ok or sent == 0 then
-    self.notify("Failed to switch Codex mode", vim.log.levels.ERROR)
+    self.notify("Failed to switch agent mode", vim.log.levels.ERROR)
     return false
   end
 
@@ -450,6 +450,10 @@ function M:schedule_startup_plan_sequence(initial_prompt, prompt_after_mode, att
   return terminal_startup.schedule_startup_plan_sequence(self, initial_prompt, prompt_after_mode, attempts_remaining, opts)
 end
 
+function M:schedule_startup_prompt(initial_prompt, attempts_remaining)
+  return terminal_startup.schedule_startup_prompt(self, initial_prompt, attempts_remaining)
+end
+
 function M:ensure_plan_mode(opts)
   return terminal_startup.ensure_plan_mode(self, opts)
 end
@@ -611,6 +615,8 @@ function M:health_info()
     mode = self.state.mode,
     permission_profile = self.state.permission_profile,
     last_permission_profile = self.state.last_permission_profile,
+    agent_provider = self.state.agent_provider,
+    last_agent_provider = self.state.last_agent_provider,
     codex_working = self.state.codex_working,
     working_indicator_visible = is_valid_win(self.state.working_win),
   }

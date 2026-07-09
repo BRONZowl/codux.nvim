@@ -22,6 +22,7 @@ local function mission_context(opts)
     mission_name = context.mission_name or context.mission_id,
     mission_objective = context.mission_objective,
     mission_focus_packet = context.mission_focus_packet,
+    agent_provider = context.agent_provider,
   }
 end
 
@@ -62,6 +63,9 @@ function M:preview_lines(request)
   }
   if type(request.mission_id) == "string" and request.mission_id ~= "" then
     table.insert(lines, "Mission: " .. tostring(request.mission_name or request.mission_id))
+  end
+  if type(request.agent_provider) == "string" and request.agent_provider ~= "" then
+    table.insert(lines, "Agent: " .. tostring(request.agent_provider))
   end
   table.insert(lines, "")
   table.insert(lines, "Instruction:")
@@ -374,6 +378,7 @@ function M:open_create_preview(request)
     self.create_workspace(request.name, {
       custom_instruction = custom_instruction,
       resolved_instruction = resolved_instruction,
+      agent_provider = request.agent_provider,
       mission_id = request.mission_id,
       mission_name = request.mission_name,
       mission_role = mission_role,
@@ -415,6 +420,10 @@ function M:open_custom_instruction_prompt(name, opts)
     request.mission_name = context.mission_name
     request.mission_objective = context.mission_objective
     request.mission_focus_packet = context.mission_focus_packet
+    request.agent_provider = context.agent_provider
+  end
+  if type(opts.agent_provider) == "string" and opts.agent_provider ~= "" then
+    request.agent_provider = opts.agent_provider
   end
 
   return self:open_instruction_editor(request, {

@@ -42,6 +42,14 @@ function M.normalize_codex_mode(value)
   return nil
 end
 
+function M.normalize_agent_provider(value)
+  if value == "grok" or value == "codex" then
+    return value
+  end
+
+  return "codex"
+end
+
 function M.normalize_record(store, record, safe_name, root)
   if type(record) ~= "table" then
     return nil
@@ -59,6 +67,8 @@ function M.normalize_record(store, record, safe_name, root)
     or record.codex_status == "question" and "question"
     or "idle"
   local codex_mode = not inactive_like_status(status) and M.normalize_codex_mode(record.codex_mode) or nil
+  local agent_provider = M.normalize_agent_provider(record.agent_provider)
+  local agent_session_id = record.agent_session_id or record.codex_session_id
 
   return {
     name = name,
@@ -83,6 +93,10 @@ function M.normalize_record(store, record, safe_name, root)
     nvim_server = record.nvim_server,
     custom_instruction = record.custom_instruction,
     resolved_instruction = record.resolved_instruction,
+    agent_provider = agent_provider,
+    agent_session_id = agent_session_id,
+    agent_session_path = record.agent_session_path or record.codex_session_path,
+    agent_session_captured_at = record.agent_session_captured_at or record.codex_session_captured_at,
     permission_profile = record.permission_profile or "default",
     codex_session_id = M.normalize_session_id(record.codex_session_id),
     codex_session_path = record.codex_session_path,
@@ -190,6 +204,13 @@ function M.workspace_from_state(record, fallback)
     custom_instruction = record.custom_instruction or fallback.custom_instruction,
     resolved_instruction = record.resolved_instruction or fallback.resolved_instruction,
     initial_mode = record.initial_mode or fallback.initial_mode,
+    agent_provider = M.normalize_agent_provider(record.agent_provider or fallback.agent_provider),
+    agent_session_id = record.agent_session_id or record.codex_session_id or fallback.agent_session_id or fallback.codex_session_id,
+    agent_session_path = record.agent_session_path or record.codex_session_path or fallback.agent_session_path or fallback.codex_session_path,
+    agent_session_captured_at = record.agent_session_captured_at
+      or record.codex_session_captured_at
+      or fallback.agent_session_captured_at
+      or fallback.codex_session_captured_at,
     permission_profile = record.permission_profile or fallback.permission_profile or "default",
     codex_session_id = M.normalize_session_id(record.codex_session_id) or M.normalize_session_id(fallback.codex_session_id),
     codex_session_path = record.codex_session_path or fallback.codex_session_path,
@@ -240,6 +261,12 @@ function M.state_record(_, workspace, existing)
     custom_instruction = workspace.custom_instruction,
     resolved_instruction = workspace.resolved_instruction,
     initial_mode = workspace.initial_mode or existing.initial_mode,
+    agent_provider = M.normalize_agent_provider(workspace.agent_provider or existing.agent_provider),
+    agent_session_id = workspace.agent_session_id or existing.agent_session_id or workspace.codex_session_id,
+    agent_session_path = workspace.agent_session_path or existing.agent_session_path or workspace.codex_session_path,
+    agent_session_captured_at = workspace.agent_session_captured_at
+      or existing.agent_session_captured_at
+      or workspace.codex_session_captured_at,
     permission_profile = workspace.permission_profile or "default",
     codex_session_id = M.normalize_session_id(workspace.codex_session_id),
     codex_session_path = workspace.codex_session_path,

@@ -18,6 +18,7 @@ local workspace_sessions = require("codux.workspace_sessions")
 local workspace_sync = require("codux.workspace_sync")
 local workspace_target = require("codux.workspace_target")
 local workspace_worktree = require("codux.workspace_worktree")
+local providers = require("codux.providers")
 
 local function noop() end
 
@@ -119,18 +120,25 @@ function M.parse_create_args(args)
   end
 
   local custom_requested = false
+  local agent_provider = nil
   local index = 2
   while index <= #args do
     local arg = args[index]
     if arg == "--custom" then
       custom_requested = true
       index = index + 1
+    elseif arg == "--grok" then
+      agent_provider = "grok"
+      index = index + 1
+    elseif arg == "--codex" then
+      agent_provider = "codex"
+      index = index + 1
     else
       return nil, false, "unknown workspace option: " .. tostring(arg)
     end
   end
 
-  return name, custom_requested, nil
+  return name, custom_requested, nil, agent_provider
 end
 
 function M.new(opts)
@@ -647,6 +655,13 @@ function M:permission_profile()
   return self.state.last_permission_profile or "default"
 end
 
+function M:agent_provider()
+  if self.terminal_running() then
+    return providers.normalize_provider(self.state.agent_provider) or "codex"
+  end
+  return providers.normalize_provider(self.state.last_agent_provider) or providers.default_provider(self.get_config())
+end
+
 function M:state_file()
   return self.store:state_file()
 end
@@ -940,6 +955,7 @@ function M:create_workspace(name, opts)
     resolved_instruction = opts.resolved_instruction,
     initial_prompt = opts.initial_prompt,
     initial_mode = "plan",
+    agent_provider = opts.agent_provider,
     permission_profile = opts.permission_profile,
     mission_id = opts.mission_id,
     mission_name = opts.mission_name,

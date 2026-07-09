@@ -11,6 +11,7 @@ local keymaps_mod = require("codux.keymaps")
 local mission_mod = require("codux.mission")
 local mission_setup_mod = require("codux.mission_setup")
 local prompt_actions_setup_mod = require("codux.prompt_actions_setup")
+local providers = require("codux.providers")
 local state_mod = require("codux.state")
 local text_util = require("codux.text")
 local terminal_mod = require("codux.terminal")
@@ -247,6 +248,9 @@ local token_monitor_setup = token_monitor_setup_mod.new({
   end,
   get_mode = function()
     return state.mode
+  end,
+  get_agent_provider = function()
+    return state.agent_provider
   end,
   command_util = command_util,
   on_update = function()
@@ -520,21 +524,59 @@ local function restart_hidden_with_command(command, permission_profile, initial_
 end
 
 function M.open_workspace_auto(initial_prompt, opts)
-  notify("Starting Codex autopilot with approve-for-me permissions")
-  return restart_with_command(config.workspace_auto_cmd, true, "auto", initial_prompt, opts)
+  opts = type(opts) == "table" and opts or {}
+  local agent_provider = providers.normalize_provider(opts.agent_provider) or providers.default_provider(config)
+  notify("Starting " .. providers.provider_label(agent_provider) .. " autopilot with approve-for-me permissions")
+  return restart_with_command(providers.command(config, agent_provider, "auto"), true, "auto", initial_prompt, {
+    initial_mode = opts.initial_mode,
+    agent_provider = agent_provider,
+  })
 end
 
 function M.open_danger_full_access(initial_prompt, opts)
-  notify("Starting Codex with no approvals and no sandbox", vim.log.levels.WARN)
-  return restart_with_command(config.danger_full_access_cmd, true, "danger", initial_prompt, opts)
+  opts = type(opts) == "table" and opts or {}
+  local agent_provider = providers.normalize_provider(opts.agent_provider) or providers.default_provider(config)
+  notify("Starting " .. providers.provider_label(agent_provider) .. " with no approvals and no sandbox", vim.log.levels.WARN)
+  return restart_with_command(providers.command(config, agent_provider, "danger"), true, "danger", initial_prompt, {
+    initial_mode = opts.initial_mode,
+    agent_provider = agent_provider,
+  })
 end
 
 function M.open_default(initial_prompt, opts)
   opts = type(opts) == "table" and opts or {}
+  local agent_provider = providers.normalize_provider(opts.agent_provider) or providers.default_provider(config)
   return terminal:open({
     initial_prompt = initial_prompt,
     initial_mode = opts.initial_mode,
+    agent_provider = agent_provider,
   })
+end
+
+function M.open_provider(agent_provider, profile, initial_prompt, opts)
+  opts = type(opts) == "table" and opts or {}
+  agent_provider = providers.normalize_provider(agent_provider) or providers.default_provider(config)
+  profile = providers.normalize_profile(profile) or "default"
+  opts.agent_provider = agent_provider
+  if profile == "auto" then
+    return M.open_workspace_auto(initial_prompt, opts)
+  end
+  if profile == "danger" then
+    return M.open_danger_full_access(initial_prompt, opts)
+  end
+  return M.open_default(initial_prompt, opts)
+end
+
+function M.open_grok(initial_prompt, opts)
+  return M.open_provider("grok", "default", initial_prompt, opts)
+end
+
+function M.open_grok_auto(initial_prompt, opts)
+  return M.open_provider("grok", "auto", initial_prompt, opts)
+end
+
+function M.open_grok_danger(initial_prompt, opts)
+  return M.open_provider("grok", "danger", initial_prompt, opts)
 end
 
 function M.open(opts)
@@ -549,6 +591,7 @@ function M.open(opts)
     open_default = M.open_default,
     open_auto = M.open_workspace_auto,
     open_danger = M.open_danger_full_access,
+    open_provider = M.open_provider,
   })
 end
 
@@ -564,6 +607,7 @@ function M.open_with_keyed_profile_menu(opts)
     open_default = M.open_default,
     open_auto = M.open_workspace_auto,
     open_danger = M.open_danger_full_access,
+    open_provider = M.open_provider,
   })
 end
 
@@ -583,21 +627,20 @@ function M.open_workspace_session(workspace, initial_prompt, opts)
   opts = opts or {}
   workspace = type(workspace) == "table" and workspace or nil
   local profile = workspace and workspace.permission_profile or opts.permission_profile or "default"
-  local command = config.codex_cmd
-  if profile == "auto" then
-    command = config.workspace_auto_cmd
-  elseif profile == "danger" then
-    command = config.danger_full_access_cmd
-  else
-    profile = "default"
-  end
+  local agent_provider = providers.normalize_provider(workspace and workspace.agent_provider)
+    or providers.normalize_provider(opts.agent_provider)
+    or providers.default_provider(config)
+  profile = providers.normalize_profile(profile) or "default"
+  local command = providers.command(config, agent_provider, profile)
 
   local developer_instructions = workspace and workspace.resolved_instruction or nil
-  command = M._v5.command_with_developer_instructions(command, developer_instructions)
+  command = providers.command_with_instructions(command, agent_provider, developer_instructions)
 
-  local resume_session_id = workspace and M._v5.normalize_codex_session_id(workspace.codex_session_id) or nil
-  if resume_session_id and (type(initial_prompt) ~= "string" or initial_prompt == "") then
-    command = M._v5.command_with_args(command, { "resume", resume_session_id })
+  local resume_session_id = workspace and (workspace.agent_session_id or workspace.codex_session_id) or nil
+  if resume_session_id and agent_provider == "grok" and (type(initial_prompt) == "string" and initial_prompt ~= "") then
+    command = providers.command_with_session_id(command, agent_provider, resume_session_id)
+  elseif resume_session_id and (type(initial_prompt) ~= "string" or initial_prompt == "") then
+    command = providers.command_with_resume(command, agent_provider, resume_session_id)
   end
 
   local visible = opts.visible == true
@@ -605,29 +648,44 @@ function M.open_workspace_session(workspace, initial_prompt, opts)
     hidden = not visible,
     capture_workspace_session = workspace ~= nil,
     initial_mode = workspace and workspace.initial_mode,
+    agent_provider = agent_provider,
     suppress_startup_plan_warning = M._v5.suppress_startup_plan_warning_for_workspace(workspace),
   })
 end
 
 function M.open_hidden(initial_prompt)
-  return start_hidden_with_command(config.codex_cmd, "default", initial_prompt)
+  local agent_provider = providers.default_provider(config)
+  return terminal:start_terminal(false, initial_prompt, providers.command(config, agent_provider, "default"), nil, "default", {
+    hidden = true,
+    agent_provider = agent_provider,
+  })
 end
 
 function M.open_workspace_auto_hidden(initial_prompt)
-  return restart_hidden_with_command(config.workspace_auto_cmd, "auto", initial_prompt)
+  local agent_provider = providers.default_provider(config)
+  terminal:exit()
+  return terminal:start_terminal(false, initial_prompt, providers.command(config, agent_provider, "auto"), nil, "auto", {
+    hidden = true,
+    agent_provider = agent_provider,
+  })
 end
 
 function M.open_danger_full_access_hidden(initial_prompt)
-  return restart_hidden_with_command(config.danger_full_access_cmd, "danger", initial_prompt)
+  local agent_provider = providers.default_provider(config)
+  terminal:exit()
+  return terminal:start_terminal(false, initial_prompt, providers.command(config, agent_provider, "danger"), nil, "danger", {
+    hidden = true,
+    agent_provider = agent_provider,
+  })
 end
 
 function M.open_workspace_auto_hidden_with_notice()
-  notify("Starting Codex autopilot with approve-for-me permissions")
+  notify("Starting " .. providers.provider_label(providers.default_provider(config)) .. " autopilot with approve-for-me permissions")
   return M.open_workspace_auto_hidden()
 end
 
 function M.open_danger_full_access_hidden_with_notice()
-  notify("Starting Codex with no approvals and no sandbox", vim.log.levels.WARN)
+  notify("Starting " .. providers.provider_label(providers.default_provider(config)) .. " with no approvals and no sandbox", vim.log.levels.WARN)
   return M.open_danger_full_access_hidden()
 end
 
@@ -771,8 +829,12 @@ mission_controller = mission_setup_mod.new({
   namespace = state.workspace_manager_ns,
 })
 
-function M.open_mission_prompt()
-  return mission_controller:open_prompt()
+function M.open_mission_prompt(opts)
+  return mission_controller:open_prompt(opts)
+end
+
+function M.open_grok_mission_prompt()
+  return mission_controller:open_prompt({ agent_provider = "grok" })
 end
 
 function M.open_missions()
@@ -914,6 +976,8 @@ function M.health_info()
     terminal_buffer = terminal_info.terminal_buffer,
     terminal_job_id = terminal_info.terminal_job_id,
     mode = terminal_info.mode,
+    agent_provider = terminal_info.agent_provider,
+    last_agent_provider = terminal_info.last_agent_provider,
     permission_profile = terminal_info.permission_profile,
     last_permission_profile = terminal_info.last_permission_profile,
     codex_working = terminal_info.codex_working,

@@ -27,6 +27,8 @@ function M.startup_sequence_ready(controller)
       saw_ready_surface = saw_ready_surface
         or line:match("^>") ~= nil
         or line:match("^›") ~= nil
+        or line:match("^grok[>%s]") ~= nil
+        or line:match("^%$") ~= nil
         or terminal_mode.detect_terminal_mode_from_line(line) ~= nil
     end
   end
@@ -230,6 +232,40 @@ function M.schedule_startup_plan_sequence(controller, initial_prompt, prompt_aft
   else
     run(0)
   end
+end
+
+function M.schedule_startup_prompt(controller, initial_prompt, attempts_remaining)
+  attempts_remaining = tonumber(attempts_remaining) or 20
+  if type(initial_prompt) ~= "string" or initial_prompt == "" then
+    return false
+  end
+
+  local function run(attempts_left)
+    if not controller:terminal_running() then
+      return
+    end
+
+    if controller:startup_sequence_ready() then
+      controller:paste_startup_prompt(initial_prompt)
+      return
+    end
+
+    if attempts_left > 0 and type(vim.defer_fn) == "function" then
+      vim.defer_fn(function()
+        run(attempts_left - 1)
+      end, 250)
+    end
+  end
+
+  if type(vim.defer_fn) == "function" then
+    vim.defer_fn(function()
+      run(attempts_remaining - 1)
+    end, 250)
+  else
+    run(0)
+  end
+
+  return true
 end
 
 function M.ensure_plan_mode(controller, opts)

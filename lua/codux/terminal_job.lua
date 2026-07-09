@@ -1,4 +1,5 @@
 local ui = require("codux.ui")
+local providers = require("codux.providers")
 
 local M = {}
 
@@ -18,8 +19,12 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
   opts = opts or {}
   local hidden = opts.hidden == true
   local initial_mode = normalize_initial_mode(opts.initial_mode) or normalize_initial_mode(controller:config().default_initial_mode)
+  local agent_provider = providers.normalize_provider(opts.agent_provider)
+    or providers.normalize_provider(workspace and workspace.agent_provider)
+    or providers.default_provider(controller:config())
   local has_initial_prompt = type(initial_prompt) == "string" and initial_prompt ~= ""
   local apply_initial_mode = initial_mode == "plan"
+  local paste_prompt = has_initial_prompt and (apply_initial_mode or providers.prompt_must_be_pasted(agent_provider))
   local prompt_after_mode = apply_initial_mode and has_initial_prompt
 
   if controller:terminal_running() then
@@ -29,7 +34,7 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
     return true
   end
 
-  command = command or controller:config().codex_cmd
+  command = command or providers.command(controller:config(), agent_provider, permission_profile)
 
   local error_message = controller.command_util.error(command)
   if error_message then
@@ -38,8 +43,8 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
   end
 
   local executable = controller.command_util.executable(command)
-  if type(executable) == "string" and executable == "codex" and vim.fn.executable(executable) ~= 1 then
-    controller.notify("Codex CLI not found on PATH", vim.log.levels.WARN)
+  if type(executable) == "string" and vim.fn.executable(executable) ~= 1 then
+    controller.notify(providers.provider_label(agent_provider) .. " CLI not found on PATH", vim.log.levels.WARN)
   end
 
   local previous_win = vim.api.nvim_get_current_win()
@@ -76,19 +81,22 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
   local job_id
   local session_capture_mtime = os.time() - 2
   local command_prompt = initial_prompt
-  if prompt_after_mode then
+  if paste_prompt then
     command_prompt = nil
   end
-  local term_command = controller.command_util.with_prompt(command, command_prompt)
+  local term_command = agent_provider == "grok" and providers.command_with_prompt(command, agent_provider, command_prompt)
+    or controller.command_util.with_prompt(command, command_prompt)
   local term_options = {
     on_exit = function(_, code)
       local expected_exit = controller.state.exiting_jobs[job_id] == true
       local pending_delete_buffer = controller.state.pending_delete_buffers[job_id]
+      local exited_provider = controller.state.agent_provider
       controller.state.exiting_jobs[job_id] = nil
       controller.state.pending_delete_buffers[job_id] = nil
       if controller.state.job_id == job_id then
         controller.state.job_id = nil
         controller.state.permission_profile = "default"
+        controller.state.agent_provider = providers.default_provider(controller:config())
         controller.sync_workspace_activity("idle")
         controller.state.last_prompt_line = nil
         controller:reset_terminal_prompt_input()
@@ -98,7 +106,7 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
         controller.reset_workspace_runtime()
       end
       if not expected_exit and code ~= 0 then
-        controller.notify("Codex exited with code " .. tostring(code), vim.log.levels.WARN)
+        controller.notify(providers.provider_label(exited_provider) .. " exited with code " .. tostring(code), vim.log.levels.WARN)
       end
       if pending_delete_buffer ~= nil then
         controller:delete_buffer_deferred(pending_delete_buffer)
@@ -117,7 +125,7 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
 
   if not term_ok or type(job_id) ~= "number" or job_id <= 0 then
     controller.state.job_id = nil
-    controller.notify("Failed to start Codex", vim.log.levels.ERROR)
+    controller.notify("Failed to start " .. providers.provider_label(agent_provider), vim.log.levels.ERROR)
     if is_valid_win(previous_win) then
       pcall(vim.api.nvim_set_current_win, previous_win)
     end
@@ -129,7 +137,10 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
   controller:invalidate_terminal_prompt_tracking()
   controller.state.permission_profile = permission_profile or "default"
   controller.state.last_permission_profile = controller.state.permission_profile
+  controller.state.agent_provider = agent_provider
+  controller.state.last_agent_provider = agent_provider
   if workspace ~= nil then
+    workspace.agent_provider = agent_provider
     controller.state.workspace = workspace
   end
   if controller:valid_win() then
@@ -142,6 +153,8 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
     controller:schedule_startup_plan_sequence(initial_prompt, prompt_after_mode, nil, {
       suppress_warning = opts.suppress_startup_plan_warning == true,
     })
+  elseif paste_prompt then
+    controller:schedule_startup_prompt(initial_prompt)
   end
   if opts.capture_workspace_session == true and workspace ~= nil then
     controller.capture_workspace_session(workspace, session_capture_mtime)
@@ -166,7 +179,7 @@ function M.ensure_codex(controller, focus, initial_prompt)
   end
 
   if not controller:config().auto_open then
-    controller.notify("Codex popup is not open", vim.log.levels.WARN)
+    controller.notify("Codux agent popup is not open", vim.log.levels.WARN)
     return false
   end
 
@@ -190,6 +203,7 @@ function M.open(controller, opts)
 
   return controller:start_terminal(focus, opts.initial_prompt, nil, nil, "default", {
     initial_mode = opts.initial_mode,
+    agent_provider = opts.agent_provider,
   })
 end
 
@@ -198,6 +212,7 @@ function M.restart_with_command(controller, command, focus, permission_profile, 
   controller:exit()
   return controller:start_terminal(focus ~= false, initial_prompt, command, nil, permission_profile, {
     initial_mode = opts.initial_mode,
+    agent_provider = opts.agent_provider,
   })
 end
 
@@ -232,6 +247,7 @@ function M.exit(controller)
   end
   controller.state.job_id = nil
   controller.state.permission_profile = "default"
+  controller.state.agent_provider = providers.default_provider(controller:config())
   controller.sync_workspace_activity("idle")
   controller.state.last_prompt_line = nil
   controller:reset_terminal_prompt_input()
@@ -265,7 +281,7 @@ function M.send_to_codex(controller, message)
   end
 
   if not controller:terminal_running() then
-    controller.notify("Codex terminal is not running", vim.log.levels.WARN)
+    controller.notify("Codux agent terminal is not running", vim.log.levels.WARN)
     return false
   end
 
@@ -276,7 +292,7 @@ function M.send_to_codex(controller, message)
   local paste = "\27[200~" .. message .. "\27[201~\r"
   local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, paste)
   if not send_ok or sent == 0 then
-    controller.notify("Failed to send prompt to Codex", vim.log.levels.ERROR)
+    controller.notify("Failed to send prompt to agent", vim.log.levels.ERROR)
     return false
   end
 

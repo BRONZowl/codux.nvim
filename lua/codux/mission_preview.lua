@@ -96,7 +96,9 @@ function M.open(controller, mission)
 
   local function edit_mission()
     return defer_preview_action(function()
-      return controller:open_objective_editor(mission.name, mission.objective)
+      return controller:open_objective_editor(mission.name, mission.objective, {
+        agent_provider = mission.agent_provider,
+      })
     end)
   end
 

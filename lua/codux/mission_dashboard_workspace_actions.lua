@@ -74,6 +74,7 @@ function M.mission_context_for_workspace(_, entry)
     mission_name = entry.mission_name,
     mission_objective = entry.mission_objective,
     mission_focus_packet = entry.mission_focus_packet,
+    agent_provider = entry.agent_provider,
   }
 end
 

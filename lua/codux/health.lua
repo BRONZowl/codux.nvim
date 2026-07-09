@@ -1,5 +1,6 @@
 local M = {}
 local command_util = require("codux.command")
+local providers = require("codux.providers")
 
 local function health_start(name)
   if vim.health.start then
@@ -75,11 +76,13 @@ function M.doctor_lines(deps)
   end
 
   local config = type(deps.config) == "table" and deps.config or {}
-  local codex_executable = command_util.executable(config.codex_cmd) or "codex"
-  if vim.fn.executable(codex_executable) == 1 then
-    add("[ok]", "codex found: " .. codex_executable)
-  else
-    add("[warn]", "codex command not found: " .. tostring(codex_executable))
+  for _, provider in ipairs({ "codex", "grok" }) do
+    local executable_name = providers.executable(config, provider, "default") or provider
+    if vim.fn.executable(executable_name) == 1 then
+      add("[ok]", provider .. " found: " .. executable_name)
+    else
+      add("[warn]", provider .. " command not found: " .. tostring(executable_name))
+    end
   end
 
   local state_file = type(deps.workspace_state_file) == "function" and deps.workspace_state_file() or nil
@@ -291,15 +294,21 @@ function M.check()
     end
   end
 
-  local commands = {
-    { label = "default", value = info.config and info.config.codex_cmd },
-    { label = "workspace auto", value = info.config and info.config.workspace_auto_cmd },
-    { label = "danger full access", value = info.config and info.config.danger_full_access_cmd },
-  }
+  local commands = {}
+  for _, provider in ipairs({ "codex", "grok" }) do
+    for _, profile in ipairs({ "default", "auto", "danger" }) do
+      table.insert(commands, {
+        provider = provider,
+        profile = profile,
+        label = providers.provider_label(provider) .. " " .. providers.profile_label(profile):lower(),
+        value = providers.command(info.config, provider, profile),
+      })
+    end
+  end
 
   local checked_executables = {}
   for _, entry in ipairs(commands) do
-    local config_error = command_util.error(entry.value, "configured Codex command")
+    local config_error = command_util.error(entry.value, "configured " .. entry.provider .. " command")
     if config_error then
       health_error(entry.label .. " command: " .. config_error)
       return
@@ -311,23 +320,23 @@ function M.check()
     if type(executable_name) == "string" and executable_name ~= "" and not checked_executables[executable_name] then
       checked_executables[executable_name] = true
       if executable(executable_name) then
-        health_ok("Codex executable found: " .. executable_name)
+        health_ok(providers.provider_label(entry.provider) .. " executable found: " .. executable_name)
       else
-        health_warn("Codex executable not found: " .. tostring(executable_name or "unknown"))
+        health_warn(providers.provider_label(entry.provider) .. " executable not found: " .. tostring(executable_name or "unknown"))
       end
     end
   end
 
   if info.popup_visible then
-    health_ok("Codex popup is visible")
+    health_ok("Codux agent popup is visible")
   else
-    health_ok("Codex popup is hidden (normal when idle)")
+    health_ok("Codux agent popup is hidden (normal when idle)")
   end
 
   if info.terminal_running then
-    health_ok("Codex terminal job is running")
-    health_ok("Codex mode: " .. tostring(info.mode or "unknown"))
-    health_ok("Codex permission profile: " .. tostring(info.permission_profile or "default"))
+    health_ok(tostring(providers.provider_label(info.agent_provider)) .. " terminal job is running")
+    health_ok("Agent mode: " .. tostring(info.mode or "unknown"))
+    health_ok("Agent permission profile: " .. tostring(info.permission_profile or "default"))
     if type(info.workspace) == "table" then
       health_ok("Codux workspace: " .. tostring(info.workspace.name or "unknown"))
     end

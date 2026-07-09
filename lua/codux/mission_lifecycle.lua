@@ -143,6 +143,7 @@ function M.start(runtime, name, opts)
       local workspace, workspace_error = runtime:prepare_workspace(workspace_name, {
         allow_existing = true,
         initial_mode = "plan",
+        agent_provider = entry.agent_provider,
         permission_profile = entry.permission_profile or "auto",
         require_existing = true,
         project_root = entry.project_root or root,

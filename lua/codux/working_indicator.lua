@@ -3,10 +3,10 @@ local ui_mod = require("codux.ui")
 local M = {}
 
 local frames = {
-  " codex is working    ",
-  " codex is working.   ",
-  " codex is working..  ",
-  " codex is working... ",
+  " agent is working    ",
+  " agent is working.   ",
+  " agent is working..  ",
+  " agent is working... ",
 }
 
 function M.config()

@@ -1,4 +1,5 @@
 local M = {}
+local providers = require("codux.providers")
 
 function M.apply_meta(runtime, workspace, meta)
   return runtime.store.apply_codex_session_meta(workspace, meta)
@@ -62,6 +63,10 @@ function M.persist_meta(runtime, workspace, meta)
   record.codex_session_id = session_id
   record.codex_session_path = meta.path
   record.codex_session_captured_at = runtime:timestamp()
+  record.agent_provider = "codex"
+  record.agent_session_id = session_id
+  record.agent_session_path = meta.path
+  record.agent_session_captured_at = record.codex_session_captured_at
   project.updated_at = record.codex_session_captured_at
 
   local write_ok = runtime:write_state(state_data)
@@ -72,6 +77,10 @@ function M.persist_meta(runtime, workspace, meta)
   workspace.codex_session_id = record.codex_session_id
   workspace.codex_session_path = record.codex_session_path
   workspace.codex_session_captured_at = record.codex_session_captured_at
+  workspace.agent_provider = "codex"
+  workspace.agent_session_id = record.agent_session_id
+  workspace.agent_session_path = record.agent_session_path
+  workspace.agent_session_captured_at = record.agent_session_captured_at
   if
     runtime.state.workspace == workspace
     or (runtime.state.workspace and runtime.state.workspace.safe_name == safe_name and runtime.state.workspace.project_root == root)
@@ -79,6 +88,10 @@ function M.persist_meta(runtime, workspace, meta)
     runtime.state.workspace.codex_session_id = record.codex_session_id
     runtime.state.workspace.codex_session_path = record.codex_session_path
     runtime.state.workspace.codex_session_captured_at = record.codex_session_captured_at
+    runtime.state.workspace.agent_provider = "codex"
+    runtime.state.workspace.agent_session_id = record.agent_session_id
+    runtime.state.workspace.agent_session_path = record.agent_session_path
+    runtime.state.workspace.agent_session_captured_at = record.agent_session_captured_at
   end
   if runtime.state.workspace_manager_project_root == root then
     runtime.render_workspace_manager()
@@ -89,6 +102,28 @@ end
 
 function M.schedule_capture(runtime, workspace, min_mtime)
   if type(workspace) ~= "table" then
+    return
+  end
+
+  local agent_provider = providers.normalize_provider(workspace.agent_provider) or "codex"
+  if agent_provider == "grok" then
+    workspace.agent_session_id = type(workspace.agent_session_id) == "string" and workspace.agent_session_id ~= ""
+        and workspace.agent_session_id
+      or providers.generate_session_id()
+    workspace.agent_session_captured_at = runtime:timestamp()
+    local root = workspace.project_root
+    local safe_name = workspace.safe_name
+    local state_data = runtime:read_state()
+    local project = type(state_data) == "table" and type(state_data.projects) == "table" and state_data.projects[root] or nil
+    local record = type(project) == "table" and type(project.workspaces) == "table" and project.workspaces[safe_name] or nil
+    if type(record) == "table" then
+      record.agent_provider = "grok"
+      record.agent_session_id = workspace.agent_session_id
+      record.agent_session_path = workspace.agent_session_path
+      record.agent_session_captured_at = workspace.agent_session_captured_at
+      project.updated_at = workspace.agent_session_captured_at
+      runtime:write_state(state_data)
+    end
     return
   end
 

@@ -5,7 +5,7 @@ local M = {}
 M.MANAGER_NAME_WIDTH = 28
 M.MANAGER_STATUS_WIDTH = 8
 M.MANAGER_MODE_WIDTH = 4
-M.MANAGER_PROFILE_WIDTH = 7
+M.MANAGER_PROFILE_WIDTH = 10
 M.MANAGER_AGE_WIDTH = 4
 M.MANAGER_GAP = "  "
 
@@ -162,7 +162,8 @@ function M.manager_line(entry, width)
   entry = type(entry) == "table" and entry or {}
   local status = entry.status or "inactive"
   local mode = M.manager_mode_label(entry)
-  local profile = entry.permission_profile or "default"
+  local provider = entry.agent_provider == "grok" and "grok" or "codex"
+  local profile = provider .. "/" .. (entry.permission_profile or "default")
   local age = M.relative_age_label(M.session_timestamp(entry))
   local target = type(entry.target_path) == "string" and entry.target_path ~= "" and vim.fn.fnamemodify(entry.target_path, ":t") or ""
   local name_width, target_width = M.manager_column_widths(width)

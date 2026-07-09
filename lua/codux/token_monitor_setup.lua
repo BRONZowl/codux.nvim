@@ -11,6 +11,7 @@ function M.new(opts)
     state = opts.state,
     is_running = opts.is_running,
     get_mode = opts.get_mode,
+    get_agent_provider = opts.get_agent_provider,
     command_util = opts.command_util,
     json_encode = json.encode,
     json_decode = json.decode,

@@ -148,7 +148,7 @@ do
   end
 
   assert_true(ui.key_choice_menu({
-    title = " Codex permission profile ",
+    title = " Codux agent profile ",
     choices = {
       { key = "d", label = "default", profile = "default", desc = "Open Codex Default" },
       { key = "a", label = "auto", profile = "auto", desc = "Open Codex Auto" },
@@ -217,7 +217,7 @@ do
   assert_equal(rendered_lines[1], "d - default")
   assert_equal(rendered_lines[2], "a - auto")
   assert_equal(rendered_lines[3], "f - full")
-  assert_equal(window_config.title, " Codex permission profile ")
+  assert_equal(window_config.title, " Codux agent profile ")
   assert_equal(window_config.height, 3)
   assert_false(window_config.focusable)
   assert_equal(sink_config.width, 1)
@@ -250,7 +250,7 @@ do
   local close_key
 
   assert_true(ui.key_choice_menu({
-    title = " Codex permission profile ",
+    title = " Codux agent profile ",
     choices = {
       { key = "d", label = "default", profile = "default" },
     },

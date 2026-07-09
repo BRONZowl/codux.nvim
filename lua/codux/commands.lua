@@ -18,12 +18,12 @@ function M.create(codux, deps)
       return
     end
 
-    local name, _custom_requested, error_message = codux._v5.parse_create_args(opts.fargs)
+    local name, _custom_requested, error_message, agent_provider = codux._v5.parse_create_args(opts.fargs)
     if error_message then
       notify(error_message, vim.log.levels.ERROR)
       return
     end
-    codux._v5.open_custom_workspace_instruction_prompt(name)
+    codux._v5.open_custom_workspace_instruction_prompt(name, { agent_provider = agent_provider })
   end
 
   vim.api.nvim_create_user_command("Codux", function()
@@ -41,6 +41,29 @@ function M.create(codux, deps)
   vim.api.nvim_create_user_command("CoduxOpenDanger", function()
     codux.open_danger_full_access()
   end, { force = true, desc = "Open Codex danger zone with no sandbox" })
+
+  vim.api.nvim_create_user_command("CoduxOpenProvider", function(opts)
+    codux.open_provider(opts.fargs[1], opts.fargs[2])
+  end, {
+    force = true,
+    nargs = "+",
+    complete = function(arglead)
+      return codux._v5.filter_completion({ "codex", "grok", "default", "auto", "danger" }, arglead)
+    end,
+    desc = "Open Codux with a specific agent provider",
+  })
+
+  vim.api.nvim_create_user_command("CoduxOpenGrok", function()
+    codux.open_grok()
+  end, { force = true, desc = "Open Grok" })
+
+  vim.api.nvim_create_user_command("CoduxOpenGrokAuto", function()
+    codux.open_grok_auto()
+  end, { force = true, desc = "Open Grok autopilot" })
+
+  vim.api.nvim_create_user_command("CoduxOpenGrokDanger", function()
+    codux.open_grok_danger()
+  end, { force = true, desc = "Open Grok full access" })
 
   vim.api.nvim_create_user_command(
     "CoduxWorkspace",
@@ -101,6 +124,16 @@ function M.create(codux, deps)
     end
     codux.open_mission_prompt()
   end, { force = true, nargs = "?", desc = "Create a Codux Mission Control crew" })
+
+  vim.api.nvim_create_user_command("CoduxMissionCreateGrok", function(opts)
+    if type(opts.args) == "string" and opts.args ~= "" then
+      if mission_controller then
+        mission_controller:open_objective_editor(opts.args, nil, { agent_provider = "grok" })
+      end
+      return
+    end
+    codux.open_mission_prompt({ agent_provider = "grok" })
+  end, { force = true, nargs = "?", desc = "Create a Grok-backed Codux Mission Control crew" })
 
   vim.api.nvim_create_user_command("CoduxMissions", function()
     codux.open_missions()

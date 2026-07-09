@@ -45,20 +45,40 @@ function M.install_terminal(api, deps)
     return terminal:send_to_codex(tostring(message or "")) and "ok" or "failed"
   end
 
+  function api.remote_send_to_agent(message)
+    return api.remote_send_to_codex(message)
+  end
+
   function api.remote_select_codex_question_option(option, with_note)
     return terminal:select_codex_question_option(tostring(option or ""), with_note == true) and "ok" or "failed"
+  end
+
+  function api.remote_select_agent_question_option(option, with_note)
+    return api.remote_select_codex_question_option(option, with_note)
   end
 
   function api.remote_submit_codex_question_note(note)
     return terminal:submit_codex_question_note(tostring(note or "")) and "ok" or "failed"
   end
 
+  function api.remote_submit_agent_question_note(note)
+    return api.remote_submit_codex_question_note(note)
+  end
+
   function api.remote_interrupt_codex_session()
     return terminal:interrupt_codex_session() and "ok" or "failed"
   end
 
+  function api.remote_interrupt_agent_session()
+    return api.remote_interrupt_codex_session()
+  end
+
   function api.remote_switch_codex_mode()
     return terminal:toggle_plan_mode() and "ok" or "failed"
+  end
+
+  function api.remote_switch_agent_mode()
+    return api.remote_switch_codex_mode()
   end
 
   function api.remote_show_existing_codex_terminal()
@@ -66,6 +86,10 @@ function M.install_terminal(api, deps)
       return "not_running"
     end
     return terminal:open_window(true) and "ok" or "failed"
+  end
+
+  function api.remote_show_existing_agent_terminal()
+    return api.remote_show_existing_codex_terminal()
   end
 
   function api.remote_workspace_status()

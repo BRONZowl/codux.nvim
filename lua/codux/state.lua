@@ -30,6 +30,8 @@ function M.initial()
     terminal_mode_sync_pending = false,
     permission_profile = "default",
     last_permission_profile = "default",
+    agent_provider = "codex",
+    last_agent_provider = "codex",
     workspace = nil,
     workspace_manager_buf = nil,
     workspace_manager_win = nil,

@@ -16,6 +16,9 @@ if type(vim.api) == "table" then
   assert_equal(profile_choices[2].label, "Autopilot")
   assert_equal(profile_choices[3].profile, "danger")
   assert_equal(profile_choices[3].label, "Full Access")
+  assert_equal(profile_choices[4].profile, "default")
+  assert_equal(profile_choices[4].agent_provider, "grok")
+  assert_equal(profile_choices[4].label, "Grok")
 
   local keyed_profile_choices = codux._v5.keyed_permission_profile_choices()
   assert_equal(keyed_profile_choices[1].key, "d")
@@ -27,6 +30,10 @@ if type(vim.api) == "table" then
   assert_equal(keyed_profile_choices[3].key, "f")
   assert_equal(keyed_profile_choices[3].label, "full")
   assert_equal(keyed_profile_choices[3].profile, "danger")
+  assert_equal(keyed_profile_choices[4].key, "g")
+  assert_equal(keyed_profile_choices[4].label, "grok")
+  assert_equal(keyed_profile_choices[4].profile, "default")
+  assert_equal(keyed_profile_choices[4].agent_provider, "grok")
 
   local profile_calls = {}
   local function open_default(prompt)
@@ -81,7 +88,7 @@ if type(vim.api) == "table" then
   assert_equal(codux._v5.select_permission_profile_open({
     initial_prompt = "hello",
     selector = function(items, opts, callback)
-      assert_equal(opts.prompt, "Codex permission profile:")
+      assert_equal(opts.prompt, "Codux agent profile:")
       assert_equal(opts.format_item(items[2]), "Autopilot")
       return callback(items[1])
     end,
@@ -126,7 +133,7 @@ if type(vim.api) == "table" then
   assert_equal(codux._v5.select_keyed_permission_profile_open({
     initial_prompt = "hello",
     menu = function(opts, callback)
-      assert_equal(opts.title, " Codex permission profile ")
+      assert_equal(opts.title, " Codux agent profile ")
       assert_equal(opts.filetype, "codux-open-profile")
       assert_equal(opts.choices[1].key, "d")
       assert_equal(opts.choices[2].key, "a")
