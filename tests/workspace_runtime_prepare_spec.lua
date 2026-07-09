@@ -22,6 +22,8 @@ local with_workspace_prepare_env = fixtures.with_workspace_prepare_env
 local workspace_prepare_runtime = fixtures.workspace_prepare_runtime
 local workspace_store = fixtures.workspace_store
 local prepare_harness = fixtures.prepare_harness
+local mission_builder_prepare_harness = fixtures.mission_builder_prepare_harness
+local mission_builder_prepare_opts = fixtures.mission_builder_prepare_opts
 do
   with_workspace_prepare_env(function()
     local created = false
@@ -136,59 +138,16 @@ end
 
 do
   with_workspace_prepare_env(function()
-    local created = false
-    local killed = false
-    local harness = prepare_harness({
-      system = function(_, command)
-        if command == "tmux display-message -p #S" then
-          return "session\n", 0
-        end
-        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-builder" then
-          return "", 1
-        end
-        if command == "git -C /repo worktree add -b dev/mission-builder /codux-worktrees/mission-builder main" then
-          return "", 0
-        end
-        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
-          if created then
-            return "@1\tmission-builder\n", 0
-          end
-          return "", 0
-        end
-        if command:find("tmux new%-window", 1, false) == 1 then
-          created = true
-          return "", 0
-        end
-        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
-          return "nvim\n", 0
-        end
-        if command:find("remote_workspace_status", 1, true) then
-          return "not_running\n", 0
-        end
-        if command == "tmux kill-window -t @1" then
-          killed = true
-          return "", 0
-        end
-        return "", 1
-      end,
-    })
+    local harness, flags = mission_builder_prepare_harness()
     local runtime = harness.runtime
     local store = harness.store
 
-    local workspace, error_message = runtime:prepare_workspace("mission-builder", {
-      resolved_instruction = "builder instructions",
-      initial_prompt = "start building",
-      initial_mode = "plan",
-      permission_profile = "auto",
-      mission_id = "mission:mission",
-      mission_name = "Mission",
-      mission_role = "Builder",
-      launch_verify_attempts = 1,
-    })
+    local workspace, error_message =
+      runtime:prepare_workspace("mission-builder", mission_builder_prepare_opts({ initial_mode = "plan" }))
 
     assert_nil(error_message)
     assert_equal(workspace.safe_name, "mission-builder")
-    assert_false(killed)
+    assert_false(flags.killed)
     local record = store.state_data().projects["/codux-worktrees/mission-builder"].workspaces["mission-builder"]
     assert_equal(record.initial_mode, "plan")
     assert_equal(record.permission_profile, "auto")
@@ -199,80 +158,27 @@ end
 
 do
   with_workspace_prepare_env(function()
-    local created = false
-    local killed = false
-    local removed_worktree = false
-    local deleted_branch = false
-    local harness = prepare_harness({
-      system = function(_, command)
-        if command == "tmux display-message -p #S" then
-          return "session\n", 0
-        end
-        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-builder" then
-          return "", 1
-        end
-        if command == "git -C /repo worktree add -b dev/mission-builder /codux-worktrees/mission-builder main" then
-          return "", 0
-        end
-        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
-          if created then
-            return "@1\tmission-builder\n", 0
-          end
-          return "", 0
-        end
-        if command:find("tmux new%-window", 1, false) == 1 then
-          created = true
-          return "", 0
-        end
-        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
-          return "nvim\n", 0
-        end
-        if command:find("remote_workspace_status", 1, true) then
-          return "not_running\n", 0
-        end
-        if command == "tmux kill-window -t @1" then
-          killed = true
-          return "", 0
-        end
-        if command == "git -C /repo worktree remove --force /codux-worktrees/mission-builder" then
-          removed_worktree = true
-          return "", 0
-        end
-        if command == "git -C /repo branch -D dev/mission-builder" then
-          deleted_branch = true
-          return "", 0
-        end
-        return "", 1
-      end,
-    })
+    local harness, flags = mission_builder_prepare_harness()
     local runtime = harness.runtime
 
-    local workspace, error_message = runtime:prepare_workspace("mission-builder", {
-      resolved_instruction = "builder instructions",
-      initial_prompt = "start building",
-      initial_mode = "plan",
-      permission_profile = "auto",
-      mission_id = "mission:mission",
-      mission_name = "Mission",
-      mission_role = "Builder",
-      launch_verify_attempts = 1,
-      require_codex_ready = true,
-    })
+    local workspace, error_message = runtime:prepare_workspace(
+      "mission-builder",
+      mission_builder_prepare_opts({
+        initial_mode = "plan",
+        require_codex_ready = true,
+      })
+    )
 
     assert_nil(workspace)
     assert_equal(error_message, "workspace Codex session is not running")
-    assert_true(killed)
-    assert_true(removed_worktree)
-    assert_true(deleted_branch)
+    assert_true(flags.killed)
+    assert_true(flags.removed_worktree)
+    assert_true(flags.deleted_branch)
   end)
 end
 
 do
   with_workspace_prepare_env(function()
-    local created = false
-    local killed = false
-    local removed_worktree = false
-    local deleted_branch = false
     local deleted_instruction = false
     local store = workspace_store({
       delete_instruction_file = function(_, root, safe_name)
@@ -280,64 +186,20 @@ do
         return true, nil
       end,
     })
-    local runtime = workspace_prepare_runtime({
-      store = store.store,
-      system = function(args)
-        local command = table.concat(args, " ")
-        if command == "tmux display-message -p #S" then
-          return "session\n", 0
-        end
-        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-builder" then
-          return "", 1
-        end
-        if command == "git -C /repo worktree add -b dev/mission-builder /codux-worktrees/mission-builder main" then
-          return "", 0
-        end
-        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
-          if created then
-            return "@1\tmission-builder\n", 0
-          end
-          return "", 0
-        end
-        if command:find("tmux new%-window", 1, false) == 1 then
-          created = true
-          return "", 0
-        end
-        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
-          return "nvim\n", 0
-        end
-        if command == "tmux kill-window -t @1" then
-          killed = true
-          return "", 0
-        end
-        if command == "git -C /repo worktree remove --force /codux-worktrees/mission-builder" then
-          removed_worktree = true
-          return "", 0
-        end
-        if command == "git -C /repo branch -D dev/mission-builder" then
-          deleted_branch = true
-          return "", 0
-        end
-        return "", 1
-      end,
+    local harness, flags = mission_builder_prepare_harness({
+      store_instance = store,
+      remote_status = false,
     })
+    local runtime = harness.runtime
 
-    local workspace, error_message = runtime:prepare_workspace("mission-builder", {
-      resolved_instruction = "builder instructions",
-      initial_prompt = "start building",
-      permission_profile = "auto",
-      mission_id = "mission:mission",
-      mission_name = "Mission",
-      mission_role = "Builder",
-      launch_verify_attempts = 1,
-    })
+    local workspace, error_message = runtime:prepare_workspace("mission-builder", mission_builder_prepare_opts())
 
     assert_nil(workspace)
     assert_equal(error_message, "workspace is not reachable")
-    assert_true(killed)
+    assert_true(flags.killed)
     assert_true(deleted_instruction)
-    assert_true(removed_worktree)
-    assert_true(deleted_branch)
+    assert_true(flags.removed_worktree)
+    assert_true(flags.deleted_branch)
     assert_nil(store.state_data().projects["/codux-worktrees/mission-builder"].workspaces["mission-builder"])
   end)
 end

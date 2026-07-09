@@ -310,6 +310,88 @@ function M.prepare_harness(opts)
   return harness
 end
 
+function M.mission_builder_prepare_opts(overrides)
+  local opts = {
+    resolved_instruction = "builder instructions",
+    initial_prompt = "start building",
+    permission_profile = "auto",
+    mission_id = "mission:mission",
+    mission_name = "Mission",
+    mission_role = "Builder",
+    launch_verify_attempts = 1,
+  }
+  for key, value in pairs(overrides or {}) do
+    opts[key] = value
+  end
+  return opts
+end
+
+function M.mission_builder_prepare_harness(opts)
+  opts = type(opts) == "table" and opts or {}
+  local flags = {
+    created = false,
+    killed = false,
+    removed_worktree = false,
+    deleted_branch = false,
+  }
+  local remote_status = opts.remote_status
+  if remote_status == nil then
+    remote_status = "not_running"
+  end
+  local harness = M.prepare_harness({
+    store = opts.store,
+    store_instance = opts.store_instance,
+    runtime = opts.runtime,
+    system = function(_, command, active_harness)
+      if type(opts.system) == "function" then
+        local output, code = opts.system(command, flags, active_harness)
+        if output ~= nil or code ~= nil then
+          return output or "", code or 0
+        end
+      end
+      if command == "tmux display-message -p #S" then
+        return "session\n", 0
+      end
+      if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-builder" then
+        return "", 1
+      end
+      if command == "git -C /repo worktree add -b dev/mission-builder /codux-worktrees/mission-builder main" then
+        return "", 0
+      end
+      if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+        if flags.created then
+          return "@1\tmission-builder\n", 0
+        end
+        return "", 0
+      end
+      if command:find("tmux new%-window", 1, false) == 1 then
+        flags.created = true
+        return "", 0
+      end
+      if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+        return "nvim\n", 0
+      end
+      if remote_status ~= false and command:find("remote_workspace_status", 1, true) then
+        return remote_status .. "\n", 0
+      end
+      if command == "tmux kill-window -t @1" then
+        flags.killed = true
+        return "", 0
+      end
+      if command == "git -C /repo worktree remove --force /codux-worktrees/mission-builder" then
+        flags.removed_worktree = true
+        return "", 0
+      end
+      if command == "git -C /repo branch -D dev/mission-builder" then
+        flags.deleted_branch = true
+        return "", 0
+      end
+      return "", 1
+    end,
+  })
+  return harness, flags
+end
+
 function M.workspace_store(opts)
   opts = opts or {}
   local state_data = opts.state_data or { projects = {} }
