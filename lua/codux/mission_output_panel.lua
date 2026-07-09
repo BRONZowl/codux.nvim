@@ -9,13 +9,6 @@ local function role_cache_key(entry)
   return table.concat({
     tostring(entry.project_root or entry.worktree_path or ""),
     tostring(entry.safe_name or entry.name or entry.mission_role or ""),
-    tostring(entry.status or ""),
-    tostring(entry.window_id or ""),
-    tostring(entry.tmux_target or ""),
-    tostring(entry.tmux_window or entry.window_name or ""),
-    tostring(entry.worktree_branch or ""),
-    tostring(entry.worktree_base or ""),
-    tostring(entry.worktree_base_commit or ""),
   }, "\0")
 end
 
@@ -105,13 +98,22 @@ function Output:render_output_panel(entry)
   end
   entry = type(entry) == "table" and entry or self:selected_output_entry()
   local key = self:output_entry_key(entry)
+  if type(entry) == "table" and entry.status == "inactive" then
+    self:close_output_preview()
+    self.state.mission_dashboard_output_entry = entry
+    self.state.mission_dashboard_output_key = key
+    self.state.mission_dashboard_output_blocked_key = key ~= "" and key or nil
+    return self:render_output_status(entry, "workspace is not active")
+  end
   if key ~= self.state.mission_dashboard_output_key then
     return self:start_output_preview(entry)
   end
   if self:output_preview_running() then
+    self.state.mission_dashboard_output_entry = entry
     return true
   end
   if key ~= "" and key == self.state.mission_dashboard_output_blocked_key then
+    self.state.mission_dashboard_output_entry = entry
     return true
   end
   return self:start_output_preview(entry)

@@ -298,6 +298,9 @@ if type(vim.api) == "table" then
       return job
     end,
   })
+  controller.output_preview_running = function()
+    return true
+  end
 
   assert_true(controller:render_output_panel({
     safe_name = "alpha-reviewer",
@@ -312,12 +315,12 @@ if type(vim.api) == "table" then
     status = "idle",
     window_id = "@2",
   }))
-  assert_equal(stopped_jobs[1], 77)
-  assert_equal(closed_preview.preview_session, "codux-preview-test")
-  assert_equal(#preview_entries, 2)
+  assert_nil(stopped_jobs[1])
+  assert_nil(closed_preview)
+  assert_equal(#preview_entries, 1)
   assert_equal(preview_entries[1].window_id, "@1")
-  assert_equal(preview_entries[2].window_id, "@2")
-  assert_equal(controller.state.mission_dashboard_output_job, 78)
+  assert_equal(controller.state.mission_dashboard_output_entry.window_id, "@2")
+  assert_equal(controller.state.mission_dashboard_output_job, 77)
   assert_contains(table.concat(ctx.rendered_lines, "\n"), "Output: Reviewer")
   output_fixtures.delete_buffer(ctx.bufnr)
 end
@@ -344,6 +347,9 @@ if type(vim.api) == "table" then
       return job
     end,
   })
+  controller.output_preview_running = function()
+    return true
+  end
 
   assert_true(controller:render_output_panel({
     safe_name = "alpha-reviewer",
@@ -359,11 +365,12 @@ if type(vim.api) == "table" then
     window_name = "review-next",
     tmux_target = "session:review-next",
   }))
-  assert_equal(stopped_jobs[1], 77)
-  assert_equal(#preview_entries, 2)
+  assert_nil(stopped_jobs[1])
+  assert_equal(#preview_entries, 1)
   assert_equal(preview_entries[1].window_name, "review")
-  assert_equal(preview_entries[2].window_name, "review-next")
-  assert_equal(controller.state.mission_dashboard_output_job, 78)
+  assert_equal(controller.state.mission_dashboard_output_entry.window_name, "review-next")
+  assert_equal(controller.state.mission_dashboard_output_entry.tmux_target, "session:review-next")
+  assert_equal(controller.state.mission_dashboard_output_job, 77)
   assert_contains(table.concat(ctx.rendered_lines, "\n"), "Output: Reviewer")
   output_fixtures.delete_buffer(ctx.bufnr)
 end
