@@ -1,8 +1,120 @@
 local mission_mod = require("codux.mission")
 local workspace_instruction_actions = require("codux.workspace_instruction_actions")
+local workspace_git = require("codux.workspace_git")
 local workspace_lifecycle = require("codux.workspace_lifecycle")
 
 local M = {}
+
+local function add_unique(values, seen, value)
+  if type(value) ~= "string" or value == "" or seen[value] then
+    return
+  end
+  seen[value] = true
+  table.insert(values, value)
+end
+
+local function matching_record_score(project_root, record, entry)
+  local score = 0
+  if type(entry.project_root) == "string" and entry.project_root ~= "" then
+    if project_root == entry.project_root or record.project_root == entry.project_root then
+      score = score + 8
+    end
+  end
+  if type(entry.worktree_path) == "string" and entry.worktree_path ~= "" and record.worktree_path == entry.worktree_path then
+    score = score + 8
+  end
+  if type(entry.mission_id) == "string" and entry.mission_id ~= "" and record.mission_id == entry.mission_id then
+    score = score + 4
+  end
+  if type(entry.worktree_branch) == "string" and entry.worktree_branch ~= "" and record.worktree_branch == entry.worktree_branch then
+    score = score + 4
+  end
+  if type(entry.git_common_dir) == "string" and entry.git_common_dir ~= "" and record.git_common_dir == entry.git_common_dir then
+    score = score + 2
+  end
+  return score
+end
+
+local function resolve_workspace_record(runtime, state_data, entry, fallback_root)
+  local safe_name = entry.safe_name
+  if type(safe_name) ~= "string" or safe_name == "" then
+    return nil, nil, nil
+  end
+
+  local project = type(state_data.projects) == "table" and state_data.projects[fallback_root] or nil
+  local record = type(project) == "table" and type(project.workspaces) == "table" and project.workspaces[safe_name] or nil
+  if type(record) == "table" then
+    return fallback_root, runtime:project_state(state_data, fallback_root), record
+  end
+
+  local best_root = nil
+  local best_score = -1
+  local best_count = 0
+  for project_root, candidate_project in pairs(type(state_data.projects) == "table" and state_data.projects or {}) do
+    local workspaces = type(candidate_project) == "table" and candidate_project.workspaces or nil
+    local candidate = type(workspaces) == "table" and workspaces[safe_name] or nil
+    if type(candidate) == "table" then
+      local score = matching_record_score(project_root, candidate, entry)
+      if score > best_score then
+        best_root = project_root
+        best_score = score
+        best_count = 1
+      elseif score == best_score then
+        best_count = best_count + 1
+      end
+    end
+  end
+
+  if best_root ~= nil and best_score > 0 and best_count == 1 then
+    project = runtime:project_state(state_data, best_root)
+    return best_root, project, project.workspaces[safe_name]
+  end
+
+  return nil, nil, nil
+end
+
+local function tmux_window_ids_for_path(runtime, path)
+  local window_ids = {}
+  local seen = {}
+  if type(path) ~= "string" or path == "" then
+    return window_ids
+  end
+
+  local output, code = runtime:tmux_system({ "list-panes", "-a", "-F", "#{window_id}\t#{pane_current_path}" })
+  if code ~= 0 then
+    return window_ids
+  end
+
+  for line in tostring(output or ""):gmatch("[^\r\n]+") do
+    local window_id, pane_path = line:match("^([^\t]+)\t(.+)$")
+    if window_id and pane_path and workspace_git.starts_with_path(pane_path, path) then
+      add_unique(window_ids, seen, window_id)
+    end
+  end
+  return window_ids
+end
+
+local function close_workspace_delete_windows(runtime, entry, window_name, worktree_path)
+  local window_ids = {}
+  local seen = {}
+  add_unique(window_ids, seen, entry.window_id)
+
+  local session = runtime:current_tmux_session()
+  if session and type(window_name) == "string" and window_name ~= "" then
+    add_unique(window_ids, seen, runtime:tmux_window_id(session, window_name))
+  end
+
+  for _, window_id in ipairs(tmux_window_ids_for_path(runtime, worktree_path)) do
+    add_unique(window_ids, seen, window_id)
+  end
+
+  for _, window_id in ipairs(window_ids) do
+    if not runtime:kill_tmux_window(window_id) then
+      return false, "Failed to close tmux window " .. tostring(window_name or window_id)
+    end
+  end
+  return true, nil
+end
 
 function M.saved_workspace_instruction_request(runtime, entry)
   return workspace_instruction_actions.saved_workspace_instruction_request(runtime, entry)
@@ -292,9 +404,11 @@ function M.delete_saved_workspace(runtime, entry)
     return false
   end
 
-  local project = runtime:project_state(state_data, root)
-  local existing = project.workspaces[entry.safe_name]
-  local instruction_path = runtime:instruction_file_path(root, entry.safe_name)
+  local state_root, project, existing = resolve_workspace_record(runtime, state_data, entry, root)
+  state_root = state_root or root
+  project = project or runtime:project_state(state_data, state_root)
+  local instruction_root = type(existing) == "table" and existing.project_root or state_root
+  local instruction_path = runtime:instruction_file_path(instruction_root, entry.safe_name)
   local has_instruction_file = instruction_path and vim.fn.filereadable(instruction_path) == 1
   if type(existing) ~= "table" and not has_instruction_file then
     runtime.notify("workspace not found", vim.log.levels.ERROR)
@@ -304,8 +418,15 @@ function M.delete_saved_workspace(runtime, entry)
 
   if type(existing) == "table" and existing.workspace_kind == "worktree" then
     local worktree_path = existing.worktree_path or existing.project_root or root
+    local current_entry = vim.deepcopy(existing)
+    current_entry.safe_name = entry.safe_name
+    local current_worktree_path = runtime:current_worktree_path(current_entry)
+    if type(current_worktree_path) == "string" and current_worktree_path ~= "" then
+      worktree_path = current_worktree_path
+    end
     local worktree_branch = existing.worktree_branch
     local git_common_dir = existing.git_common_dir
+    local window_name = existing.tmux_window or existing.window_name or entry.window_name or entry.safe_name
     local previous_project = vim.deepcopy(project)
     if type(git_common_dir) ~= "string" or git_common_dir == "" then
       git_common_dir = runtime:git_common_dir(worktree_path)
@@ -319,19 +440,19 @@ function M.delete_saved_workspace(runtime, entry)
     if next(project.workspaces) == nil and vim.empty_dict then
       project.workspaces = vim.empty_dict()
     end
-    if next(project.workspaces) == nil and root == (existing.worktree_path or existing.project_root) then
-      state_data.projects[root] = nil
+    if next(project.workspaces) == nil and state_root == (existing.worktree_path or existing.project_root) then
+      state_data.projects[state_root] = nil
     end
     project.updated_at = runtime:timestamp()
     local write_ok, write_error = runtime:write_state(state_data)
     if not write_ok then
-      state_data.projects[root] = previous_project
+      state_data.projects[state_root] = previous_project
       runtime.notify(write_error, vim.log.levels.ERROR)
       return false
     end
 
     local function restore_state_after_delete(message)
-      state_data.projects[root] = previous_project
+      state_data.projects[state_root] = previous_project
       local restore_ok, restore_error = runtime:write_state(state_data)
       if not restore_ok then
         message = tostring(message or "Failed to delete Codux workspace")
@@ -343,11 +464,12 @@ function M.delete_saved_workspace(runtime, entry)
       return false
     end
 
-    if entry.window_id and not runtime:kill_tmux_window(entry.window_id) then
-      return restore_state_after_delete("Failed to close tmux window " .. tostring(entry.window_name))
+    local close_ok, close_error = close_workspace_delete_windows(runtime, entry, window_name, worktree_path)
+    if not close_ok then
+      return restore_state_after_delete(close_error)
     end
 
-    local delete_instruction_ok, delete_instruction_error = runtime:delete_instruction_file(root, entry.safe_name)
+    local delete_instruction_ok, delete_instruction_error = runtime:delete_instruction_file(instruction_root, entry.safe_name)
     if not delete_instruction_ok then
       return restore_state_after_delete(delete_instruction_error)
     end
@@ -386,10 +508,10 @@ function M.delete_saved_workspace(runtime, entry)
     return false
   end
 
-  local delete_instruction_ok, delete_instruction_error = runtime:delete_instruction_file(root, entry.safe_name)
+  local delete_instruction_ok, delete_instruction_error = runtime:delete_instruction_file(instruction_root, entry.safe_name)
   if not delete_instruction_ok then
     if type(existing) == "table" then
-      state_data.projects[root] = previous_project
+      state_data.projects[state_root] = previous_project
       local restore_ok, restore_error = runtime:write_state(state_data)
       if not restore_ok then
         local message = (delete_instruction_error or "Failed to delete Codux workspace instruction file")

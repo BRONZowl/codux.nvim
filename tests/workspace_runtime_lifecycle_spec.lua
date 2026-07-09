@@ -945,6 +945,159 @@ do
   with_filereadable(1, function()
     local deleted_instruction = false
     local removed_worktree = false
+    local deleted_branch = false
+    local killed_window = false
+    local cleanup_root
+    local nested_root = "/codux-worktrees/repo/alpha-builder"
+    local state_data = {
+      projects = {
+        [nested_root] = {
+          workspaces = {
+            ["alpha-builder"] = review_workspace_record({
+              name = "alpha-builder",
+              safe_name = "alpha-builder",
+              project_root = nested_root,
+              tmux_window = "stale-window-name",
+              workspace_kind = "worktree",
+              git_common_dir = "/repo/.git",
+              worktree_path = nested_root,
+              worktree_branch = "dev/alpha-builder",
+              worktree_base = "main",
+              mission_id = "mission:alpha",
+              mission_name = "Alpha",
+              mission_role = "Builder",
+              mission_objective = "Build it",
+            }),
+          },
+        },
+      },
+    }
+    local store = workspace_store({
+      state_data = state_data,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      delete_instruction_file = function(_, root, safe_name)
+        deleted_instruction = root == nested_root and safe_name == "alpha-builder"
+        return true, nil
+      end,
+    })
+    local runtime = workspace_delete_runtime(store.store, {
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "git -C /repo rev-parse --path-format=absolute --git-common-dir" then
+          return "/repo/.git\n", 0
+        end
+        if command == "git --git-dir=/repo/.git worktree list --porcelain" then
+          return "worktree /repo\nHEAD base\nbranch refs/heads/main\n\nworktree "
+            .. nested_root
+            .. "\nHEAD role\nbranch refs/heads/dev/alpha-builder\n",
+            0
+        end
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "@1\tunrelated\n", 0
+        end
+        if command == "tmux list-panes -a -F #{window_id}\t#{pane_current_path}" then
+          return "@9\t" .. nested_root .. "\n", 0
+        end
+        if command == "tmux kill-window -t @9" then
+          killed_window = true
+          return "", 0
+        end
+        if command == "git --git-dir=/repo/.git worktree remove --force " .. nested_root then
+          removed_worktree = true
+          return "", 0
+        end
+        if command == "git --git-dir=/repo/.git branch -D dev/alpha-builder" then
+          deleted_branch = true
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+    runtime.cleanup_mission_residue = function(_, root)
+      cleanup_root = root
+      return true, {}
+    end
+
+    assert_true(runtime:delete_mission("Alpha", { project_root = "/repo" }))
+    assert_true(deleted_instruction)
+    assert_true(killed_window)
+    assert_true(removed_worktree)
+    assert_true(deleted_branch)
+    assert_equal(cleanup_root, "/repo")
+    assert_nil(state_data.projects[nested_root])
+  end)
+end
+
+do
+  with_filereadable(1, function()
+    local notification
+    local attempted_remove = false
+    local state_data = worktree_delete_state()
+    local store = workspace_store({
+      state_data = state_data,
+      write_state = function(_, next_state)
+        state_data = next_state
+        return true, nil
+      end,
+      delete_instruction_file = function()
+        return true, nil
+      end,
+    })
+    local runtime = workspace_delete_runtime(store.store, {
+      notify = function(message)
+        notification = message
+      end,
+      system = function(args)
+        local command = table.concat(args, " ")
+        if command == "git --git-dir=/repo/.git worktree list --porcelain" then
+          return "worktree /repo\nHEAD base\nbranch refs/heads/main\n\nworktree /codux-worktrees/review\nHEAD role\nbranch refs/heads/dev/review\n",
+            0
+        end
+        if command == "tmux display-message -p #S" then
+          return "session\n", 0
+        end
+        if command == "tmux list-windows -t session -F #{window_id}\t#{window_name}" then
+          return "", 0
+        end
+        if command == "tmux list-panes -a -F #{window_id}\t#{pane_current_path}" then
+          return "@9\t/codux-worktrees/review/subdir\n", 0
+        end
+        if command == "tmux kill-window -t @9" then
+          return "failed\n", 1
+        end
+        if command == "git --git-dir=/repo/.git worktree remove --force /codux-worktrees/review" then
+          attempted_remove = true
+          return "", 0
+        end
+        return "", 1
+      end,
+    })
+
+    assert_false(runtime:delete_saved_workspace({
+      name = "review",
+      safe_name = "review",
+      project_root = "/repo",
+      workspace_kind = "worktree",
+      git_common_dir = "/repo/.git",
+      worktree_path = "/codux-worktrees/review",
+      worktree_branch = "dev/review",
+    }))
+    assert_contains(notification, "Failed to close tmux window")
+    assert_false(attempted_remove)
+    assert_equal(state_data.projects["/repo"].workspaces.review.worktree_branch, "dev/review")
+  end)
+end
+
+do
+  with_filereadable(1, function()
+    local deleted_instruction = false
+    local removed_worktree = false
     local state_data = worktree_delete_state()
     local store = workspace_store({
       state_data = state_data,
