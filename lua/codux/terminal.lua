@@ -9,27 +9,17 @@ local terminal_question = require("codux.terminal_question")
 local terminal_startup = require("codux.terminal_startup")
 local terminal_window = require("codux.terminal_window")
 local ui = require("codux.ui")
+local util = require("codux.util")
 local working_indicator = require("codux.working_indicator")
 
-local function noop() end
+local noop = util.noop
+local now_ms = util.now_ms
 
 local is_valid_buf = ui.is_valid_buf
 local is_loaded_buf = ui.is_loaded_buf
 local is_valid_win = ui.is_valid_win
 local window_buffer = ui.window_buffer
 local buffer_lines = ui.buffer_lines
-
-local function now_ms()
-  local loop = vim.uv or vim.loop
-  if loop and type(loop.now) == "function" then
-    return loop.now()
-  end
-  if loop and type(loop.hrtime) == "function" then
-    return math.floor(loop.hrtime() / 1000000)
-  end
-
-  return os.time() * 1000
-end
 
 local function workspace_mode_for(mode)
   if mode == "execute" or mode == "plan" then

@@ -10,16 +10,16 @@ local json = require("codux.json")
 local keymaps_mod = require("codux.keymaps")
 local mission_mod = require("codux.mission")
 local mission_setup_mod = require("codux.mission_setup")
-local prompt_actions_setup_mod = require("codux.prompt_actions_setup")
+local prompt_actions_mod = require("codux.prompt_actions")
 local providers = require("codux.providers")
 local state_mod = require("codux.state")
 local text_util = require("codux.text")
 local terminal_mod = require("codux.terminal")
 local token_monitor_setup_mod = require("codux.token_monitor_setup")
 local ui = require("codux.ui")
-local which_key_setup_mod = require("codux.which_key_setup")
+local which_key_mod = require("codux.which_key")
 local workspace_create_mod = require("codux.workspace_create")
-local workspace_manager_setup_mod = require("codux.workspace_manager_setup")
+local workspace_manager_mod = require("codux.workspace_manager")
 local workspace_runtime_mod = require("codux.workspace_runtime")
 local workspace_store_mod = require("codux.workspace_store")
 local workspace_ui = require("codux.workspace_ui")
@@ -465,7 +465,7 @@ local function edit_saved_workspace_instruction(entry)
   })
 end
 
-workspace_manager_controller = workspace_manager_setup_mod.new({
+workspace_manager_controller = workspace_manager_mod.new({
   state = state,
   notify = notify,
   trim = trim,
@@ -878,7 +878,7 @@ local function send_to_codex(message)
   return M._v5.send_prompt_or_open_with_profile(message)
 end
 
-prompt_actions = prompt_actions_setup_mod.new({
+prompt_actions = prompt_actions_mod.new({
   get_config = function()
     return config
   end,
@@ -1008,7 +1008,7 @@ local function set_mapping(mode, lhs, rhs, desc)
   return keymaps_mod.set(state, mode, lhs, rhs, desc)
 end
 
-which_key_controller = which_key_setup_mod.new({
+which_key_controller = which_key_mod.new({
   get_mode = function()
     return state.mode
   end,

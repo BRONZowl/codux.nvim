@@ -312,7 +312,7 @@ if type(vim.api) == "table" then
   codux.open_with_keyed_profile_menu = old_open_with_keyed_profile_menu
 
   local open_map = vim.fn.maparg("<leader>zc", "n", false, true)
-  assert_equal(open_map.desc, "open codex")
+  assert_equal(open_map.desc, "open codux")
   assert_equal(vim.tbl_isempty(vim.fn.maparg("<leader>za", "n", false, true)), true)
   assert_equal(vim.tbl_isempty(vim.fn.maparg("<leader>zA", "n", false, true)), true)
 end

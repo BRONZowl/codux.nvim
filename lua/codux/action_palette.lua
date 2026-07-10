@@ -2,19 +2,10 @@ local M = {}
 M.__index = M
 
 local ui = require("codux.ui")
+local util = require("codux.util")
 
-local function noop() end
-
-local function api_function(name)
-  return vim.api and type(vim.api[name]) == "function" and vim.api[name] or nil
-end
-
-local function value_from(value, ...)
-  if type(value) == "function" then
-    return value(...)
-  end
-  return value
-end
+local api_function = util.api_function
+local value_from = util.value_from
 
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
@@ -47,7 +38,7 @@ function M.new(opts)
     end,
     set_buffer_keymap = type(opts.set_buffer_keymap) == "function" and opts.set_buffer_keymap or ui.set_keymap,
     bind_close_keys = type(opts.bind_close_keys) == "function" and opts.bind_close_keys or ui.bind_close_keys,
-    notify = type(opts.notify) == "function" and opts.notify or noop,
+    notify = type(opts.notify) == "function" and opts.notify or util.noop,
     namespace = opts.namespace or 0,
     win_key = opts.win_key,
     buf_key = opts.buf_key,

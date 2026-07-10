@@ -2,7 +2,10 @@
 
 Thanks for your interest in contributing to codux.nvim.
 
-codux.nvim is a Neovim plugin for running OpenAI Codex inside a persistent floating terminal. Contributions that improve reliability, documentation, setup clarity, and day-to-day editor workflow are welcome.
+codux.nvim is a Neovim plugin for running Codex CLI or Grok CLI inside a
+persistent floating terminal, with optional tmux workspaces and Mission Control.
+Contributions that improve reliability, documentation, setup clarity, and
+day-to-day editor workflow are welcome.
 
 ## Reporting Issues
 
@@ -14,7 +17,7 @@ For bug reports, include:
 - Neovim version (`nvim --version`)
 - codux.nvim version or commit
 - Plugin manager
-- OpenAI Codex CLI version, if relevant
+- Codex CLI and/or Grok CLI version, if relevant
 - Minimal config needed to reproduce the issue
 - Steps to reproduce
 - Expected behavior
@@ -40,7 +43,7 @@ Please:
 - Update documentation when behavior changes
 - Avoid unrelated formatting changes
 - Include screenshots or GIFs for user-facing UI changes
-- Test locally before submitting
+- Run `make test` before submitting
 
 ## Development Setup
 
@@ -67,7 +70,19 @@ Example with lazy.nvim:
 
 ## Testing Changes
 
-At minimum, verify that:
+Run the full suite:
+
+```sh
+make test
+```
+
+That target runs pure-Lua specs under Lua 5.1, the same specs under headless
+Neovim, LuaJIT syntax checks, a setup smoke test, and `:checkhealth codux`.
+
+If you add a new `tests/*_spec.lua` file, also add it to `TEST_SPECS` in the
+`Makefile`.
+
+At minimum, also verify that:
 
 - Neovim starts without errors
 - codux.nvim loads successfully

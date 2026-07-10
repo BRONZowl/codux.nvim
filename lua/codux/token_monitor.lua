@@ -1,33 +1,10 @@
 local M = {}
 M.__index = M
 
+local json = require("codux.json")
 local token_usage = require("codux.token_usage")
 local providers = require("codux.providers")
-
-local function default_json_encode(value)
-  if vim.json and type(vim.json.encode) == "function" then
-    return vim.json.encode(value)
-  end
-
-  return vim.fn.json_encode(value)
-end
-
-local function default_json_decode(value)
-  local ok, decoded
-  if vim.json and type(vim.json.decode) == "function" then
-    ok, decoded = pcall(vim.json.decode, value)
-  else
-    ok, decoded = pcall(vim.fn.json_decode, value)
-  end
-
-  if ok then
-    return decoded
-  end
-
-  return nil
-end
-
-local function noop() end
+local util = require("codux.util")
 
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
@@ -45,9 +22,9 @@ function M.new(opts)
       return "codex"
     end,
     command_util = type(opts.command_util) == "table" and opts.command_util or require("codux.command"),
-    json_encode = type(opts.json_encode) == "function" and opts.json_encode or default_json_encode,
-    json_decode = type(opts.json_decode) == "function" and opts.json_decode or default_json_decode,
-    on_update = type(opts.on_update) == "function" and opts.on_update or noop,
+    json_encode = type(opts.json_encode) == "function" and opts.json_encode or json.encode,
+    json_decode = type(opts.json_decode) == "function" and opts.json_decode or json.decode,
+    on_update = type(opts.on_update) == "function" and opts.on_update or util.noop,
   }
 
   return setmetatable(monitor, M)

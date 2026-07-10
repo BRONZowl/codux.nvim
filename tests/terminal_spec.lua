@@ -706,7 +706,8 @@ do
   end
 
   assert_true(controller:submit_terminal_prompt())
-  assert_equal(sent[1], "\21\27[200~ship it\27[201~\r")
+  -- Grok interactive Enter should submit with CR only (no clear + bracketed paste).
+  assert_equal(sent[1], "\r")
   assert_equal(sent[2], nil)
   assert_equal(controller.state.terminal_prompt_input, "")
   assert_true(controller.state.terminal_prompt_tracking_valid)

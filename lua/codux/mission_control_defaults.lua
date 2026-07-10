@@ -1,10 +1,11 @@
 local dashboard_viewport = require("codux.mission_dashboard_viewport")
 local mission_mod = require("codux.mission")
 local ui = require("codux.ui")
+local util = require("codux.util")
 
 local M = {}
 
-local function noop() end
+local noop = util.noop
 
 local function opt_function(opts, key, fallback)
   return type(opts[key]) == "function" and opts[key] or fallback
@@ -64,13 +65,7 @@ function M.normalize(opts)
     token_usage_refresh_ms = opt_function(opts, "token_usage_refresh_ms", function()
       return 60000
     end),
-    token_usage_now_ms = opt_function(opts, "token_usage_now_ms", function()
-      local loop = vim.uv or vim.loop
-      if loop and type(loop.now) == "function" then
-        return loop.now()
-      end
-      return os.time() * 1000
-    end),
+    token_usage_now_ms = opt_function(opts, "token_usage_now_ms", util.now_ms),
     create_mission = opt_function(opts, "create_mission", noop),
     cleanup_mission_residue = opt_function(opts, "cleanup_mission_residue", nil),
     create_workspace_prompt = opt_function(opts, "create_workspace_prompt", noop),

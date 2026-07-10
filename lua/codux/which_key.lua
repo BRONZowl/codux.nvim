@@ -4,7 +4,7 @@ M.__index = M
 local codux_icon = "󰚩"
 
 local markers = {
-  "open codex",
+  "open codux",
   "codex autopilot",
   "codex danger zone",
   "send file/folder to codex",
@@ -403,7 +403,7 @@ end
 
 function M:normal_entries(mappings)
   local candidates = {
-    { lhs = mappings.open, desc = "open codex" },
+    { lhs = mappings.open, desc = "open codux" },
     { lhs = mappings.review_file, desc = "send file/folder to codex" },
     { lhs = mappings.review_selection, desc = "send selection to codex" },
     { lhs = mappings.diagnostics, desc = "send diagnostics to codex" },

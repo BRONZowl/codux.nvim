@@ -39,7 +39,7 @@ end
 
 function M.install_defaults(state, mappings, codux, mode_action_desc)
   mappings = type(mappings) == "table" and mappings or {}
-  M.set(state, "n", mappings.open, codux.open_with_keyed_profile_menu, "open codex")
+  M.set(state, "n", mappings.open, codux.open_with_keyed_profile_menu, "open codux")
   M.set(state, "n", mappings.review_file, codux.send_file_review, "send file/folder to codex")
   M.set(state, "n", mappings.review_selection, codux.send_selection, "send selection to codex")
   M.set(state, "v", mappings.review_selection, codux.send_selection, "send selection to codex")

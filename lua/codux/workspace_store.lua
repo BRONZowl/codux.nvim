@@ -1,6 +1,7 @@
 local Store = {}
 Store.__index = Store
 
+local json = require("codux.json")
 local text_util = require("codux.text")
 local workspace_store_instructions = require("codux.workspace_store_instructions")
 local workspace_store_sessions = require("codux.workspace_store_sessions")
@@ -8,29 +9,6 @@ local workspace_store_state = require("codux.workspace_store_state")
 
 local function trim(value)
   return text_util.trim(value)
-end
-
-local function default_json_encode(value)
-  if vim.json and type(vim.json.encode) == "function" then
-    return vim.json.encode(value)
-  end
-
-  return vim.fn.json_encode(value)
-end
-
-local function default_json_decode(value)
-  local ok, decoded
-  if vim.json and type(vim.json.decode) == "function" then
-    ok, decoded = pcall(vim.json.decode, value)
-  else
-    ok, decoded = pcall(vim.fn.json_decode, value)
-  end
-
-  if ok then
-    return decoded
-  end
-
-  return nil
 end
 
 local function default_workspace_window_name(safe_name)
@@ -190,8 +168,8 @@ function M.new(opts)
     get_workspace_config = opts.get_workspace_config,
     default_instruction_files = type(opts.default_instruction_files) == "table" and opts.default_instruction_files
       or { enabled = true, directory = ".agents/codux" },
-    json_encode = type(opts.json_encode) == "function" and opts.json_encode or default_json_encode,
-    json_decode = type(opts.json_decode) == "function" and opts.json_decode or default_json_decode,
+    json_encode = type(opts.json_encode) == "function" and opts.json_encode or json.encode,
+    json_decode = type(opts.json_decode) == "function" and opts.json_decode or json.decode,
     sanitize_workspace_name = type(opts.sanitize_workspace_name) == "function" and opts.sanitize_workspace_name
       or function(name)
         return trim(name), trim(name)
