@@ -1,6 +1,7 @@
 local M = {}
 
 local text_util = require("codux.text")
+local util = require("codux.util")
 
 local severity_names = {
   [vim.diagnostic.severity.ERROR] = "ERROR",
@@ -32,7 +33,7 @@ local function notify(deps, message, level)
   if type(deps.notify) == "function" then
     deps.notify(message, level)
   else
-    vim.notify(message, level or vim.log.levels.INFO, { title = "codux.nvim" })
+    util.notify(message, level)
   end
 end
 

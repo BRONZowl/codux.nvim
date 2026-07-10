@@ -14,6 +14,9 @@ function M.defaults()
         default_cmd = vim.env.GROK_CMD or "grok --sandbox workspace",
         auto_cmd = vim.env.GROK_WORKSPACE_AUTO_CMD or "grok --sandbox workspace --always-approve",
         danger_cmd = vim.env.GROK_DANGER_FULL_ACCESS_CMD or "grok --sandbox off --always-approve",
+        -- Optional preferred TUI theme (auto, groknight, grokday, tokyonight, ...).
+        -- Also settable via :CoduxSetGrokTheme / CODUX_GROK_THEME / settings.json.
+        theme = vim.env.CODUX_GROK_THEME or nil,
       },
     },
     default_initial_mode = "plan",

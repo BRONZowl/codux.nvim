@@ -1,5 +1,6 @@
 local ui = require("codux.ui")
 local providers = require("codux.providers")
+local settings = require("codux.settings")
 
 local M = {}
 
@@ -40,6 +41,10 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
   if error_message then
     controller.notify(error_message, vim.log.levels.ERROR)
     return false
+  end
+
+  if agent_provider == "grok" then
+    pcall(settings.ensure_grok_theme_applied)
   end
 
   local executable = controller.command_util.executable(command)

@@ -1,6 +1,6 @@
 local workspace_create_mod = require("codux.workspace_create")
-local workspace_manager_mod = require("codux.workspace_manager")
 local workspace_runtime_mod = require("codux.workspace_runtime")
+local workspace_ui = require("codux.workspace_ui")
 
 local M = {}
 
@@ -140,11 +140,11 @@ function M.install_workspace_manager(api, deps)
   local runtime = deps.runtime
 
   function api.fuzzy_workspace_score(value, query)
-    return workspace_manager_mod.fuzzy_workspace_score(value, query)
+    return workspace_ui.fuzzy_workspace_score(value, query)
   end
 
   function api.fuzzy_workspace_filter(entries, query)
-    return workspace_manager_mod.fuzzy_workspace_filter(entries, query)
+    return workspace_ui.fuzzy_workspace_filter(entries, query)
   end
 
   function api.render_workspace_manager_search()

@@ -2,10 +2,11 @@ local terminal_mod = require("codux.terminal")
 local terminal_keymaps = require("codux.terminal_keymaps")
 local output_mouse = require("codux.mission_output_mouse")
 local ui = require("codux.ui")
+local util = require("codux.util")
 
 local M = {}
 
-local function noop() end
+local noop = util.noop
 
 local function output_terminal_state(parent)
   local state = parent.state.mission_dashboard_output_terminal_state

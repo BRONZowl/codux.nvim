@@ -8,23 +8,16 @@ local manager_selection = require("codux.workspace_manager_selection")
 local manager_windows = require("codux.workspace_manager_windows")
 local text_util = require("codux.text")
 local ui = require("codux.ui")
+local util = require("codux.util")
 local workspace_ui = require("codux.workspace_ui")
 
-local function noop() end
-
-function M.fuzzy_workspace_score(value, query)
-  return workspace_ui.fuzzy_workspace_score(value, query)
-end
-
-function M.fuzzy_workspace_filter(entries, query)
-  return workspace_ui.fuzzy_workspace_filter(entries, query)
-end
+local noop = util.noop
 
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
   local controller = {
     state = type(opts.state) == "table" and opts.state or {},
-    notify = type(opts.notify) == "function" and opts.notify or noop,
+    notify = type(opts.notify) == "function" and opts.notify or util.noop,
     trim = type(opts.trim) == "function" and opts.trim or text_util.trim,
     ui = type(opts.ui) == "table" and opts.ui or ui,
     workspace_ui = type(opts.workspace_ui) == "table" and opts.workspace_ui or workspace_ui,

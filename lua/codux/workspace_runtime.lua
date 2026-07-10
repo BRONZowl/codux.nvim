@@ -19,8 +19,9 @@ local workspace_sync = require("codux.workspace_sync")
 local workspace_target = require("codux.workspace_target")
 local workspace_worktree = require("codux.workspace_worktree")
 local providers = require("codux.providers")
+local util = require("codux.util")
 
-local function noop() end
+local noop = util.noop
 
 local function trim(value)
   return text_util.trim(value)

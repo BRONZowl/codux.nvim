@@ -1,3 +1,4 @@
+local action_palette = require("codux.action_palette")
 local providers = require("codux.providers")
 
 local M = {}
@@ -72,8 +73,7 @@ function M.close_action_palette(controller)
 end
 
 function M.action_palette_width(controller)
-  local dashboard_width = controller:window_width() or 58
-  return math.min(math.max(32, dashboard_width - 8), 48)
+  return action_palette.palette_width(controller:window_width() or 58)
 end
 
 function M.action_palette_config(controller, item, item_count)
@@ -81,26 +81,19 @@ function M.action_palette_config(controller, item, item_count)
       and vim.api.nvim_win_get_config(controller.state.workspace_manager_win)
     or {}
   local dashboard_width = controller:window_width() or 58
-  local dashboard_height = controller:window_height() or math.max(1, item_count or 1)
   local width = controller:action_palette_width()
-  local height = math.max(1, item_count or 1)
-  local col = type(dashboard_config.col) == "number" and dashboard_config.col or math.floor((vim.o.columns - dashboard_width) / 2)
-  local row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
 
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
+  return action_palette.centered_window_config({
+    dashboard_width = dashboard_width,
+    dashboard_height = controller:window_height() or math.max(1, item_count or 1),
+    col = type(dashboard_config.col) == "number" and dashboard_config.col or nil,
+    row = type(dashboard_config.row) == "number" and dashboard_config.row or nil,
+    width = width,
+    height = math.max(1, item_count or 1),
     title = " Codux actions: "
       .. controller.workspace_ui.truncate_display_tail(item and item.name or "workspace", width - 16)
       .. " ",
-    title_pos = "center",
-    width = width,
-    height = height,
-    col = math.max(0, col + math.floor((dashboard_width - width) / 2)),
-    row = math.max(0, row + math.floor((dashboard_height - height) / 2)),
-    zindex = 70,
-  }
+  })
 end
 
 function M.render_action_palette(controller)

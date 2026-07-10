@@ -1,3 +1,4 @@
+local action_palette = require("codux.action_palette")
 local workspace_actions = require("codux.mission_dashboard_workspace_actions")
 
 local M = {}
@@ -21,8 +22,7 @@ function M.close_action_palette(controller)
 end
 
 function M.action_palette_width(controller)
-  local dashboard_width = controller:window_width() or 58
-  return math.min(math.max(32, dashboard_width - 8), 48)
+  return action_palette.palette_width(controller:window_width() or 58)
 end
 
 function M.action_palette_config(controller, target, item_count, kind)
@@ -30,29 +30,20 @@ function M.action_palette_config(controller, target, item_count, kind)
       and controller.get_window_config(controller.state.mission_dashboard_win)
     or {}
   local dashboard_width = controller:window_width() or 58
-  local dashboard_height = controller:window_height() or math.max(1, item_count or 1)
   local width = controller:action_palette_width()
-  local height = math.max(1, item_count or 1)
-  local col = type(dashboard_config.col) == "number"
-      and dashboard_config.col
-    or math.floor((vim.o.columns - dashboard_width) / 2)
-  local row = type(dashboard_config.row) == "number" and dashboard_config.row or 0
   local title = target and (target.name or target.safe_name or target.mission_role or target.mission_id) or "item"
   local prefix = kind == "workspace" and " Codux workspace: " or " Codux mission: "
   local title_width = kind == "workspace" and width - 19 or width - 17
 
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = prefix .. controller.workspace_ui.truncate_display_tail(title, title_width) .. " ",
-    title_pos = "center",
+  return action_palette.centered_window_config({
+    dashboard_width = dashboard_width,
+    dashboard_height = controller:window_height() or math.max(1, item_count or 1),
+    col = type(dashboard_config.col) == "number" and dashboard_config.col or nil,
+    row = type(dashboard_config.row) == "number" and dashboard_config.row or nil,
     width = width,
-    height = height,
-    col = math.max(0, col + math.floor((dashboard_width - width) / 2)),
-    row = math.max(0, row + math.floor((dashboard_height - height) / 2)),
-    zindex = 70,
-  }
+    height = math.max(1, item_count or 1),
+    title = prefix .. controller.workspace_ui.truncate_display_tail(title, title_width) .. " ",
+  })
 end
 
 function M.render_action_palette(controller)

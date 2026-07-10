@@ -11,12 +11,15 @@ local keymaps_mod = require("codux.keymaps")
 local mission_mod = require("codux.mission")
 local mission_setup_mod = require("codux.mission_setup")
 local prompt_actions_mod = require("codux.prompt_actions")
+local grok_config = require("codux.grok_config")
 local providers = require("codux.providers")
+local settings = require("codux.settings")
 local state_mod = require("codux.state")
 local text_util = require("codux.text")
 local terminal_mod = require("codux.terminal")
 local token_monitor_setup_mod = require("codux.token_monitor_setup")
 local ui = require("codux.ui")
+local util = require("codux.util")
 local which_key_mod = require("codux.which_key")
 local workspace_create_mod = require("codux.workspace_create")
 local workspace_manager_mod = require("codux.workspace_manager")
@@ -51,9 +54,7 @@ local close_workspace_manager
 
 M._v5 = {}
 
-local function notify(message, level)
-  vim.notify(message, level or vim.log.levels.INFO, { title = "codux.nvim" })
-end
+local notify = util.notify
 
 local function trim(value)
   return text_util.trim(value)
@@ -416,14 +417,6 @@ local function workspace_manager_project_root()
   return workspace_runtime:project_root()
 end
 
-M._stop_workspace_manager_refresh_timer = function()
-  return workspace_manager_controller:stop_refresh_timer()
-end
-
-M._start_workspace_manager_refresh_timer = function()
-  return workspace_manager_controller:start_refresh_timer()
-end
-
 close_workspace_manager = function()
   return workspace_manager_controller:close()
 end
@@ -535,14 +528,6 @@ local function restart_with_command(command, focus, permission_profile, initial_
   return terminal:restart_with_command(command, focus, permission_profile, initial_prompt, opts)
 end
 
-local function start_hidden_with_command(command, permission_profile, initial_prompt)
-  return terminal:start_hidden_with_command(command, permission_profile, initial_prompt)
-end
-
-local function restart_hidden_with_command(command, permission_profile, initial_prompt)
-  return terminal:restart_hidden_with_command(command, permission_profile, initial_prompt)
-end
-
 function M.open_workspace_auto(initial_prompt, opts)
   opts = type(opts) == "table" and opts or {}
   local agent_provider = providers.normalize_provider(opts.agent_provider) or providers.default_provider(config)
@@ -606,6 +591,14 @@ function M.set_default_provider(provider)
     return false
   end
   config.default_agent_provider = provider
+  if state.job_id == nil then
+    state.agent_provider = provider
+    state.last_agent_provider = provider
+  end
+  local ok, err = settings.set_default_agent_provider(provider)
+  if not ok then
+    notify(err or "Failed to save default provider", vim.log.levels.WARN)
+  end
   notify("Default provider set to " .. providers.provider_label(provider))
   return true
 end
@@ -624,13 +617,65 @@ function M.set_default_provider_menu(opts)
   })
 end
 
+function M.set_grok_theme(theme)
+  theme = grok_config.normalize_theme(theme)
+  if not theme then
+    notify("Unknown Grok theme. Use auto, groknight, grokday, tokyonight, rosepine-moon, or oscura-midnight.", vim.log.levels.ERROR)
+    return false
+  end
+
+  local ok, err = settings.set_grok_theme(theme)
+  if not ok then
+    notify(err or "Failed to save Grok theme", vim.log.levels.WARN)
+  end
+
+  local synced, sync_err = grok_config.write_ui_theme(theme)
+  if not synced then
+    notify(sync_err or "Failed to write Grok config theme", vim.log.levels.WARN)
+  end
+
+  if type(config.providers) ~= "table" then
+    config.providers = {}
+  end
+  if type(config.providers.grok) ~= "table" then
+    config.providers.grok = {}
+  end
+  config.providers.grok.theme = theme
+
+  notify("Grok theme set to " .. grok_config.theme_label(theme))
+  return true
+end
+
+function M.set_grok_theme_menu(opts)
+  opts = type(opts) == "table" and opts or {}
+  local menu = type(opts.menu) == "function" and opts.menu or ui.key_choice_menu
+  return menu({
+    title = " Grok theme ",
+    filetype = "codux-grok-theme",
+    choices = grok_config.theme_choices(),
+  }, function(choice)
+    if type(choice) ~= "table" then
+      return false
+    end
+    return M.set_grok_theme(choice.theme)
+  end, {
+    notify = notify,
+    set_buffer_keymap = M._v5.set_buffer_keymap,
+    bind_close_keys = M._v5.bind_close_keys,
+  })
+end
+
 function M.open(opts)
   return M.open_with_keyed_profile_menu(opts)
 end
 
+function M.is_popup_open()
+  return terminal:valid_win()
+end
+
 function M.open_with_keyed_profile_menu(opts)
   opts = type(opts) == "table" and opts or {}
-  if terminal:valid_win() then
+  if M.is_popup_open() then
     notify("Codux is already open", vim.log.levels.INFO)
     return false
   end
@@ -676,42 +721,6 @@ function M.open_workspace_session(workspace, initial_prompt, opts)
     agent_provider = agent_provider,
     suppress_startup_plan_warning = M._v5.suppress_startup_plan_warning_for_workspace(workspace),
   })
-end
-
-function M.open_hidden(initial_prompt)
-  local agent_provider = providers.default_provider(config)
-  return terminal:start_terminal(false, initial_prompt, providers.command(config, agent_provider, "default"), nil, "default", {
-    hidden = true,
-    agent_provider = agent_provider,
-  })
-end
-
-function M.open_workspace_auto_hidden(initial_prompt)
-  local agent_provider = providers.default_provider(config)
-  terminal:exit()
-  return terminal:start_terminal(false, initial_prompt, providers.command(config, agent_provider, "auto"), nil, "auto", {
-    hidden = true,
-    agent_provider = agent_provider,
-  })
-end
-
-function M.open_danger_full_access_hidden(initial_prompt)
-  local agent_provider = providers.default_provider(config)
-  terminal:exit()
-  return terminal:start_terminal(false, initial_prompt, providers.command(config, agent_provider, "danger"), nil, "danger", {
-    hidden = true,
-    agent_provider = agent_provider,
-  })
-end
-
-function M.open_workspace_auto_hidden_with_notice()
-  notify("Starting " .. providers.provider_label(providers.default_provider(config)) .. " autopilot with approve-for-me permissions")
-  return M.open_workspace_auto_hidden()
-end
-
-function M.open_danger_full_access_hidden_with_notice()
-  notify("Starting " .. providers.provider_label(providers.default_provider(config)) .. " with no approvals and no sandbox", vim.log.levels.WARN)
-  return M.open_danger_full_access_hidden()
 end
 
 function M.create_workspace(name, opts)
@@ -945,14 +954,6 @@ prompt_actions = prompt_actions_mod.new({
   end,
 })
 
-M._workspace_target_signature = function(path, target_type, branch)
-  return workspace_runtime_mod.workspace_target_signature(path, target_type, branch)
-end
-
-M._workspace_target_sync_allowed = function(event)
-  return workspace_runtime:target_sync_allowed(event, current_filetype)
-end
-
 M._sync_workspace_target = function(event)
   return workspace_runtime:sync_target(event, current_filetype)
 end
@@ -1097,8 +1098,36 @@ function M.setup(opts)
   stop_token_monitor_timer()
   remove_installed_mappings()
   opts = type(opts) == "table" and opts or {}
-  config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts)
+  -- Rebuild from fresh defaults so env is re-read when setup runs again.
+  config = vim.tbl_deep_extend("force", vim.deepcopy(config_defaults.defaults()), opts)
   config_defaults.apply_legacy_codex_aliases(config, opts)
+
+  if settings.should_apply_persisted_default(opts, vim.env) then
+    local persisted = settings.get_default_agent_provider()
+    if persisted then
+      config.default_agent_provider = persisted
+    end
+  end
+
+  local default_provider = providers.default_provider(config)
+  if state.job_id == nil then
+    state.agent_provider = default_provider
+    state.last_agent_provider = default_provider
+  end
+
+  local grok_theme, grok_theme_err = settings.resolve_and_sync_grok_theme(opts, vim.env)
+  if grok_theme then
+    if type(config.providers) ~= "table" then
+      config.providers = {}
+    end
+    if type(config.providers.grok) ~= "table" then
+      config.providers.grok = {}
+    end
+    config.providers.grok.theme = grok_theme
+  end
+  if grok_theme_err then
+    notify(grok_theme_err, vim.log.levels.WARN)
+  end
 
   create_commands()
 

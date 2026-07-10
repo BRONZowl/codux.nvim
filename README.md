@@ -75,9 +75,10 @@ stops the agent process.
 
 Set the global default agent provider with `<leader>zP` or
 `:CoduxSetDefaultProvider` (picker keys `g` for Grok, `c` for Codex). That
-choice updates the session default used by open, workspace create, and mission
-create. Setup option `default_agent_provider` (or env `CODUX_AGENT_PROVIDER`)
-seeds the default when Neovim starts.
+choice is used by open, workspace create, and mission create, and is saved under
+`stdpath("data")/codux/settings.json` so it persists across Neovim restarts.
+Startup precedence (highest wins): setup option `default_agent_provider`, then
+env `CODUX_AGENT_PROVIDER`, then the saved preference, then `"codex"`.
 
 The default open mapping is `<leader>zc`. When no agent is running, it opens a
 permission-profile picker for the global default provider:
@@ -112,6 +113,7 @@ Codux can send editor context to the active agent session:
 | --- | --- | --- |
 | Open or focus agent | `<leader>zc` | `:Codux` or `:CoduxOpen` |
 | Set default agent provider | `<leader>zP` | `:CoduxSetDefaultProvider [codex\|grok]` |
+| Set preferred Grok TUI theme | none | `:CoduxSetGrokTheme [theme]` |
 | Toggle agent popup | none | `:CoduxToggle` |
 | Hide the popup | `<C-q>` in popup | `:CoduxClose` |
 | Stop agent | none | `:CoduxExit` |
@@ -171,6 +173,7 @@ require("codux").setup({
       default_cmd = "grok --sandbox workspace",
       auto_cmd = "grok --sandbox workspace --always-approve",
       danger_cmd = "grok --sandbox off --always-approve",
+      -- theme = "tokyonight", -- or :CoduxSetGrokTheme / CODUX_GROK_THEME
     },
   },
   token_monitor = {
@@ -217,9 +220,18 @@ variables:
 - `GROK_WORKSPACE_AUTO_CMD` for the Grok auto profile
 - `GROK_DANGER_FULL_ACCESS_CMD` for the Grok full-access profile
 
-`default_agent_provider` (default `"codex"`, or `CODUX_AGENT_PROVIDER`) is the
-startup seed for open, workspace create, and mission create. Change it for the
-current Neovim session with `<leader>zP` or `:CoduxSetDefaultProvider`.
+`default_agent_provider` is the startup seed for open, workspace create, and
+mission create. Resolution order: setup option → `CODUX_AGENT_PROVIDER` → last
+value from `<leader>zP` / `:CoduxSetDefaultProvider` (persisted) → `"codex"`.
+
+Preferred Grok TUI theme is set with `:CoduxSetGrokTheme` (or setup
+`providers.grok.theme` / env `CODUX_GROK_THEME`). Codux saves it under
+`stdpath("data")/codux/settings.json` and syncs `[ui].theme` in
+`~/.grok/config.toml` so new Grok processes start with that theme. Resolution
+order: setup `providers.grok.theme` → `CODUX_GROK_THEME` → saved preference →
+existing `~/.grok/config.toml`. Themes: `auto`, `groknight`, `grokday`,
+`tokyonight`, `rosepine-moon`, `oscura-midnight` (aliases like `dark` / `tokyo`
+also work).
 
 New Codux-managed agent sessions start in plan mode. Set
 `default_initial_mode = "execute"` to keep older execute-mode startup behavior.

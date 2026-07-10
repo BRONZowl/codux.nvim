@@ -31,6 +31,8 @@ TEST_SPECS := \
 	tests/mission_output_panel_spec.lua \
 	tests/open_profile_spec.lua \
 	tests/providers_spec.lua \
+	tests/settings_spec.lua \
+	tests/grok_theme_spec.lua \
 	tests/prompt_actions_spec.lua \
 	tests/workspace_create_spec.lua \
 	tests/workspace_git_spec.lua \

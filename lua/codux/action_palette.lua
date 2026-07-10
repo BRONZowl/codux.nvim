@@ -7,6 +7,37 @@ local util = require("codux.util")
 local api_function = util.api_function
 local value_from = util.value_from
 
+function M.palette_width(dashboard_width)
+  dashboard_width = type(dashboard_width) == "number" and dashboard_width or 58
+  return math.min(math.max(32, dashboard_width - 8), 48)
+end
+
+--- Build a centered floating action-palette window config over a parent dashboard.
+--- @param opts table|nil
+---   dashboard_width, dashboard_height, col, row, width, height, title, zindex
+function M.centered_window_config(opts)
+  opts = type(opts) == "table" and opts or {}
+  local dashboard_width = type(opts.dashboard_width) == "number" and opts.dashboard_width or 58
+  local dashboard_height = type(opts.dashboard_height) == "number" and opts.dashboard_height or 1
+  local width = type(opts.width) == "number" and opts.width or M.palette_width(dashboard_width)
+  local height = math.max(1, type(opts.height) == "number" and opts.height or 1)
+  local col = type(opts.col) == "number" and opts.col or math.floor((vim.o.columns - dashboard_width) / 2)
+  local row = type(opts.row) == "number" and opts.row or 0
+
+  return {
+    relative = "editor",
+    style = "minimal",
+    border = "rounded",
+    title = opts.title or " ",
+    title_pos = "center",
+    width = width,
+    height = height,
+    col = math.max(0, col + math.floor((dashboard_width - width) / 2)),
+    row = math.max(0, row + math.floor((dashboard_height - height) / 2)),
+    zindex = type(opts.zindex) == "number" and opts.zindex or 70,
+  }
+end
+
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
   local controller = {
@@ -79,7 +110,7 @@ function M.new(opts)
     create_error = opts.create_error or "Failed to create Codux actions",
     open_error = opts.open_error or "Failed to open Codux actions",
     after_create_buffer = type(opts.after_create_buffer) == "function" and opts.after_create_buffer or nil,
-    run_action = type(opts.run_action) == "function" and opts.run_action or noop,
+    run_action = type(opts.run_action) == "function" and opts.run_action or util.noop,
     key_only = opts.key_only == true,
     sink_win_key = opts.sink_win_key or "__action_palette_sink_win",
     sink_buf_key = opts.sink_buf_key or "__action_palette_sink_buf",

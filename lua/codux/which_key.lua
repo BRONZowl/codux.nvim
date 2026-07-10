@@ -18,7 +18,8 @@ local markers = {
   "switch to plan mode",
 }
 
-local function noop() end
+local util = require("codux.util")
+local noop = util.noop
 
 local function mode_action_desc_for(mode)
   if mode == "execute" then

@@ -1,10 +1,10 @@
+local util = require("codux.util")
+
 local M = {}
 
 function M.create(codux, deps)
   deps = type(deps) == "table" and deps or {}
-  local notify = type(deps.notify) == "function" and deps.notify or function(message, level)
-    vim.notify(message, level or vim.log.levels.INFO, { title = "codux.nvim" })
-  end
+  local notify = type(deps.notify) == "function" and deps.notify or util.notify
   local workspace_manager_project_root = type(deps.workspace_manager_project_root) == "function"
       and deps.workspace_manager_project_root
     or function()
@@ -66,6 +66,29 @@ function M.create(codux, deps)
       return codux._v5.filter_completion({ "codex", "grok" }, arglead)
     end,
     desc = "Set the global default Codux agent provider",
+  })
+
+  vim.api.nvim_create_user_command("CoduxSetGrokTheme", function(opts)
+    if type(opts.args) == "string" and opts.args ~= "" then
+      codux.set_grok_theme(opts.args)
+      return
+    end
+    codux.set_grok_theme_menu()
+  end, {
+    force = true,
+    nargs = "?",
+    complete = function(arglead)
+      local themes = {
+        "auto",
+        "groknight",
+        "grokday",
+        "tokyonight",
+        "rosepine-moon",
+        "oscura-midnight",
+      }
+      return codux._v5.filter_completion(themes, arglead)
+    end,
+    desc = "Set the preferred Grok TUI theme",
   })
 
   vim.api.nvim_create_user_command("CoduxOpenGrok", function()

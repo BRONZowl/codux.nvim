@@ -1,4 +1,5 @@
 local text_util = require("codux.text")
+local util = require("codux.util")
 
 local M = {}
 
@@ -323,9 +324,7 @@ function M.key_choice_menu(opts, callback, deps)
   opts = type(opts) == "table" and opts or {}
   deps = type(deps) == "table" and deps or {}
   callback = type(callback) == "function" and callback or function() end
-  local notify = type(deps.notify) == "function" and deps.notify or function(message, level)
-    vim.notify(message, level or vim.log.levels.INFO, { title = "codux.nvim" })
-  end
+  local notify = type(deps.notify) == "function" and deps.notify or util.notify
   local create_scratch_buffer = type(deps.create_scratch_buffer) == "function" and deps.create_scratch_buffer
     or M.create_scratch_buffer
   local set_lines = type(deps.set_lines) == "function" and deps.set_lines or M.set_lines
@@ -539,9 +538,7 @@ function M.single_line_prompt(opts, callback, deps)
   opts = type(opts) == "table" and opts or {}
   deps = type(deps) == "table" and deps or {}
   callback = type(callback) == "function" and callback or function() end
-  local notify = type(deps.notify) == "function" and deps.notify or function(message, level)
-    vim.notify(message, level or vim.log.levels.INFO, { title = "codux.nvim" })
-  end
+  local notify = type(deps.notify) == "function" and deps.notify or util.notify
   local set_keymap = type(deps.set_buffer_keymap) == "function" and deps.set_buffer_keymap or M.set_keymap
   local bind_close_keys = type(deps.bind_close_keys) == "function" and deps.bind_close_keys or M.bind_close_keys
   local prompt = tostring(opts.prompt or "")

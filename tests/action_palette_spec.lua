@@ -6,6 +6,35 @@ local assert_true = h.assert_true
 local action_palette_mod = require("codux.action_palette")
 
 do
+  assert_equal(action_palette_mod.palette_width(58), 48)
+  assert_equal(action_palette_mod.palette_width(30), 32)
+  assert_equal(action_palette_mod.palette_width(40), 32)
+
+  local old_columns = vim.o.columns
+  vim.o.columns = 120
+  local config = action_palette_mod.centered_window_config({
+    dashboard_width = 58,
+    dashboard_height = 20,
+    col = 10,
+    row = 5,
+    width = 40,
+    height = 4,
+    title = " Codux actions: demo ",
+  })
+  assert_equal(config.relative, "editor")
+  assert_equal(config.style, "minimal")
+  assert_equal(config.border, "rounded")
+  assert_equal(config.title, " Codux actions: demo ")
+  assert_equal(config.title_pos, "center")
+  assert_equal(config.width, 40)
+  assert_equal(config.height, 4)
+  assert_equal(config.col, 10 + math.floor((58 - 40) / 2))
+  assert_equal(config.row, 5 + math.floor((20 - 4) / 2))
+  assert_equal(config.zindex, 70)
+  vim.o.columns = old_columns
+end
+
+do
   local old_api = vim.api
   local highlights = {}
   vim.api = {

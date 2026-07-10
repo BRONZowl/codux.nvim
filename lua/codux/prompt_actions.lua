@@ -1,7 +1,7 @@
+local util = require("codux.util")
+
 local M = {}
 M.__index = M
-
-local function noop() end
 
 local function is_blockwise_mode(mode)
   return mode == "\22" or mode == "\19"
@@ -52,13 +52,11 @@ function M.new(opts)
     get_config = type(opts.get_config) == "function" and opts.get_config or function()
       return {}
     end,
-    notify = type(opts.notify) == "function" and opts.notify or function(message, level)
-      vim.notify(message, level or vim.log.levels.INFO, { title = "codux.nvim" })
-    end,
+    notify = type(opts.notify) == "function" and opts.notify or util.notify,
     send_to_codex = type(opts.send_to_codex) == "function" and opts.send_to_codex or function()
       return false
     end,
-    exit = type(opts.exit) == "function" and opts.exit or noop,
+    exit = type(opts.exit) == "function" and opts.exit or util.noop,
     context = opts.context,
     current_filetype = type(opts.current_filetype) == "function" and opts.current_filetype or function()
       return "unknown"

@@ -4,6 +4,10 @@ local assert_false = h.assert_false
 local assert_nil = h.assert_nil
 
 if type(vim.api) == "table" then
+  local settings = require("codux.settings")
+  local settings_path = vim.fn.tempname() .. "-codux-open-profile-settings.json"
+  settings.set_path_for_tests(settings_path)
+
   local codux = require("codux")
   codux.setup({ token_monitor = false })
 
@@ -331,28 +335,14 @@ if type(vim.api) == "table" then
   assert_equal(default_open_menus[1].initial_prompt, "hi")
 
   -- Fail-safe: when the Codux popup is already open, open is a no-op.
-  local terminal_ctrl
-  local upvalue_index = 1
-  while true do
-    local name, value = debug.getupvalue(codux.open_with_keyed_profile_menu, upvalue_index)
-    if not name then
-      break
-    end
-    if name == "terminal" then
-      terminal_ctrl = value
-      break
-    end
-    upvalue_index = upvalue_index + 1
-  end
-  assert_equal(type(terminal_ctrl), "table")
-  local old_valid_win = terminal_ctrl.valid_win
   local menu_calls_before = #default_open_menus
-  terminal_ctrl.valid_win = function()
+  local old_is_popup_open = codux.is_popup_open
+  codux.is_popup_open = function()
     return true
   end
   assert_false(codux.open_with_keyed_profile_menu({ initial_prompt = "blocked" }))
   assert_equal(#default_open_menus, menu_calls_before)
-  terminal_ctrl.valid_win = old_valid_win
+  codux.is_popup_open = old_is_popup_open
   codux._v5.select_keyed_provider_profile_open = old_select_keyed
 
   local opened_opts
@@ -372,6 +362,9 @@ if type(vim.api) == "table" then
   assert_equal(default_provider_map.desc, "set default provider")
   assert_equal(vim.tbl_isempty(vim.fn.maparg("<leader>za", "n", false, true)), true)
   assert_equal(vim.tbl_isempty(vim.fn.maparg("<leader>zA", "n", false, true)), true)
+
+  settings.set_path_for_tests(nil)
+  pcall(vim.fn.delete, settings_path)
 end
 
 print("open_profile_spec.lua: ok")

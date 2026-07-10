@@ -5,12 +5,13 @@ local confirmation_footer = require("codux.confirmation_footer")
 local mission_mod = require("codux.mission")
 local providers = require("codux.providers")
 local text_util = require("codux.text")
+local util = require("codux.util")
+
+local noop = util.noop
 
 local function default_trim(value)
   return text_util.trim(value)
 end
-
-local function noop() end
 
 local function mission_context(opts)
   opts = type(opts) == "table" and opts or {}
@@ -31,9 +32,7 @@ end
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
   local controller = {
-    notify = type(opts.notify) == "function" and opts.notify or function(message, level)
-      vim.notify(message, level or vim.log.levels.INFO, { title = "codux.nvim" })
-    end,
+    notify = type(opts.notify) == "function" and opts.notify or util.notify,
     trim = type(opts.trim) == "function" and opts.trim or default_trim,
     ui = type(opts.ui) == "table" and opts.ui or require("codux.ui"),
     workspace_ui = type(opts.workspace_ui) == "table" and opts.workspace_ui or require("codux.workspace_ui"),
@@ -43,9 +42,9 @@ function M.new(opts)
     is_valid_win = type(opts.is_valid_win) == "function" and opts.is_valid_win or function()
       return false
     end,
-    set_buffer_keymap = type(opts.set_buffer_keymap) == "function" and opts.set_buffer_keymap or noop,
-    bind_close_keys = type(opts.bind_close_keys) == "function" and opts.bind_close_keys or noop,
-    single_line_prompt = type(opts.single_line_prompt) == "function" and opts.single_line_prompt or noop,
+    set_buffer_keymap = type(opts.set_buffer_keymap) == "function" and opts.set_buffer_keymap or util.noop,
+    bind_close_keys = type(opts.bind_close_keys) == "function" and opts.bind_close_keys or util.noop,
+    single_line_prompt = type(opts.single_line_prompt) == "function" and opts.single_line_prompt or util.noop,
     has_tmux_session = type(opts.has_tmux_session) == "function" and opts.has_tmux_session or function()
       return false
     end,
