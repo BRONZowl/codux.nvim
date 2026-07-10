@@ -37,7 +37,7 @@ function M.set(state, mode, lhs, rhs, desc)
   end
 end
 
-function M.install_defaults(state, mappings, codux, mode_action_desc)
+function M.install_defaults(state, mappings, codux)
   mappings = type(mappings) == "table" and mappings or {}
   M.set(state, "n", mappings.open, codux.open_with_keyed_profile_menu, "open codux")
   M.set(state, "n", mappings.review_file, codux.send_file_review, "send file/folder")
@@ -49,9 +49,7 @@ function M.install_defaults(state, mappings, codux, mode_action_desc)
   M.set(state, "n", mappings.workspaces, codux.open_workspaces, "current codux workspaces")
   M.set(state, "n", mappings.mission, codux.open_mission_prompt, "create codux mission")
   M.set(state, "n", mappings.missions, codux.open_missions, "mission control")
-  if mode_action_desc then
-    M.set(state, "n", mappings.mode, codux.toggle_plan_mode, mode_action_desc)
-  end
+  -- Plan/exec toggle is buffer-local in the agent terminal (and :CoduxTogglePlan), not a global z-menu map.
 end
 
 return M

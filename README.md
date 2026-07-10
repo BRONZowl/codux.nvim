@@ -112,7 +112,7 @@ Codux can send editor context to the active agent session:
 | Send visual selection | `<leader>zs` | `:CoduxReviewSelection` |
 | Send diagnostics and health output | `<leader>zd` | `:CoduxDiagnostics` |
 | Send Git diff | `<leader>zg` | `:CoduxDiff` |
-| Toggle agent plan mode | `<leader>zp` | `:CoduxTogglePlan` |
+| Toggle agent plan mode | `<leader>zp` in agent terminal | `:CoduxTogglePlan` |
 | Create a tmux workspace | none | `:CoduxWorkspace` or `:CoduxWorkspaceCreate` |
 | Show current workspaces | none | `:CoduxWorkspaces` |
 | Open a saved workspace | none | `:CoduxWorkspaceOpen <name>` |
@@ -133,9 +133,11 @@ Codux can send editor context to the active agent session:
 | Run Codux Doctor | `h` in workspace dashboard | `:CoduxDoctor` |
 
 By default, Codux maps only the core single-session actions and Mission Control:
-open, review file, review selection, diagnostics, diff, plan-mode toggle, and
-missions. Workspace create/list mappings are disabled by default, but every
-workspace command is available directly.
+open, review file, review selection, diagnostics, diff, and missions. Plan-mode
+toggle is available as `:CoduxTogglePlan` and as a buffer-local map inside the
+agent terminal (`mappings.mode`, default `<leader>zp`), not as a global
+leader-z which-key entry. Workspace create/list mappings are disabled by
+default, but every workspace command is available directly.
 
 ## Configuration
 
@@ -316,24 +318,24 @@ residue.
 
 ## Token and Status Monitoring
 
-When Codux is running, the `<leader>z` which-key header shows the current Codux
-mode and token usage, for example:
+The `<leader>z` which-key header shows Codux status and token usage, for example:
 
 ```text
-codux exec | 5hr 3% | wk 5%
-codux plan | 5hr 3% | wk 5%
+codux | 5hr 3% | wk 5%
 ```
 
-Token monitoring refreshes in the background while Codux is running (`refresh_ms`,
-default 60s). Mission Control can also refresh usage without an active session.
-Each check starts a short-lived `codex app-server` process (`timeout_ms`, default
-5s). If usage is unavailable (CLI missing, timeout, API error), Codux shows `--%`
-placeholders; Mission Control may append `(unavailable)`. Inspect
-`require("codux").health_info().token_usage.last_error` for the last failure
-detail. Grok token usage uses placeholders until a machine-readable Grok usage
-API is available. When an agent is actively working and the popup is hidden,
-Codux shows a small `agent is working...` indicator near the bottom-right of the
-editor.
+Token monitoring refreshes in the background while a Codex session is running
+(`refresh_ms`, default 60s). Mission Control also refreshes usage without an
+active main-session terminal, using the agent provider of the selected mission
+role (or any Codex role in the dashboard) so Grok main sessions do not block
+Codex usage checks. Each check starts a short-lived `codex app-server` process
+(`timeout_ms`, default 5s). If usage is unavailable (CLI missing, timeout, API
+error), Codux shows `--%` placeholders; Mission Control may append
+`(unavailable)`. Inspect `require("codux").health_info().token_usage.last_error`
+for the last failure detail. Grok token usage uses placeholders until a
+machine-readable Grok usage API is available. When an agent is actively working
+and the popup is hidden, Codux shows a small `agent is working...` indicator near
+the bottom-right of the editor.
 
 ## Troubleshooting
 

@@ -282,8 +282,8 @@ refresh_token_usage = function(force)
   return token_monitor_setup.refresh_token_usage(force)
 end
 
-local function refresh_mission_token_usage(force)
-  return token_monitor_setup.refresh_mission_token_usage(force)
+local function refresh_mission_token_usage(force, refresh_opts)
+  return token_monitor_setup.refresh_mission_token_usage(force, refresh_opts)
 end
 
 local function token_usage_refresh_ms()
@@ -1026,7 +1026,6 @@ which_key_controller = which_key_mod.new({
     return type(config.mappings) == "table" and config.mappings or {}
   end,
   token_usage_label = token_usage_label,
-  mode_display_label = M._v5.mode_display_label,
   valid_terminal_buffer = valid_buf,
   terminal_buffer = function()
     return state.buf
@@ -1069,7 +1068,7 @@ function M.setup(opts)
 
   local mappings = type(config.mappings) == "table" and config.mappings or {}
   refresh_which_key()
-  keymaps_mod.install_defaults(state, mappings, M, which_key_controller:mode_action_desc())
+  keymaps_mod.install_defaults(state, mappings, M)
   M._install_workspace_target_autocmds()
 
   autocmds_mod.install_shutdown_autocmd(augroup, stop_token_monitor_timer)

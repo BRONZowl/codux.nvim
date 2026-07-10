@@ -243,8 +243,12 @@ function M:dashboard_min_height_for_lines(lines)
   return mission_dashboard.min_height_for_lines(lines)
 end
 
-function M:refresh_dashboard_token_usage(force)
-  return dashboard_render.refresh_dashboard_token_usage(self, force)
+function M:refresh_dashboard_token_usage(force, opts)
+  return dashboard_render.refresh_dashboard_token_usage(self, force, opts)
+end
+
+function M:dashboard_token_agent_provider()
+  return dashboard_render.dashboard_token_agent_provider(self)
 end
 
 function M:missions_for_root(root)

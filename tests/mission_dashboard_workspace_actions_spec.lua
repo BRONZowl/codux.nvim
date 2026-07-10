@@ -665,9 +665,16 @@ do
       return true, nil, true
     end,
   })
-  function controller:render_dashboard()
+  local token_refresh
+  function controller:refresh_dashboard_token_usage(force, opts)
+    table.insert(calls, "token")
+    token_refresh = { force = force, opts = opts }
+    return true
+  end
+  function controller:render_dashboard(opts)
     table.insert(calls, "render")
     rendered = true
+    assert_equal(opts and opts.skip_token_refresh, true, "profile switch should skip second token refresh")
     return true
   end
   function controller:invalidate_output_preview_for_entry(workspace)
@@ -689,7 +696,9 @@ do
   assert_true(selected.restart)
   assert_equal(invalidated.safe_name, "alpha-builder")
   assert_equal(retried.safe_name, "alpha-builder")
-  assert_equal(table.concat(calls, ","), "invalidate,render,retry")
+  assert_equal(table.concat(calls, ","), "invalidate,token,render,retry")
+  assert_true(token_refresh.force)
+  assert_equal(token_refresh.opts.agent_provider, "grok")
   assert_true(rendered)
   assert_contains(notifications[#notifications], "Grok Auto")
 end

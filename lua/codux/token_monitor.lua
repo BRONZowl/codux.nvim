@@ -243,7 +243,11 @@ function M:refresh(force, opts)
     return false
   end
 
-  if not providers.token_usage_supported(self.get_agent_provider()) then
+  local agent_provider = opts.agent_provider
+  if agent_provider == nil then
+    agent_provider = self.get_agent_provider()
+  end
+  if not providers.token_usage_supported(agent_provider) then
     self:clear_usage()
     self.state.last_error = nil
     self.on_update()

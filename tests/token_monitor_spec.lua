@@ -328,6 +328,127 @@ do
 end
 
 do
+  local state = {
+    five_hour_percent = 5,
+    weekly_percent = 6,
+  }
+  local updates = 0
+  local started_commands = {}
+  local monitor = monitor_with_config({ codex_cmd = "codex" }, {
+    state = state,
+    get_agent_provider = function()
+      return "grok"
+    end,
+    on_update = function()
+      updates = updates + 1
+    end,
+  })
+
+  h.with_stubs({
+    {
+      target = vim,
+      key = "schedule_wrap",
+      value = function(fn)
+        return fn
+      end,
+    },
+    {
+      target = vim.fn,
+      key = "executable",
+      value = function()
+        return 1
+      end,
+    },
+    {
+      target = vim.fn,
+      key = "jobstart",
+      value = function(command)
+        table.insert(started_commands, command)
+        return 0
+      end,
+    },
+  }, function()
+    assert_false(
+      monitor:refresh(false, { require_running = false, agent_provider = "grok" }),
+      "explicit grok override should not refresh"
+    )
+    assert_equal(#started_commands, 0, "explicit grok override should not start a job")
+    assert_nil(state.five_hour_percent)
+    assert_equal(updates, 1)
+
+    state.five_hour_percent = 9
+    state.weekly_percent = 10
+    updates = 0
+    assert_false(
+      monitor:refresh(false, { require_running = false, agent_provider = "codex" }),
+      "jobstart failure should still attempt codex when overridden"
+    )
+    assert_equal(#started_commands, 1, "codex override should start even when main provider is grok")
+    assert_equal(updates, 1)
+  end)
+end
+
+do
+  local controller = {
+    state = {
+      mission_dashboard_items = {
+        [4] = { kind = "role", entry = { agent_provider = "grok" } },
+        [6] = { kind = "role", entry = { agent_provider = "codex" } },
+      },
+    },
+    selected_item = function()
+      return { kind = "role", entry = { agent_provider = "grok" } }
+    end,
+  }
+  assert_equal(dashboard_render.dashboard_token_agent_provider(controller), "grok", "selected role wins")
+
+  controller.selected_item = function()
+    return nil
+  end
+  assert_equal(dashboard_render.dashboard_token_agent_provider(controller), "codex", "any codex role wins when unselected")
+
+  controller.state.mission_dashboard_items = {
+    [4] = { kind = "role", entry = { agent_provider = "grok" } },
+  }
+  assert_equal(dashboard_render.dashboard_token_agent_provider(controller), "grok", "grok-only dashboard")
+
+  controller.state.mission_dashboard_items = {}
+  controller.default_agent_provider = function()
+    return "grok"
+  end
+  assert_equal(dashboard_render.dashboard_token_agent_provider(controller), "grok", "default provider fallback")
+end
+
+do
+  local now_ms = 1000
+  local refresh_calls = {}
+  local controller = {
+    state = {},
+    token_usage_now_ms = function()
+      return now_ms
+    end,
+    token_usage_refresh_ms = function()
+      return 60000
+    end,
+    selected_item = function()
+      return { kind = "role", entry = { agent_provider = "codex" } }
+    end,
+    refresh_token_usage = function(force, opts)
+      table.insert(refresh_calls, { force = force, opts = opts })
+      return true
+    end,
+  }
+
+  assert_true(dashboard_render.refresh_dashboard_token_usage(controller, true))
+  assert_equal(#refresh_calls, 1)
+  assert_equal(refresh_calls[1].force, true)
+  assert_equal(refresh_calls[1].opts.agent_provider, "codex")
+
+  assert_true(dashboard_render.refresh_dashboard_token_usage(controller, true, { agent_provider = "grok" }))
+  assert_equal(refresh_calls[2].opts.agent_provider, "grok", "explicit override should win")
+end
+
+do
   local now_ms = 1000
   local refresh_calls = 0
   local controller = {

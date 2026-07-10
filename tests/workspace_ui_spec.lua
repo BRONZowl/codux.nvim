@@ -62,7 +62,10 @@ end
 do
   local controller = which_key_mod.new({
     get_mode = function()
-      return "not running"
+      return "execute"
+    end,
+    token_usage_label = function()
+      return "usage | 5hr 12% | wk 34%"
     end,
   })
   local entries = controller:normal_entries({
@@ -72,6 +75,7 @@ do
     workspace = "<leader>zw",
     workspaces = "<leader>zW",
     missions = "<leader>zM",
+    mode = "<leader>zp",
   })
   local by_lhs = {}
   local by_desc = {}
@@ -85,12 +89,25 @@ do
   assert_nil(by_desc["current codux workspaces"])
   assert_nil(by_desc["codex autopilot"])
   assert_nil(by_desc["codex danger zone"])
+  assert_nil(by_desc["switch to plan mode"])
+  assert_nil(by_desc["switch to execute mode"])
   assert_nil(by_lhs["<leader>zm"])
   assert_nil(by_lhs["<leader>za"])
   assert_nil(by_lhs["<leader>zA"])
   assert_nil(by_lhs["<leader>zw"])
   assert_nil(by_lhs["<leader>zW"])
+  assert_nil(by_lhs["<leader>zp"])
   assert_equal(by_lhs["<leader>zM"], "mission control")
+
+  local title = controller:title()
+  assert_equal(title[1][1], " codux ")
+  assert_contains(title[2][1], "5hr 12%")
+  assert_equal(table.concat({ title[1][1], title[2][1] }):find("exec", 1, true), nil)
+  assert_equal(table.concat({ title[1][1], title[2][1] }):find("plan", 1, true), nil)
+
+  local header = controller:mode_status_header_lines()
+  assert_equal(header[1], "codux")
+  assert_equal(header[2], "usage | 5hr 12% | wk 34%")
 end
 
 do

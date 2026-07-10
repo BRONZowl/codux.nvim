@@ -35,9 +35,11 @@ function M.new(opts)
     refresh_token_usage = function(force)
       return monitor:refresh(force)
     end,
-    refresh_mission_token_usage = function(force)
+    refresh_mission_token_usage = function(force, refresh_opts)
+      refresh_opts = type(refresh_opts) == "table" and refresh_opts or {}
       return monitor:refresh(force, {
         require_running = false,
+        agent_provider = refresh_opts.agent_provider,
       })
     end,
     token_usage_refresh_ms = function()

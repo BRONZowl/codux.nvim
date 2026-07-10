@@ -19,16 +19,6 @@ local markers = {
 
 local function noop() end
 
-local function mode_display_label(display_label, mode)
-  if type(display_label) == "function" then
-    return display_label(mode)
-  end
-  if mode == "execute" then
-    return "exec"
-  end
-  return mode or "not running"
-end
-
 local function mode_action_desc_for(mode)
   if mode == "execute" then
     return "switch to plan mode"
@@ -108,7 +98,6 @@ function M.new(opts)
     token_usage_label = type(opts.token_usage_label) == "function" and opts.token_usage_label or function()
       return ""
     end,
-    mode_display_label = opts.mode_display_label,
     valid_terminal_buffer = type(opts.valid_terminal_buffer) == "function" and opts.valid_terminal_buffer or function()
       return false
     end,
@@ -140,7 +129,7 @@ function M:mode_status_label()
 end
 
 function M:mode_status_header_lines()
-  local lines = { "codux status " .. mode_display_label(self.mode_display_label, self:mode()) }
+  local lines = { "codux" }
   local usage = self.token_usage_label()
   if usage ~= "" then
     table.insert(lines, usage)
@@ -249,7 +238,7 @@ end
 
 function M:title()
   local usage = self.token_usage_label()
-  local title = { { " codux " .. mode_display_label(self.mode_display_label, self:mode()) .. " ", self:mode_status_hl() } }
+  local title = { { " codux ", self:mode_status_hl() } }
   if usage ~= "" then
     local compact_usage = usage:gsub("^usage | ", "")
     table.insert(title, { "| " .. compact_usage .. " ", "CoduxWhichKeyUsage" })
@@ -416,10 +405,6 @@ function M:normal_entries(mappings)
       table.insert(entries, entry)
     end
   end
-  local action_desc = self:mode_action_desc()
-  if action_desc and type(mappings.mode) == "string" and mappings.mode ~= "" then
-    table.insert(entries, { lhs = mappings.mode, desc = action_desc })
-  end
 
   return entries
 end
@@ -489,11 +474,15 @@ function M:refresh(mappings)
   mappings = type(mappings) == "table" and mappings or self.get_mappings()
   self:apply_mode_status_hl()
   self:register_group(mappings)
-  local action_desc = self:mode_action_desc()
-  if action_desc then
-    self.set_mapping("n", mappings.mode, self.toggle_plan_mode, action_desc)
-  elseif type(mappings.mode) == "string" and mappings.mode ~= "" then
-    pcall(vim.keymap.del, "n", mappings.mode)
+  -- Plan/exec toggle stays buffer-local in the agent terminal, not on the global z menu.
+  if type(mappings.mode) == "string" and mappings.mode ~= "" then
+    local current = vim.fn.maparg(mappings.mode, "n", false, true)
+    if
+      type(current) == "table"
+      and (current.desc == "switch to plan mode" or current.desc == "switch to execute mode")
+    then
+      pcall(vim.keymap.del, "n", mappings.mode)
+    end
   end
   self:update_terminal_mode_mapping()
 end

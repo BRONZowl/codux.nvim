@@ -1,5 +1,7 @@
 local M = {}
 
+local providers = require("codux.providers")
+
 local function entry_key(entry)
   entry = type(entry) == "table" and entry or {}
   return tostring(entry.safe_name or entry.name or entry.mission_role or "")
@@ -247,7 +249,80 @@ function M.mission_mode_label(_, entry)
   return "not set"
 end
 
-function M.refresh_dashboard_token_usage(controller, force)
+local function entry_agent_provider(entry)
+  entry = type(entry) == "table" and entry or {}
+  return providers.normalize_provider(entry.agent_provider)
+end
+
+--- Agent provider that should drive Mission Control token usage (not the main popup terminal).
+function M.dashboard_token_agent_provider(controller)
+  local function from_roles(roles)
+    local saw_grok = false
+    for _, role in ipairs(type(roles) == "table" and roles or {}) do
+      local provider = entry_agent_provider(role)
+      if provider == "codex" then
+        return "codex"
+      end
+      if provider == "grok" then
+        saw_grok = true
+      end
+    end
+    if saw_grok then
+      return "grok"
+    end
+    return nil
+  end
+
+  local selected = type(controller.selected_item) == "function" and controller:selected_item() or nil
+  if type(selected) == "table" then
+    if selected.kind == "role" then
+      local provider = entry_agent_provider(selected.entry)
+      if provider then
+        return provider
+      end
+    end
+    if selected.kind == "mission" and type(selected.mission) == "table" then
+      local mission_provider = providers.normalize_provider(selected.mission.agent_provider)
+      if mission_provider then
+        return mission_provider
+      end
+      local from_mission_roles = from_roles(selected.mission.roles)
+      if from_mission_roles then
+        return from_mission_roles
+      end
+    end
+  end
+
+  local saw_codex = false
+  local saw_grok = false
+  local items = type(controller.state) == "table" and controller.state.mission_dashboard_items or nil
+  if type(items) == "table" then
+    for _, item in pairs(items) do
+      if type(item) == "table" and item.kind == "role" then
+        local provider = entry_agent_provider(item.entry)
+        if provider == "codex" then
+          saw_codex = true
+        elseif provider == "grok" then
+          saw_grok = true
+        end
+      end
+    end
+  end
+  if saw_codex then
+    return "codex"
+  end
+  if saw_grok then
+    return "grok"
+  end
+
+  if type(controller.default_agent_provider) == "function" then
+    return providers.normalize_provider(controller.default_agent_provider()) or "codex"
+  end
+  return "codex"
+end
+
+function M.refresh_dashboard_token_usage(controller, force, opts)
+  opts = type(opts) == "table" and opts or {}
   local now = tonumber(controller.token_usage_now_ms()) or (os.time() * 1000)
   local refresh_ms = tonumber(controller.token_usage_refresh_ms()) or 60000
   refresh_ms = math.max(10000, refresh_ms)
@@ -256,10 +331,14 @@ function M.refresh_dashboard_token_usage(controller, force)
     return false
   end
 
+  local agent_provider = opts.agent_provider or M.dashboard_token_agent_provider(controller)
+
   -- Stamp when a refresh starts, or on permanent failures so we back off.
   -- When another request is already in flight, leave the stamp alone so the
   -- next tick can try again after that request settles.
-  local started, reason = controller.refresh_token_usage(force == true)
+  local started, reason = controller.refresh_token_usage(force == true, {
+    agent_provider = agent_provider,
+  })
   if started or reason ~= "in_flight" then
     controller.state.mission_dashboard_token_usage_refreshed_at = now
   end
