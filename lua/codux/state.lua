@@ -17,6 +17,9 @@ function M.initial()
     token_usage = {
       five_hour_percent = nil,
       weekly_percent = nil,
+      tpm_percent = nil,
+      rpm_percent = nil,
+      usage_provider = nil,
       last_error = nil,
       in_flight = false,
       job_id = nil,

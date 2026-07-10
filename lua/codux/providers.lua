@@ -305,7 +305,8 @@ function M.prompt_must_be_pasted(provider)
 end
 
 function M.token_usage_supported(provider)
-  return (M.normalize_provider(provider) or "codex") == "codex"
+  provider = M.normalize_provider(provider) or "codex"
+  return provider == "codex" or provider == "grok"
 end
 
 return M

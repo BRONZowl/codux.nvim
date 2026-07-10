@@ -992,6 +992,9 @@ function M.health_info()
     token_usage = {
       five_hour_percent = state.token_usage.five_hour_percent,
       weekly_percent = state.token_usage.weekly_percent,
+      tpm_percent = state.token_usage.tpm_percent,
+      rpm_percent = state.token_usage.rpm_percent,
+      usage_provider = state.token_usage.usage_provider,
       in_flight = state.token_usage.in_flight,
       last_error = state.token_usage.last_error,
     },

@@ -163,8 +163,15 @@ require("codux").setup({
     enabled = true,
     refresh_ms = 60000,
     timeout_ms = 5000,
-    -- Optional dedicated CLI for usage checks (defaults to providers.codex executable):
+    -- Optional dedicated CLI for Codex usage checks (defaults to providers.codex executable):
     -- codex_cmd = "codex",
+    grok = {
+      enabled = true,
+      base_url = "https://api.x.ai/v1",
+      model = "grok-4.5",
+      -- api_key = nil, -- or set XAI_API_KEY / GROK_API_KEY
+      -- auth_file = nil, -- default ~/.grok/auth.json (Grok CLI OAuth)
+    },
   },
   workspaces = {
     enabled = true,
@@ -322,20 +329,31 @@ The `<leader>z` which-key header shows Codux status and token usage, for example
 
 ```text
 codux | 5hr 3% | wk 5%
+codux | tpm 2% | rpm 0%
 ```
 
-Token monitoring refreshes in the background while a Codex session is running
+Token monitoring refreshes in the background while a session is running
 (`refresh_ms`, default 60s). Mission Control also refreshes usage without an
 active main-session terminal, using the agent provider of the selected mission
-role (or any Codex role in the dashboard) so Grok main sessions do not block
-Codex usage checks. Each check starts a short-lived `codex app-server` process
-(`timeout_ms`, default 5s). If usage is unavailable (CLI missing, timeout, API
-error), Codux shows `--%` placeholders; Mission Control may append
-`(unavailable)`. Inspect `require("codux").health_info().token_usage.last_error`
-for the last failure detail. Grok token usage uses placeholders until a
-machine-readable Grok usage API is available. When an agent is actively working
-and the popup is hidden, Codux shows a small `agent is working...` indicator near
-the bottom-right of the editor.
+role.
+
+**Codex** usage is unchanged: each check starts a short-lived `codex app-server`
+process and reads account rate limits (`timeout_ms`, default 5s), shown as
+`5hr` / `wk` percent used.
+
+**Grok** usage uses a cheap `max_tokens=1` probe against the xAI API and reads
+`x-ratelimit-*` headers, shown as `tpm` / `rpm` percent used. Auth is resolved
+from `token_monitor.grok.api_key`, then `XAI_API_KEY` / `GROK_API_KEY`, then
+`~/.grok/auth.json` (same OAuth key as `grok login`). This probe incurs a small
+API cost per refresh; disable with `token_monitor.grok = false` without
+affecting Codex monitoring.
+
+If usage is unavailable (CLI missing, timeout, API error, no credentials),
+Codux shows `--%` placeholders; Mission Control may append `(unavailable)`.
+Inspect `require("codux").health_info().token_usage.last_error` for the last
+failure detail. When an agent is actively working and the popup is hidden,
+Codux shows a small `agent is working...` indicator near the bottom-right of the
+editor.
 
 ## Troubleshooting
 

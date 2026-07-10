@@ -305,12 +305,60 @@ do
 end
 
 do
+  local providers = require("codux.providers")
+  assert_true(providers.token_usage_supported("codex"))
+  assert_true(providers.token_usage_supported("grok"))
+  -- Unknown values still fall back to codex (legacy normalize behavior).
+  assert_true(providers.token_usage_supported("nope"))
+end
+
+do
+  local parsed = token_usage.parse_grok_headers({
+    ["x-ratelimit-limit-tokens"] = "100",
+    ["x-ratelimit-remaining-tokens"] = "100",
+    ["x-ratelimit-limit-requests"] = "50",
+    ["x-ratelimit-remaining-requests"] = "50",
+  })
+  assert_equal(parsed.tpm_percent, 0)
+  assert_equal(parsed.rpm_percent, 0)
+
+  parsed = token_usage.parse_grok_headers(
+    "HTTP/1.1 200 OK\nx-ratelimit-limit-tokens: 100\nx-ratelimit-remaining-tokens: 40\nx-ratelimit-limit-requests: 10\nx-ratelimit-remaining-requests: 7\n\n"
+  )
+  assert_equal(parsed.tpm_percent, 60)
+  assert_equal(parsed.rpm_percent, 30)
+  assert_nil(token_usage.parse_grok_headers({}))
+  assert_nil(token_usage.parse_grok_headers({ ["x-ratelimit-limit-tokens"] = "0", ["x-ratelimit-remaining-tokens"] = "0" }))
+end
+
+do
+  assert_equal(
+    token_usage.label({ tpm_percent = 12, rpm_percent = 3, usage_provider = "grok" }),
+    "usage | tpm 12% | rpm 3%"
+  )
+  assert_equal(
+    token_usage.label({ last_error = "nope" }, { provider = "grok", show_error = true }),
+    "usage | tpm --% | rpm --% (unavailable)"
+  )
+  -- Codex label format must stay byte-identical for the same inputs.
+  assert_equal(
+    token_usage.label({ five_hour_percent = 1, weekly_percent = 2 }),
+    "usage | 5hr 1% | wk 2%"
+  )
+end
+
+do
   local state = {
     five_hour_percent = 5,
     weekly_percent = 6,
   }
   local updates = 0
-  local monitor = monitor_with_config({ codex_cmd = "codex" }, {
+  local monitor = monitor_with_config({
+    codex_cmd = "codex",
+    token_monitor = {
+      grok = false,
+    },
+  }, {
     state = state,
     get_agent_provider = function()
       return "grok"
@@ -320,11 +368,14 @@ do
     end,
   })
 
-  assert_false(monitor:refresh(false), "unsupported provider should not refresh")
-  assert_nil(state.five_hour_percent, "unsupported provider should clear usage")
-  assert_nil(state.weekly_percent)
-  assert_nil(state.last_error)
+  assert_false(monitor:refresh(false, { require_running = false }), "disabled grok monitor should not probe")
+  assert_equal(state.usage_provider, "grok")
+  assert_nil(state.tpm_percent)
+  assert_nil(state.rpm_percent)
   assert_equal(updates, 1)
+  -- Codex cached percents are not cleared by a Grok-disabled refresh.
+  assert_equal(state.five_hour_percent, 5)
+  assert_equal(state.weekly_percent, 6)
 end
 
 do
@@ -334,16 +385,153 @@ do
   }
   local updates = 0
   local started_commands = {}
-  local monitor = monitor_with_config({ codex_cmd = "codex" }, {
+  local monitor = token_monitor_mod.new({
+    defaults = {
+      enabled = true,
+      refresh_ms = 60000,
+      timeout_ms = 5000,
+      grok = { enabled = true, base_url = "https://api.x.ai/v1", model = "grok-4.5" },
+    },
     state = state,
+    get_config = function()
+      return {
+        codex_cmd = "codex",
+        token_monitor = {
+          grok = { api_key = "test-key" },
+        },
+      }
+    end,
+    is_running = function()
+      return true
+    end,
     get_agent_provider = function()
       return "grok"
+    end,
+    json_encode = function()
+      return '{"model":"grok-4.5"}'
     end,
     on_update = function()
       updates = updates + 1
     end,
   })
 
+  h.with_stubs({
+    {
+      target = vim,
+      key = "schedule_wrap",
+      value = function(fn)
+        return fn
+      end,
+    },
+    {
+      target = vim.fn,
+      key = "executable",
+      value = function(name)
+        if name == "curl" or name == "codex" then
+          return 1
+        end
+        return 0
+      end,
+    },
+    {
+      target = vim.fn,
+      key = "jobstart",
+      value = function(command)
+        table.insert(started_commands, command)
+        return 0
+      end,
+    },
+  }, function()
+    assert_false(
+      monitor:refresh(false, { require_running = false, agent_provider = "grok" }),
+      "failed grok jobstart should return false"
+    )
+    assert_equal(#started_commands, 1, "grok override should start curl probe")
+    assert_true(type(started_commands[1]) == "table")
+    assert_equal(started_commands[1][1], "curl")
+    assert_equal(state.five_hour_percent, 5, "grok probe must not clear Codex fields")
+    assert_equal(updates, 1)
+
+    state.five_hour_percent = 9
+    state.weekly_percent = 10
+    updates = 0
+    started_commands = {}
+    assert_false(
+      monitor:refresh(false, { require_running = false, agent_provider = "codex" }),
+      "jobstart failure should still attempt codex when overridden"
+    )
+    assert_equal(#started_commands, 1, "codex override should start even when main provider is grok")
+    assert_equal(started_commands[1][1], "codex")
+    assert_equal(updates, 1)
+  end)
+end
+
+do
+  local key, err = token_monitor_mod.resolve_grok_api_key({
+    grok = {},
+    env = {},
+    read_file = function()
+      return nil
+    end,
+  })
+  assert_nil(key)
+  assert_equal(err, "Grok credentials not found")
+
+  key = token_monitor_mod.resolve_grok_api_key({
+    grok = { api_key = "from-config" },
+    env = { XAI_API_KEY = "from-env" },
+  })
+  assert_equal(key, "from-config")
+
+  key = token_monitor_mod.resolve_grok_api_key({
+    grok = {},
+    env = { GROK_API_KEY = "from-grok-env" },
+  })
+  assert_equal(key, "from-grok-env")
+
+  key = token_monitor_mod.resolve_grok_api_key({
+    grok = { auth_file = "/tmp/fake-auth.json" },
+    env = {},
+    read_file = function()
+      return '{"https://auth.x.ai::id":{"key":"oauth-key"}}'
+    end,
+    json_decode = function()
+      return { ["https://auth.x.ai::id"] = { key = "oauth-key" } }
+    end,
+  })
+  assert_equal(key, "oauth-key")
+end
+
+do
+  local state = {}
+  local updates = 0
+  local exit_cb
+  local monitor = token_monitor_mod.new({
+    defaults = {
+      enabled = true,
+      refresh_ms = 60000,
+      timeout_ms = 5000,
+      grok = { enabled = true, model = "grok-4.5", base_url = "https://api.x.ai/v1" },
+    },
+    state = state,
+    get_config = function()
+      return { token_monitor = { grok = { api_key = "k" } } }
+    end,
+    is_running = function()
+      return false
+    end,
+    json_encode = function()
+      return '{"model":"grok-4.5"}'
+    end,
+    on_update = function()
+      updates = updates + 1
+    end,
+  })
+
+  local old_uv = vim.uv
+  local old_loop = vim.loop
+  vim.uv = nil
+  vim.loop = nil
   h.with_stubs({
     {
       target = vim,
@@ -362,30 +550,25 @@ do
     {
       target = vim.fn,
       key = "jobstart",
-      value = function(command)
-        table.insert(started_commands, command)
-        return 0
+      value = function(_, opts)
+        exit_cb = opts.on_exit
+        return 42
       end,
     },
   }, function()
-    assert_false(
-      monitor:refresh(false, { require_running = false, agent_provider = "grok" }),
-      "explicit grok override should not refresh"
-    )
-    assert_equal(#started_commands, 0, "explicit grok override should not start a job")
-    assert_nil(state.five_hour_percent)
-    assert_equal(updates, 1)
-
-    state.five_hour_percent = 9
-    state.weekly_percent = 10
-    updates = 0
-    assert_false(
-      monitor:refresh(false, { require_running = false, agent_provider = "codex" }),
-      "jobstart failure should still attempt codex when overridden"
-    )
-    assert_equal(#started_commands, 1, "codex override should start even when main provider is grok")
-    assert_equal(updates, 1)
+    assert_true(monitor:refresh(false, { require_running = false, agent_provider = "grok" }))
+    assert_equal(state.job_id, 42)
+    state.stdout =
+      "HTTP/2 200\nx-ratelimit-limit-tokens: 100\nx-ratelimit-remaining-tokens: 25\nx-ratelimit-limit-requests: 20\nx-ratelimit-remaining-requests: 10\n\n"
+    exit_cb(nil, 0)
+    assert_equal(state.tpm_percent, 75)
+    assert_equal(state.rpm_percent, 50)
+    assert_equal(state.usage_provider, "grok")
+    assert_nil(state.last_error)
+    assert_true(updates >= 1)
   end)
+  vim.uv = old_uv
+  vim.loop = old_loop
 end
 
 do

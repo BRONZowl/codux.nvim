@@ -25,6 +25,14 @@ function M.new(opts)
     json_encode = type(opts.json_encode) == "function" and opts.json_encode or json.encode,
     json_decode = type(opts.json_decode) == "function" and opts.json_decode or json.decode,
     on_update = type(opts.on_update) == "function" and opts.on_update or util.noop,
+    read_file = type(opts.read_file) == "function" and opts.read_file or function(path)
+      local ok, lines = pcall(vim.fn.readfile, path)
+      if not ok or type(lines) ~= "table" then
+        return nil
+      end
+      return table.concat(lines, "\n")
+    end,
+    env = type(opts.env) == "table" and opts.env or vim.env,
   }
 
   return setmetatable(monitor, M)
@@ -70,6 +78,18 @@ function M:timeout_ms()
   return value
 end
 
+function M:grok_config()
+  local monitor = self:config()
+  if monitor.grok == false then
+    return { enabled = false }
+  end
+  if type(monitor.grok) ~= "table" then
+    local defaults = type(self.defaults) == "table" and self.defaults.grok or {}
+    return type(defaults) == "table" and defaults or { enabled = true }
+  end
+  return monitor.grok
+end
+
 function M:label(opts)
   opts = type(opts) == "table" and opts or {}
   local running = opts.running
@@ -87,6 +107,7 @@ function M:label(opts)
     mode = mode,
     show_when_not_running = opts.show_when_not_running,
     show_error = opts.show_error,
+    provider = self.state.usage_provider,
   })
 end
 
@@ -102,6 +123,9 @@ end
 function M:clear_usage()
   self.state.five_hour_percent = nil
   self.state.weekly_percent = nil
+  self.state.tpm_percent = nil
+  self.state.rpm_percent = nil
+  self.state.usage_provider = nil
   self.state.last_error = nil
 end
 
@@ -117,8 +141,15 @@ function M:complete_request(job_id, usage, error_message, stop_job)
   self.state.initialized = false
 
   if type(usage) == "table" then
-    self.state.five_hour_percent = usage.five_hour_percent
-    self.state.weekly_percent = usage.weekly_percent
+    if usage.usage_provider == "grok" or usage.tpm_percent ~= nil or usage.rpm_percent ~= nil then
+      self.state.tpm_percent = usage.tpm_percent
+      self.state.rpm_percent = usage.rpm_percent
+      self.state.usage_provider = "grok"
+    else
+      self.state.five_hour_percent = usage.five_hour_percent
+      self.state.weekly_percent = usage.weekly_percent
+      self.state.usage_provider = "codex"
+    end
     self.state.last_error = nil
   elseif type(error_message) == "string" and error_message ~= "" then
     self.state.last_error = error_message
@@ -236,24 +267,183 @@ function M:app_server_command()
   return { executable, "app-server", "--stdio" }, executable, nil
 end
 
-function M:refresh(force, opts)
+function M.resolve_grok_api_key(opts)
   opts = type(opts) == "table" and opts or {}
-  local require_running = opts.require_running ~= false
-  if not self:enabled() or (require_running and not self.is_running()) then
-    return false
+  local grok = type(opts.grok) == "table" and opts.grok or {}
+  if type(grok.api_key) == "string" and grok.api_key ~= "" then
+    return grok.api_key
   end
 
-  local agent_provider = opts.agent_provider
-  if agent_provider == nil then
-    agent_provider = self.get_agent_provider()
+  local env = type(opts.env) == "table" and opts.env or {}
+  if type(env.XAI_API_KEY) == "string" and env.XAI_API_KEY ~= "" then
+    return env.XAI_API_KEY
   end
-  if not providers.token_usage_supported(agent_provider) then
-    self:clear_usage()
+  if type(env.GROK_API_KEY) == "string" and env.GROK_API_KEY ~= "" then
+    return env.GROK_API_KEY
+  end
+
+  local auth_file = grok.auth_file
+  if type(auth_file) ~= "string" or auth_file == "" then
+    local home = type(env.HOME) == "string" and env.HOME or (vim.env and vim.env.HOME) or ""
+    if home ~= "" then
+      auth_file = home .. "/.grok/auth.json"
+    end
+  end
+  if type(auth_file) ~= "string" or auth_file == "" then
+    return nil, "Grok credentials not found"
+  end
+
+  local read_file = type(opts.read_file) == "function" and opts.read_file
+  local content = read_file and read_file(auth_file) or nil
+  if type(content) ~= "string" or content == "" then
+    return nil, "Grok credentials not found"
+  end
+
+  local decoded = (opts.json_decode or json.decode)(content)
+  if type(decoded) ~= "table" then
+    return nil, "Grok credentials file is invalid"
+  end
+
+  for _, entry in pairs(decoded) do
+    if type(entry) == "table" and type(entry.key) == "string" and entry.key ~= "" then
+      return entry.key
+    end
+  end
+
+  return nil, "Grok credentials not found"
+end
+
+function M:refresh_grok(force)
+  local grok = self:grok_config()
+  if grok.enabled == false then
+    self.state.tpm_percent = nil
+    self.state.rpm_percent = nil
+    self.state.usage_provider = "grok"
     self.state.last_error = nil
     self.on_update()
     return false
   end
 
+  if self.state.in_flight then
+    if not force then
+      return false, "in_flight"
+    end
+    self:complete_request(self.state.job_id, nil, "Grok token usage request was replaced", true)
+  end
+
+  local api_key, auth_error = M.resolve_grok_api_key({
+    grok = grok,
+    env = self.env,
+    read_file = self.read_file,
+    json_decode = self.json_decode,
+  })
+  if not api_key then
+    self.state.usage_provider = "grok"
+    self.state.tpm_percent = nil
+    self.state.rpm_percent = nil
+    self.state.last_error = auth_error or "Grok credentials not found"
+    self.on_update()
+    return false
+  end
+
+  if vim.fn.executable("curl") ~= 1 then
+    self.state.usage_provider = "grok"
+    self.state.last_error = "curl not found on PATH (required for Grok token usage)"
+    self.on_update()
+    return false
+  end
+
+  local base_url = type(grok.base_url) == "string" and grok.base_url ~= "" and grok.base_url or "https://api.x.ai/v1"
+  base_url = base_url:gsub("/+$", "")
+  local model = type(grok.model) == "string" and grok.model ~= "" and grok.model or "grok-4.5"
+  local payload = self.json_encode({
+    model = model,
+    messages = { { role = "user", content = "." } },
+    max_tokens = 1,
+  })
+
+  local command = {
+    "curl",
+    "-sS",
+    "-D",
+    "-",
+    "-o",
+    "/dev/null",
+    "-X",
+    "POST",
+    base_url .. "/chat/completions",
+    "-H",
+    "Authorization: Bearer " .. api_key,
+    "-H",
+    "Content-Type: application/json",
+    "-H",
+    "Accept: application/json",
+    "-H",
+    "User-Agent: codux.nvim",
+    "--data-binary",
+    payload,
+  }
+
+  self.state.in_flight = true
+  self.state.stdout = ""
+  self.state.initialized = false
+  self.state.last_error = nil
+  self.state.usage_provider = "grok"
+
+  local job_id
+  job_id = vim.fn.jobstart(command, {
+    stdout_buffered = true,
+    stderr_buffered = true,
+    on_stdout = vim.schedule_wrap(function(_, data)
+      if self.state.job_id ~= job_id or type(data) ~= "table" then
+        return
+      end
+      self.state.stdout = (self.state.stdout or "") .. table.concat(data, "\n")
+    end),
+    on_exit = vim.schedule_wrap(function(_, code)
+      if self.state.job_id ~= job_id then
+        return
+      end
+      local raw = self.state.stdout or ""
+      local usage = token_usage.parse_grok_headers(raw)
+      if usage then
+        self:complete_request(job_id, usage, nil, false)
+        return
+      end
+      local message = "Grok token usage response was unavailable"
+      if code ~= 0 then
+        message = "Grok token usage request exited with code " .. tostring(code)
+      elseif raw:find("401", 1, true) or raw:lower():find("unauthenticated", 1, true) then
+        message = "Grok token usage authentication failed"
+      end
+      self:complete_request(job_id, nil, message, false)
+    end),
+  })
+
+  if type(job_id) ~= "number" or job_id <= 0 then
+    self.state.job_id = nil
+    self.state.in_flight = false
+    self.state.last_error = "Failed to start Grok token usage probe"
+    self.on_update()
+    return false
+  end
+
+  self.state.job_id = job_id
+
+  local loop = vim.uv or vim.loop
+  local timer = loop and loop.new_timer()
+  if timer then
+    self.state.timeout_timer = timer
+    timer:start(self:timeout_ms(), 0, vim.schedule_wrap(function()
+      self:complete_request(job_id, nil, "Grok token usage request timed out", true)
+    end))
+  end
+
+  return true
+end
+
+--- Codex path: preserved behavior (app-server rate limits).
+function M:refresh_codex(force)
   if self.state.in_flight then
     if not force then
       return false, "in_flight"
@@ -278,6 +468,7 @@ function M:refresh(force, opts)
   self.state.stdout = ""
   self.state.initialized = false
   self.state.last_error = nil
+  self.state.usage_provider = "codex"
 
   local job_id
   job_id = vim.fn.jobstart(command, {
@@ -331,6 +522,33 @@ function M:refresh(force, opts)
   end
 
   return true
+end
+
+function M:refresh(force, opts)
+  opts = type(opts) == "table" and opts or {}
+  local require_running = opts.require_running ~= false
+  if not self:enabled() or (require_running and not self.is_running()) then
+    return false
+  end
+
+  local agent_provider = opts.agent_provider
+  if agent_provider == nil then
+    agent_provider = self.get_agent_provider()
+  end
+  agent_provider = providers.normalize_provider(agent_provider) or "codex"
+
+  if not providers.token_usage_supported(agent_provider) then
+    self:clear_usage()
+    self.state.last_error = nil
+    self.on_update()
+    return false
+  end
+
+  if agent_provider == "grok" then
+    return self:refresh_grok(force)
+  end
+
+  return self:refresh_codex(force)
 end
 
 function M:start()
