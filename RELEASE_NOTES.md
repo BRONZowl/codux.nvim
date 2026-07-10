@@ -1,5 +1,20 @@
 # Release Notes
 
+## v1.0.1
+
+Global default provider and Grok usage polish.
+
+codux.nvim v1.0.1 streamlines provider selection with a session-wide default,
+keeps per-workspace switching intact, and hardens Grok token/status monitoring.
+
+- Added `<leader>zP` and `:CoduxSetDefaultProvider` to set the global default agent provider (Grok or Codex) for the Neovim session.
+- Open (`<leader>zc` / `:Codux`), workspace create, and mission create now skip the provider step and open the permission-profile picker for the global default.
+- Left Mission Control and workspace dashboard Switch Profile menus as full two-step provider + profile pickers so roles and workspaces can still diverge from the default.
+- Added Grok API rate-limit usage probing (`tpm` / `rpm`) with OAuth/API-key auth resolution, and cached Mission Control token usage per agent provider.
+- Simplified leader-z which-key chrome and menu labels, and fixed Grok dashboard prompt submission and interactive submit paths.
+- Hardened token monitor refresh and UI updates, and fixed provider configuration / README guidance for nested provider commands.
+- Expanded regression coverage for default-provider selection, open/create profile pickers, and related command wiring.
+
 ## v1.0.0
 
 Codex and Grok provider release.

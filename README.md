@@ -73,17 +73,27 @@ Restart Neovim, open a project, then verify Codux:
 `:CoduxClose` or `<C-q>` hides the window without stopping the agent; `:CoduxExit`
 stops the agent process.
 
+Set the global default agent provider with `<leader>zP` or
+`:CoduxSetDefaultProvider` (picker keys `g` for Grok, `c` for Codex). That
+choice updates the session default used by open, workspace create, and mission
+create. Setup option `default_agent_provider` (or env `CODUX_AGENT_PROVIDER`)
+seeds the default when Neovim starts.
+
 The default open mapping is `<leader>zc`. When no agent is running, it opens a
-two-step provider/profile picker:
+permission-profile picker for the global default provider:
 
-- first choose `g` for Grok or `c` for Codex
-- then choose `d` for default, `a` for auto, or `f` for full access
+- `d` for default
+- `a` for auto
+- `f` for full access
 
-Those picker choices set only the startup provider and permission profile for
-the new session. Once an agent is running, `:Codux` and `<leader>zc` focus that
-session instead of changing its provider. Use full access only in repositories
-you trust. `:CoduxOpenDanger` starts Codex with no approval prompts and no
-sandbox; `:CoduxOpenGrokDanger` starts Grok with its full-access command.
+Those profile choices set only the startup permission profile for the new
+session. Once an agent is running, `:Codux` and `<leader>zc` focus that session
+instead of changing its provider or profile. Mission Control and workspace
+dashboard **Switch Profile** menus still use a two-step provider + profile
+picker so individual roles or workspaces can differ from the global default.
+Use full access only in repositories you trust. `:CoduxOpenDanger` starts Codex
+with no approval prompts and no sandbox; `:CoduxOpenGrokDanger` starts Grok with
+its full-access command.
 
 Codux can send editor context to the active agent session:
 
@@ -99,15 +109,16 @@ Codux can send editor context to the active agent session:
 | Action | Default key | Command |
 | --- | --- | --- |
 | Open or focus agent | `<leader>zc` | `:Codux` or `:CoduxOpen` |
+| Set default agent provider | `<leader>zP` | `:CoduxSetDefaultProvider [codex\|grok]` |
 | Toggle agent popup | none | `:CoduxToggle` |
 | Hide the popup | `<C-q>` in popup | `:CoduxClose` |
 | Stop agent | none | `:CoduxExit` |
-| Open Codex with auto profile | picker keys `c`, `a` | `:CoduxOpenAuto` |
-| Open Codex with full access | picker keys `c`, `f` | `:CoduxOpenDanger` |
+| Open Codex with auto profile | none | `:CoduxOpenAuto` |
+| Open Codex with full access | none | `:CoduxOpenDanger` |
 | Open a specific provider | none | `:CoduxOpenProvider <codex\|grok> <default\|auto\|danger>` |
-| Open Grok | picker keys `g`, `d` | `:CoduxOpenGrok` |
-| Open Grok with auto profile | picker keys `g`, `a` | `:CoduxOpenGrokAuto` |
-| Open Grok with full access | picker keys `g`, `f` | `:CoduxOpenGrokDanger` |
+| Open Grok | none | `:CoduxOpenGrok` |
+| Open Grok with auto profile | none | `:CoduxOpenGrokAuto` |
+| Open Grok with full access | none | `:CoduxOpenGrokDanger` |
 | Send file, folder, or explorer node | `<leader>zf` | `:CoduxReview` |
 | Send visual selection | `<leader>zs` | `:CoduxReviewSelection` |
 | Send diagnostics and health output | `<leader>zd` | `:CoduxDiagnostics` |
@@ -133,11 +144,12 @@ Codux can send editor context to the active agent session:
 | Run Codux Doctor | `h` in workspace dashboard | `:CoduxDoctor` |
 
 By default, Codux maps only the core single-session actions and Mission Control:
-open, review file, review selection, diagnostics, diff, and missions. Plan-mode
-toggle is available as `:CoduxTogglePlan` and as a buffer-local map inside the
-agent terminal (`mappings.mode`, default `<leader>zp`), not as a global
-leader-z which-key entry. Workspace create/list mappings are disabled by
-default, but every workspace command is available directly.
+open, set default provider, review file, review selection, diagnostics, diff,
+and missions. Plan-mode toggle is available as `:CoduxTogglePlan` and as a
+buffer-local map inside the agent terminal (`mappings.mode`, default
+`<leader>zp`), not as a global leader-z which-key entry. Workspace create/list
+mappings are disabled by default, but every workspace command is available
+directly.
 
 ## Configuration
 
@@ -203,6 +215,10 @@ variables:
 - `GROK_WORKSPACE_AUTO_CMD` for the Grok auto profile
 - `GROK_DANGER_FULL_ACCESS_CMD` for the Grok full-access profile
 
+`default_agent_provider` (default `"codex"`, or `CODUX_AGENT_PROVIDER`) is the
+startup seed for open, workspace create, and mission create. Change it for the
+current Neovim session with `<leader>zP` or `:CoduxSetDefaultProvider`.
+
 New Codux-managed agent sessions start in plan mode. Set
 `default_initial_mode = "execute"` to keep older execute-mode startup behavior.
 
@@ -218,8 +234,8 @@ Run `:CoduxWorkspaceCreate` inside tmux to create a guided workspace. Add
 `--grok` or `--codex` to force a provider for that workspace. Codux:
 
 - prompts for a workspace name
-- prompts for Grok or Codex, unless the provider was forced
-- prompts for default, auto, or full profile
+- uses the global default provider unless the provider was forced
+- prompts for default, auto, or full permission profile
 - opens a Vim-like instruction editor
 - previews the instruction before launch
 - requires the current checkout to be clean
