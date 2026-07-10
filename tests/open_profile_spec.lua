@@ -300,6 +300,37 @@ if type(vim.api) == "table" then
   assert_equal(selected_only.agent_provider, "grok")
   assert_equal(selected_only.profile, "auto")
 
+  local default_provider_choice
+  assert_equal(codux._v5.select_default_agent_provider({
+    menu = function(opts, callback)
+      assert_equal(opts.title, " Codux agent provider ")
+      assert_equal(opts.filetype, "codux-default-provider")
+      assert_equal(opts.choices[1].agent_provider, "grok")
+      assert_equal(opts.choices[2].agent_provider, "codex")
+      return callback(opts.choices[1])
+    end,
+    on_select = function(choice)
+      default_provider_choice = choice.agent_provider
+      return true
+    end,
+  }), true)
+  assert_equal(default_provider_choice, "grok")
+
+  assert_equal(codux.set_default_provider("grok"), true)
+  assert_equal(codux.set_default_provider("nope"), false)
+
+  local default_open_menus = {}
+  local old_select_keyed = codux._v5.select_keyed_provider_profile_open
+  codux._v5.select_keyed_provider_profile_open = function(opts)
+    table.insert(default_open_menus, opts)
+    return "profile-only"
+  end
+  assert_equal(codux.open_with_keyed_profile_menu({ initial_prompt = "hi" }), "profile-only")
+  assert_equal(#default_open_menus, 1)
+  assert_equal(default_open_menus[1].agent_provider, "grok")
+  assert_equal(default_open_menus[1].initial_prompt, "hi")
+  codux._v5.select_keyed_provider_profile_open = old_select_keyed
+
   local opened_opts
   local old_open_with_keyed_profile_menu = codux.open_with_keyed_profile_menu
   codux.open_with_keyed_profile_menu = function(opts)
@@ -313,6 +344,8 @@ if type(vim.api) == "table" then
 
   local open_map = vim.fn.maparg("<leader>zc", "n", false, true)
   assert_equal(open_map.desc, "open codux")
+  local default_provider_map = vim.fn.maparg("<leader>zP", "n", false, true)
+  assert_equal(default_provider_map.desc, "set default provider")
   assert_equal(vim.tbl_isempty(vim.fn.maparg("<leader>za", "n", false, true)), true)
   assert_equal(vim.tbl_isempty(vim.fn.maparg("<leader>zA", "n", false, true)), true)
 end

@@ -156,8 +156,35 @@ do
   assert_true(controller:open_mission_provider_menu("Alpha"))
   assert_equal(selected_opts.provider_filetype, "codux-mission-provider")
   assert_equal(selected_opts.profile_filetype, "codux-mission-profile")
+  assert_nil(selected_opts.agent_provider)
   assert_equal(opened.name, "Alpha")
   assert_equal(opened.agent_provider, "grok")
+  assert_equal(opened.permission_profile, "auto")
+end
+
+do
+  local selected_opts
+  local opened
+  local controller = mission_control_mod.new({
+    default_agent_provider = function()
+      return "codex"
+    end,
+    select_provider_profile = function(opts)
+      selected_opts = opts
+      return opts.on_select({
+        agent_provider = opts.agent_provider,
+        profile = "auto",
+      })
+    end,
+  })
+  function controller:open_objective_editor(name, _, opts)
+    opened = { name = name, agent_provider = opts.agent_provider, permission_profile = opts.permission_profile }
+    return true
+  end
+
+  assert_true(controller:open_mission_provider_menu("Alpha"))
+  assert_equal(selected_opts.agent_provider, "codex")
+  assert_equal(opened.agent_provider, "codex")
   assert_equal(opened.permission_profile, "auto")
 end
 

@@ -29,6 +29,7 @@ function M.new(deps)
     select_provider_profile = function(opts)
       return codux._v5.select_keyed_provider_profile(opts)
     end,
+    default_agent_provider = type(deps.default_agent_provider) == "function" and deps.default_agent_provider or nil,
     update_mission_objective = function(name, objective, root)
       return codux.update_mission_objective(name, objective, { project_root = root })
     end,

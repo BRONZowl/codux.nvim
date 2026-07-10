@@ -62,6 +62,8 @@ for _, name in ipairs({
   "toggle_plan_mode",
   "health",
   "doctor",
+  "set_default_provider",
+  "set_default_provider_menu",
 }) do
   codux[name] = function(...)
     table.insert(calls, name .. ":" .. tostring((...)))
@@ -108,6 +110,12 @@ assert_equal(calls[#calls], "mission_provider:Mission:")
 
 created.CoduxMissionCreateGrok.callback({ args = "Mission" })
 assert_equal(calls[#calls], "mission_provider:Mission:grok")
+
+assert_true(type(created.CoduxSetDefaultProvider.callback) == "function")
+created.CoduxSetDefaultProvider.callback({ args = "grok" })
+assert_equal(calls[#calls], "set_default_provider:grok")
+created.CoduxSetDefaultProvider.callback({ args = "" })
+assert_equal(calls[#calls], "set_default_provider_menu:nil")
 
 vim.api.nvim_create_user_command = original_create_user_command
 if original_api == nil then

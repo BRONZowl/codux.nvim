@@ -53,6 +53,7 @@ function M.defaults()
     },
     mappings = {
       open = "<leader>zc",
+      default_provider = "<leader>zP",
       review_file = "<leader>zf",
       review_selection = "<leader>zs",
       diagnostics = "<leader>zd",

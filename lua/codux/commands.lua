@@ -53,6 +53,21 @@ function M.create(codux, deps)
     desc = "Open Codux with a specific agent provider",
   })
 
+  vim.api.nvim_create_user_command("CoduxSetDefaultProvider", function(opts)
+    if type(opts.args) == "string" and opts.args ~= "" then
+      codux.set_default_provider(opts.args)
+      return
+    end
+    codux.set_default_provider_menu()
+  end, {
+    force = true,
+    nargs = "?",
+    complete = function(arglead)
+      return codux._v5.filter_completion({ "codex", "grok" }, arglead)
+    end,
+    desc = "Set the global default Codux agent provider",
+  })
+
   vim.api.nvim_create_user_command("CoduxOpenGrok", function()
     codux.open_grok()
   end, { force = true, desc = "Open Grok" })

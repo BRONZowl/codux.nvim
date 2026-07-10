@@ -1,5 +1,6 @@
 local h = require("tests.helpers")
 local assert_equal = h.assert_equal
+local assert_nil = h.assert_nil
 local assert_true = h.assert_true
 local assert_contains = h.assert_contains
 
@@ -117,9 +118,44 @@ do
   assert_equal(prompt_opts.prompt, "Codux workspace: ")
   assert_equal(selected_opts.provider_filetype, "codux-workspace-provider")
   assert_equal(selected_opts.profile_filetype, "codux-workspace-profile")
+  assert_nil(selected_opts.agent_provider)
   assert_equal(opened_name, "Research")
   assert_equal(opened_opts.agent_provider, "grok")
   assert_equal(opened_opts.permission_profile, "auto")
+end
+
+do
+  local selected_opts
+  local opened_opts
+  local controller = workspace_create_mod.new({
+    namespace = 1,
+    has_tmux_session = function()
+      return true
+    end,
+    single_line_prompt = function(_, callback)
+      callback("Research")
+      return true
+    end,
+    default_agent_provider = function()
+      return "grok"
+    end,
+    select_provider_profile = function(opts)
+      selected_opts = opts
+      return opts.on_select({
+        agent_provider = opts.agent_provider,
+        profile = "default",
+      })
+    end,
+  })
+  function controller:open_custom_instruction_prompt(_, opts)
+    opened_opts = opts
+    return true
+  end
+
+  assert_true(controller:open_prompt())
+  assert_equal(selected_opts.agent_provider, "grok")
+  assert_equal(opened_opts.agent_provider, "grok")
+  assert_equal(opened_opts.permission_profile, "default")
 end
 
 print("workspace_create_spec.lua: ok")

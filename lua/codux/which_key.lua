@@ -5,6 +5,7 @@ local codux_icon = "󰚩"
 
 local markers = {
   "open codux",
+  "set default provider",
   "codex autopilot",
   "codex danger zone",
   "send file/folder",
@@ -393,6 +394,7 @@ end
 function M:normal_entries(mappings)
   local candidates = {
     { lhs = mappings.open, desc = "open codux" },
+    { lhs = mappings.default_provider, desc = "set default provider" },
     { lhs = mappings.review_file, desc = "send file/folder" },
     { lhs = mappings.review_selection, desc = "send selection" },
     { lhs = mappings.diagnostics, desc = "send diagnostics" },

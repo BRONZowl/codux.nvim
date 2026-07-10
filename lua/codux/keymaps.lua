@@ -40,6 +40,7 @@ end
 function M.install_defaults(state, mappings, codux)
   mappings = type(mappings) == "table" and mappings or {}
   M.set(state, "n", mappings.open, codux.open_with_keyed_profile_menu, "open codux")
+  M.set(state, "n", mappings.default_provider, codux.set_default_provider_menu, "set default provider")
   M.set(state, "n", mappings.review_file, codux.send_file_review, "send file/folder")
   M.set(state, "n", mappings.review_selection, codux.send_selection, "send selection")
   M.set(state, "v", mappings.review_selection, codux.send_selection, "send selection")

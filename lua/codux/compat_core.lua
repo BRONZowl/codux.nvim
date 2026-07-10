@@ -186,6 +186,40 @@ function M.install(api, deps)
     return api.select_keyed_provider_profile(opts)
   end
 
+  function api.select_default_agent_provider(opts)
+    opts = type(opts) == "table" and opts or {}
+    local menu = opts.menu or ui.key_choice_menu
+    if type(menu) ~= "function" then
+      return false
+    end
+
+    local forced = providers.normalize_provider(opts.agent_provider)
+    if forced then
+      if type(opts.on_select) == "function" then
+        return opts.on_select({ agent_provider = forced })
+      end
+      return forced
+    end
+
+    return menu({
+      title = opts.provider_title or " Codux agent provider ",
+      choices = api.keyed_agent_provider_choices(),
+      filetype = opts.provider_filetype or "codux-default-provider",
+      zindex = opts.provider_zindex,
+      cancel_desc = opts.provider_cancel_desc or "Cancel Codux Default Provider",
+      create_error = opts.provider_create_error or "Failed to create Codux default provider menu",
+      open_error = opts.provider_open_error or "Failed to open Codux default provider menu",
+    }, function(choice)
+      if type(choice) ~= "table" then
+        return false
+      end
+      if type(opts.on_select) == "function" then
+        return opts.on_select(choice)
+      end
+      return choice
+    end)
+  end
+
   api.filter_completion = filter_completion
 
   function api.complete_workspace_names(arglead)

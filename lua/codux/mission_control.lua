@@ -120,8 +120,12 @@ end
 function M:open_mission_provider_menu(name, opts)
   opts = type(opts) == "table" and opts or {}
   if type(self.select_provider_profile) == "function" then
+    local agent_provider = providers.normalize_provider(opts.agent_provider)
+    if not agent_provider and type(self.default_agent_provider) == "function" then
+      agent_provider = providers.normalize_provider(self.default_agent_provider())
+    end
     return self.select_provider_profile({
-      agent_provider = opts.agent_provider,
+      agent_provider = agent_provider,
       provider_title = " Codux mission agent ",
       provider_filetype = "codux-mission-provider",
       provider_zindex = 81,

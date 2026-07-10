@@ -599,20 +599,33 @@ function M.open_grok_danger(initial_prompt, opts)
   return M.open_provider("grok", "danger", initial_prompt, opts)
 end
 
-function M.open(opts)
-  opts = type(opts) == "table" and opts or {}
-  if not M._v5.should_select_permission_profile(state.job_id) then
-    return terminal:open(opts)
+function M.set_default_provider(provider)
+  provider = providers.normalize_provider(provider)
+  if not provider then
+    notify("Unknown agent provider. Use codex or grok.", vim.log.levels.ERROR)
+    return false
   end
+  config.default_agent_provider = provider
+  notify("Default provider set to " .. providers.provider_label(provider))
+  return true
+end
 
-  return M._v5.select_permission_profile_open({
-    initial_prompt = opts.initial_prompt,
-    open_opts = opts.open_opts,
-    open_default = M.open_default,
-    open_auto = M.open_workspace_auto,
-    open_danger = M.open_danger_full_access,
-    open_provider = M.open_provider,
+function M.set_default_provider_menu(opts)
+  opts = type(opts) == "table" and opts or {}
+  return M._v5.select_default_agent_provider({
+    agent_provider = opts.agent_provider,
+    menu = opts.menu,
+    on_select = function(choice)
+      if type(choice) ~= "table" then
+        return false
+      end
+      return M.set_default_provider(choice.agent_provider)
+    end,
   })
+end
+
+function M.open(opts)
+  return M.open_with_keyed_profile_menu(opts)
 end
 
 function M.open_with_keyed_profile_menu(opts)
@@ -622,6 +635,8 @@ function M.open_with_keyed_profile_menu(opts)
   end
 
   return M._v5.select_keyed_provider_profile_open({
+    config = config,
+    agent_provider = providers.default_provider(config),
     initial_prompt = opts.initial_prompt,
     open_opts = opts.open_opts,
     open_default = M.open_default,
@@ -795,6 +810,9 @@ workspace_create_controller = workspace_create_mod.new({
   select_provider_profile = function(opts)
     return M._v5.select_keyed_provider_profile(opts)
   end,
+  default_agent_provider = function()
+    return providers.default_provider(config)
+  end,
   create_workspace = function(name, opts)
     return M.create_workspace(name, opts)
   end,
@@ -834,6 +852,9 @@ mission_controller = mission_setup_mod.new({
   delete_saved_workspace = delete_saved_workspace,
   switch_workspace_profile = function(entry, agent_provider, permission_profile, opts)
     return workspace_runtime:update_workspace_profile(entry, agent_provider, permission_profile, opts)
+  end,
+  default_agent_provider = function()
+    return providers.default_provider(config)
   end,
   project_root = workspace_manager_project_root,
   set_buffer_keymap = M._v5.set_buffer_keymap,

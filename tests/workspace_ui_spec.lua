@@ -70,6 +70,7 @@ do
   })
   local entries = controller:normal_entries({
     open = "<leader>zc",
+    default_provider = "<leader>zP",
     open_auto = "<leader>za",
     open_danger = "<leader>zA",
     workspace = "<leader>zw",
@@ -98,6 +99,7 @@ do
   assert_nil(by_lhs["<leader>zW"])
   assert_nil(by_lhs["<leader>zp"])
   assert_equal(by_lhs["<leader>zM"], "mission control")
+  assert_equal(by_lhs["<leader>zP"], "set default provider")
 
   local title = controller:title()
   assert_equal(title[1][1], " codux ")

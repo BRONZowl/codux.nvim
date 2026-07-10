@@ -3,6 +3,7 @@ M.__index = M
 
 local confirmation_footer = require("codux.confirmation_footer")
 local mission_mod = require("codux.mission")
+local providers = require("codux.providers")
 local text_util = require("codux.text")
 
 local function default_trim(value)
@@ -49,6 +50,7 @@ function M.new(opts)
       return false
     end,
     select_provider_profile = type(opts.select_provider_profile) == "function" and opts.select_provider_profile or nil,
+    default_agent_provider = type(opts.default_agent_provider) == "function" and opts.default_agent_provider or nil,
     create_workspace = type(opts.create_workspace) == "function" and opts.create_workspace or noop,
     namespace = opts.namespace or vim.api.nvim_create_namespace("codux.workspace_create"),
   }
@@ -450,8 +452,13 @@ function M:open_provider_profile_menu(name, opts)
     return self:open_custom_instruction_prompt(name, opts)
   end
 
+  local agent_provider = providers.normalize_provider(opts.agent_provider)
+  if not agent_provider and type(self.default_agent_provider) == "function" then
+    agent_provider = providers.normalize_provider(self.default_agent_provider())
+  end
+
   return self.select_provider_profile({
-    agent_provider = opts.agent_provider,
+    agent_provider = agent_provider,
     provider_title = " Codux workspace agent ",
     provider_filetype = "codux-workspace-provider",
     provider_zindex = 81,
