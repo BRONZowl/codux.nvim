@@ -159,6 +159,10 @@ require("codux").setup({
   },
   token_monitor = {
     enabled = true,
+    refresh_ms = 60000,
+    timeout_ms = 5000,
+    -- Optional dedicated CLI for usage checks (defaults to providers.codex executable):
+    -- codex_cmd = "codex",
   },
   workspaces = {
     enabled = true,
@@ -320,11 +324,16 @@ codux exec | 5hr 3% | wk 5%
 codux plan | 5hr 3% | wk 5%
 ```
 
-Token monitoring refreshes in the background only while Codux is running. If
-usage is unavailable, Codux shows `--%` placeholders. Grok token usage uses
-placeholders until a machine-readable Grok usage API is available. When an agent
-is actively working and the popup is hidden, Codux shows a small `agent is working...`
-indicator near the bottom-right of the editor.
+Token monitoring refreshes in the background while Codux is running (`refresh_ms`,
+default 60s). Mission Control can also refresh usage without an active session.
+Each check starts a short-lived `codex app-server` process (`timeout_ms`, default
+5s). If usage is unavailable (CLI missing, timeout, API error), Codux shows `--%`
+placeholders; Mission Control may append `(unavailable)`. Inspect
+`require("codux").health_info().token_usage.last_error` for the last failure
+detail. Grok token usage uses placeholders until a machine-readable Grok usage
+API is available. When an agent is actively working and the popup is hidden,
+Codux shows a small `agent is working...` indicator near the bottom-right of the
+editor.
 
 ## Troubleshooting
 

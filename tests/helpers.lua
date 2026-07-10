@@ -16,6 +16,25 @@ if type(vim) ~= "table" then
     return copy
   end
 
+  local function tbl_deep_extend(behavior, ...)
+    local values = { ... }
+    local result = {}
+    for _, value in ipairs(values) do
+      if type(value) == "table" then
+        for key, item in pairs(value) do
+          if behavior == "force" or result[key] == nil then
+            if type(item) == "table" and type(result[key]) == "table" then
+              result[key] = tbl_deep_extend(behavior, result[key], item)
+            else
+              result[key] = deepcopy(item)
+            end
+          end
+        end
+      end
+    end
+    return result
+  end
+
   vim = {
     deepcopy = deepcopy,
     env = {},
@@ -26,6 +45,7 @@ if type(vim) ~= "table" then
       end
       return target
     end,
+    tbl_deep_extend = tbl_deep_extend,
     tbl_isempty = function(value)
       return type(value) ~= "table" or next(value) == nil
     end,

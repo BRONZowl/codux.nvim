@@ -257,6 +257,16 @@ local token_monitor_setup = token_monitor_setup_mod.new({
     if type(refresh_which_key_header) == "function" then
       refresh_which_key_header()
     end
+    if
+      mission_controller
+      and type(mission_controller.render_dashboard) == "function"
+      and state.mission_dashboard_buf ~= nil
+      and is_loaded_buf(state.mission_dashboard_buf)
+      and is_valid_win(state.mission_dashboard_win)
+    then
+      -- Redraw labels only; avoid re-entering refresh from the async callback.
+      mission_controller:render_dashboard({ skip_token_refresh = true })
+    end
   end,
 })
 

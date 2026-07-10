@@ -451,7 +451,9 @@ function M:render_dashboard(opts)
     return false
   end
 
-  self:refresh_dashboard_token_usage(false)
+  if opts.skip_token_refresh ~= true then
+    self:refresh_dashboard_token_usage(false)
+  end
   local root = self.state.mission_dashboard_project_root or self.project_root()
   local query = tostring(self.state.mission_dashboard_query or "")
   local selected = self:selected_item()

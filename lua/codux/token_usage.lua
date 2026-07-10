@@ -74,7 +74,17 @@ function M.label(usage, opts)
   local five_hour_label = five_hour ~= nil and (tostring(five_hour) .. "%") or "--%"
   local weekly_label = weekly ~= nil and (tostring(weekly) .. "%") or "--%"
 
-  return "usage | 5hr " .. five_hour_label .. " | wk " .. weekly_label
+  local label = "usage | 5hr " .. five_hour_label .. " | wk " .. weekly_label
+  if
+    five_hour == nil
+    and weekly == nil
+    and type(usage.last_error) == "string"
+    and usage.last_error ~= ""
+    and opts.show_error == true
+  then
+    label = label .. " (unavailable)"
+  end
+  return label
 end
 
 return M

@@ -23,6 +23,7 @@ function M.initial()
       stdout = "",
       initialized = false,
       timeout_timer = nil,
+      refresh_timer = nil,
     },
     terminal_attached_buf = nil,
     terminal_prompt_input = "",

@@ -40,11 +40,12 @@ function M:config()
     return { enabled = false }
   end
 
+  local defaults = type(self.defaults) == "table" and self.defaults or {}
   if type(config.token_monitor) ~= "table" then
-    return self.defaults
+    return defaults
   end
 
-  return config.token_monitor
+  return vim.tbl_deep_extend("force", vim.deepcopy(defaults), config.token_monitor)
 end
 
 function M:enabled()
@@ -85,6 +86,7 @@ function M:label(opts)
     running = running,
     mode = mode,
     show_when_not_running = opts.show_when_not_running,
+    show_error = opts.show_error,
   })
 end
 
@@ -250,7 +252,7 @@ function M:refresh(force, opts)
 
   if self.state.in_flight then
     if not force then
-      return false
+      return false, "in_flight"
     end
     self:complete_request(self.state.job_id, nil, "Codex token usage request was replaced", true)
   end
@@ -366,7 +368,9 @@ function M:stop()
   self.state.in_flight = false
   self.state.stdout = ""
   self.state.initialized = false
-  self:clear_usage()
+  -- Keep last-known percentages so mission dashboard / which-key can still
+  -- show usage after the terminal exits; only cancel in-flight work.
+  self.state.last_error = nil
   if job_id then
     pcall(vim.fn.jobstop, job_id)
   end

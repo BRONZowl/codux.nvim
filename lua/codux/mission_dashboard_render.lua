@@ -256,8 +256,14 @@ function M.refresh_dashboard_token_usage(controller, force)
     return false
   end
 
-  controller.state.mission_dashboard_token_usage_refreshed_at = now
-  return controller.refresh_token_usage(force == true)
+  -- Stamp when a refresh starts, or on permanent failures so we back off.
+  -- When another request is already in flight, leave the stamp alone so the
+  -- next tick can try again after that request settles.
+  local started, reason = controller.refresh_token_usage(force == true)
+  if started or reason ~= "in_flight" then
+    controller.state.mission_dashboard_token_usage_refreshed_at = now
+  end
+  return started
 end
 
 function M.missions_for_root(controller, root)

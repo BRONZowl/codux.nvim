@@ -29,6 +29,7 @@ function M.new(opts)
     mission_token_usage_label = function()
       return monitor:label({
         show_when_not_running = true,
+        show_error = true,
       })
     end,
     refresh_token_usage = function(force)
