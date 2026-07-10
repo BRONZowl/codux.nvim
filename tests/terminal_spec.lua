@@ -649,6 +649,76 @@ end
 do
   local sent = {}
   local old_chansend = vim.fn.chansend
+  vim.fn.chansend = function(job_id, value)
+    assert_equal(job_id, 42)
+    table.insert(sent, value)
+    return 1
+  end
+
+  local controller = terminal_mod.new({})
+  controller.state.job_id = 42
+  controller.state.agent_provider = "codex"
+  controller.state.terminal_prompt_input = "ship it"
+  controller.state.terminal_prompt_tracking_valid = true
+  function controller:terminal_running()
+    return true
+  end
+  function controller:mark_terminal_prompt_submission()
+    self.state.marked_prompt_submission = true
+  end
+  function controller:set_codex_working(working)
+    self.state.codex_working = working == true
+  end
+
+  assert_true(controller:submit_terminal_prompt())
+  assert_equal(sent[1], "\r")
+  assert_equal(sent[2], nil)
+  assert_equal(controller.state.terminal_prompt_input, "")
+  assert_true(controller.state.terminal_prompt_tracking_valid)
+  assert_true(controller.state.marked_prompt_submission)
+  assert_true(controller.state.codex_working)
+
+  vim.fn.chansend = old_chansend
+end
+
+do
+  local sent = {}
+  local old_chansend = vim.fn.chansend
+  vim.fn.chansend = function(job_id, value)
+    assert_equal(job_id, 42)
+    table.insert(sent, value)
+    return 1
+  end
+
+  local controller = terminal_mod.new({})
+  controller.state.job_id = 42
+  controller.state.agent_provider = "grok"
+  controller.state.terminal_prompt_input = "ship it"
+  controller.state.terminal_prompt_tracking_valid = true
+  function controller:terminal_running()
+    return true
+  end
+  function controller:mark_terminal_prompt_submission()
+    self.state.marked_prompt_submission = true
+  end
+  function controller:set_codex_working(working)
+    self.state.codex_working = working == true
+  end
+
+  assert_true(controller:submit_terminal_prompt())
+  assert_equal(sent[1], "\21\27[200~ship it\27[201~\r")
+  assert_equal(sent[2], nil)
+  assert_equal(controller.state.terminal_prompt_input, "")
+  assert_true(controller.state.terminal_prompt_tracking_valid)
+  assert_true(controller.state.marked_prompt_submission)
+  assert_true(controller.state.codex_working)
+
+  vim.fn.chansend = old_chansend
+end
+
+do
+  local sent = {}
+  local old_chansend = vim.fn.chansend
   local old_sleep = vim.fn.sleep
   vim.fn.chansend = function(job_id, value)
     assert_equal(job_id, 42)

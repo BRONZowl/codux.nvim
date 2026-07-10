@@ -151,6 +151,51 @@ if type(vim.api) == "table" then
 end
 
 if type(vim.api) == "table" then
+  local bound, set_buffer_keymap = output_fixtures.keymap_capture()
+  local sent_job
+  local sent_sequence
+  h.with_stubs({
+    {
+      target = vim.fn,
+      key = "jobwait",
+      value = function()
+        return { -1 }
+      end,
+    },
+    {
+      target = vim.fn,
+      key = "chansend",
+      value = function(job_id, sequence)
+        sent_job = job_id
+        sent_sequence = sequence
+        return 1
+      end,
+    },
+  }, function()
+    local controller, ctx = output_fixtures.controller({
+      state = {
+        mission_dashboard_output_job = 77,
+      },
+      set_buffer_keymap = set_buffer_keymap,
+    })
+
+    assert_true(controller:prepare_output_terminal_buffer())
+    local submit
+    for _, mapping in ipairs(bound) do
+      if mapping.lhs == "<CR>" and mapping.desc == "Submit Codux Prompt" then
+        submit = mapping.rhs
+      end
+    end
+    assert_true(type(submit) == "function")
+    assert_true(submit())
+    assert_equal(sent_job, 77)
+    assert_equal(sent_sequence, "\r")
+    output_fixtures.delete_buffer(controller.state.mission_dashboard_output_buf)
+    output_fixtures.delete_buffer(ctx.bufnr)
+  end)
+end
+
+if type(vim.api) == "table" then
   local sent_job
   local sent_sequence
   h.with_stubs({

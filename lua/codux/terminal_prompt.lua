@@ -1,4 +1,5 @@
 local terminal_mode = require("codux.terminal_mode")
+local providers = require("codux.providers")
 local text_util = require("codux.text")
 local ui = require("codux.ui")
 
@@ -162,12 +163,22 @@ function M.submit(controller)
     return false
   end
 
-  local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, "\r")
+  local input = tostring(controller.state.terminal_prompt_input or "")
+  local tracking_valid = controller.state.terminal_prompt_tracking_valid == true
+  local agent_provider = providers.normalize_provider(controller.state.agent_provider)
+    or providers.normalize_provider(controller.state.last_agent_provider)
+    or "codex"
+  local submit_input = "\r"
+  if agent_provider == "grok" and tracking_valid and trim(input) ~= "" then
+    submit_input = "\21\27[200~" .. input .. "\27[201~\r"
+  end
+
+  local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, submit_input)
   if send_ok and sent ~= 0 then
     if
       terminal_mode.terminal_prompt_is_plan_toggle(
-        controller.state.terminal_prompt_input,
-        controller.state.terminal_prompt_tracking_valid
+        input,
+        tracking_valid
       )
       and controller:terminal_buffer_prompt_is_plan_toggle()
     then
