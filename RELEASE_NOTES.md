@@ -1,5 +1,20 @@
 # Release Notes
 
+## v1.0.0
+
+Codex and Grok provider release.
+
+codux.nvim v1.0.0 makes Codex CLI and Grok CLI first-class agent providers across the single-session popup, tmux workspaces, and Mission Control.
+
+- Added Grok CLI provider support with default, auto, and full-access profiles alongside the existing Codex profiles.
+- Added two-step provider/profile pickers for `<leader>zc`, workspace creation, mission creation, and workspace profile switching.
+- Added provider-aware workspace and mission startup so saved workspaces and mission roles launch with the selected Codex or Grok command.
+- Kept Grok startup arguments minimal by using the configured profile command, adding `--rules` only when instructions exist, and pasting initial prompts after the Grok TUI is ready.
+- Added active and inactive workspace profile switching, including active workspace restarts and saved startup-profile updates for inactive workspaces.
+- Updated workspace and mission dashboards so profile labels identify Codex versus Grok.
+- Reduced Mission Control output preview flicker and refreshed highlighted active-role previews correctly after profile-switch restarts.
+- Expanded regression coverage for providers, profile pickers, workspace and mission creation, profile switching, Grok startup behavior, dashboard labels, and output-preview refreshes.
+
 ## v0.9.1
 
 Mission output and cleanup hardening.

@@ -74,8 +74,11 @@ two-step provider/profile picker:
 - first choose `g` for Grok or `c` for Codex
 - then choose `d` for default, `a` for auto, or `f` for full access
 
-Use full access only in repositories you trust. `:CoduxOpenDanger` starts Codex
-with no approval prompts and no sandbox.
+Those picker choices set only the startup provider and permission profile for
+the new session. Once an agent is running, `:Codux` and `<leader>zc` focus that
+session instead of changing its provider. Use full access only in repositories
+you trust. `:CoduxOpenDanger` starts Codex with no approval prompts and no
+sandbox; `:CoduxOpenGrokDanger` starts Grok with its full-access command.
 
 Codux can send editor context to the active agent session:
 
@@ -219,7 +222,8 @@ Use `:CoduxWorkspaces` to open the workspace dashboard. It includes fuzzy search
 `m` for the selected-workspace menu. The menu supports rename, edit
 instructions, switch provider/profile, close workspace, close all workspaces,
 and delete workspace. Switching the profile of an active workspace restarts that
-workspace with the selected Codex or Grok command.
+workspace with the selected Codex or Grok command; switching an inactive
+workspace updates its saved startup provider/profile for the next launch.
 
 Deleting a workspace removes saved state and the matching instruction file,
 closes the tmux window, removes the worktree, and deletes the workspace branch.
@@ -264,6 +268,8 @@ agent session. When an active role preview is shown, the dashboard gives more
 space to the output panel while keeping the selected row visible. The preview
 uses the role's Codux terminal controls, so output control behaves like the
 default `<leader>zc` Codux window while staying inside the dashboard layout.
+Profile labels include the provider, and switching the profile of a highlighted
+active role refreshes the output preview after the restarted session is ready.
 
 Dashboard controls:
 
