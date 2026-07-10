@@ -274,8 +274,8 @@ local function token_usage_label()
   return token_monitor_setup.token_usage_label()
 end
 
-local function mission_token_usage_label()
-  return token_monitor_setup.mission_token_usage_label()
+local function mission_token_usage_label(provider)
+  return token_monitor_setup.mission_token_usage_label(provider)
 end
 
 refresh_token_usage = function(force)
@@ -288,6 +288,10 @@ end
 
 local function token_usage_refresh_ms()
   return token_monitor_setup.token_usage_refresh_ms()
+end
+
+local function token_usage_provider_refreshed_at(provider)
+  return token_monitor_setup.provider_refreshed_at(provider)
 end
 
 start_token_monitor_timer = function()
@@ -823,6 +827,7 @@ mission_controller = mission_setup_mod.new({
   token_usage_label = mission_token_usage_label,
   refresh_token_usage = refresh_mission_token_usage,
   token_usage_refresh_ms = token_usage_refresh_ms,
+  token_usage_provider_refreshed_at = token_usage_provider_refreshed_at,
   workspace_runtime = workspace_runtime,
   workspace_entries_for_project = workspace_entries_for_project,
   edit_saved_workspace_instruction = edit_saved_workspace_instruction,
@@ -996,7 +1001,9 @@ function M.health_info()
       rpm_percent = state.token_usage.rpm_percent,
       usage_provider = state.token_usage.usage_provider,
       in_flight = state.token_usage.in_flight,
+      in_flight_provider = state.token_usage.in_flight_provider,
       last_error = state.token_usage.last_error,
+      by_provider = state.token_usage.by_provider,
     },
     workspace = state.workspace,
     workspace_state_file = workspace_state_file(),

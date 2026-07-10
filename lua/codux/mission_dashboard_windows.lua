@@ -111,6 +111,8 @@ function M.close_dashboard(controller)
   controller.state.mission_dashboard_project_root = nil
   controller.state.mission_dashboard_resize_augroup = nil
   controller.state.mission_dashboard_token_usage_refreshed_at = nil
+  controller.state.mission_dashboard_token_usage_refreshed_at_by_provider = nil
+  controller.state.mission_dashboard_token_usage_provider = nil
   controller:restore_dashboard_mouse()
   return true
 end

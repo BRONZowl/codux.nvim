@@ -187,7 +187,16 @@ function M.command_lines(controller, dashboard_width)
 end
 
 function M.token_usage_line(controller, dashboard_width)
-  local usage = tostring(controller.token_usage_label() or "")
+  local provider = nil
+  if type(controller.dashboard_token_agent_provider) == "function" then
+    provider = controller:dashboard_token_agent_provider()
+  end
+  local usage
+  if provider ~= nil and type(controller.token_usage_label) == "function" then
+    usage = tostring(controller.token_usage_label(provider) or "")
+  else
+    usage = tostring(controller.token_usage_label and controller.token_usage_label() or "")
+  end
   if usage == "" then
     return nil
   end

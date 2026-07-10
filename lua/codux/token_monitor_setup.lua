@@ -26,11 +26,23 @@ function M.new(opts)
         mode = opts.get_mode(),
       })
     end,
-    mission_token_usage_label = function()
+    mission_token_usage_label = function(provider)
+      if provider ~= nil and provider ~= "" then
+        return monitor:label_for_provider(provider, {
+          show_when_not_running = true,
+          show_error = true,
+        })
+      end
       return monitor:label({
         show_when_not_running = true,
         show_error = true,
       })
+    end,
+    label_for_provider = function(provider, label_opts)
+      return monitor:label_for_provider(provider, label_opts)
+    end,
+    provider_refreshed_at = function(provider)
+      return monitor:provider_refreshed_at(provider)
     end,
     refresh_token_usage = function(force)
       return monitor:refresh(force)

@@ -66,6 +66,9 @@ function M.normalize(opts)
       return 60000
     end),
     token_usage_now_ms = opt_function(opts, "token_usage_now_ms", util.now_ms),
+    token_usage_provider_refreshed_at = opt_function(opts, "token_usage_provider_refreshed_at", function()
+      return nil
+    end),
     create_mission = opt_function(opts, "create_mission", noop),
     cleanup_mission_residue = opt_function(opts, "cleanup_mission_residue", nil),
     create_workspace_prompt = opt_function(opts, "create_workspace_prompt", noop),

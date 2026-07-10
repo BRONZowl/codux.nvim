@@ -677,6 +677,97 @@ do
 
   assert_false(dashboard_render.refresh_dashboard_token_usage(controller, false))
   assert_equal(refresh_calls, 4, "successful refresh should throttle subsequent calls")
+
+  -- Other provider is not blocked by Codex throttle.
+  controller.selected_item = function()
+    return { kind = "role", entry = { agent_provider = "grok" } }
+  end
+  assert_true(dashboard_render.refresh_dashboard_token_usage(controller, false))
+  assert_equal(refresh_calls, 5, "grok provider should refresh despite codex throttle")
+end
+
+do
+  local state = {
+    by_provider = {
+      codex = { five_hour_percent = 11, weekly_percent = 22, last_error = nil },
+      grok = { tpm_percent = 33, rpm_percent = 44, last_error = nil },
+    },
+    usage_provider = "grok",
+    tpm_percent = 33,
+    rpm_percent = 44,
+    five_hour_percent = 11,
+    weekly_percent = 22,
+  }
+  local monitor = monitor_with_config({ codex_cmd = "codex" }, { state = state })
+  assert_equal(monitor:label_for_provider("codex"), "usage | 5hr 11% | wk 22%")
+  assert_equal(monitor:label_for_provider("grok"), "usage | tpm 33% | rpm 44%")
+  assert_equal(monitor:label(), "usage | tpm 33% | rpm 44%", "active snapshot follows usage_provider")
+end
+
+do
+  local state = { by_provider = { codex = {}, grok = {} } }
+  local monitor = monitor_with_config({ codex_cmd = "codex" }, { state = state })
+  monitor:write_provider_cache("codex", {
+    five_hour_percent = 7,
+    weekly_percent = 8,
+    last_error = nil,
+  })
+  monitor:write_provider_cache("grok", {
+    tpm_percent = 1,
+    rpm_percent = 2,
+    last_error = nil,
+  })
+  assert_equal(state.by_provider.codex.five_hour_percent, 7)
+  assert_equal(state.by_provider.grok.tpm_percent, 1)
+  assert_equal(monitor:label_for_provider("codex"), "usage | 5hr 7% | wk 8%")
+  assert_equal(monitor:label_for_provider("grok"), "usage | tpm 1% | rpm 2%")
+end
+
+do
+  local calls = {}
+  local controller = {
+    state = {
+      mission_dashboard_token_usage_provider = "codex",
+      mission_dashboard_selectable_rows = { 4, 6 },
+      mission_dashboard_selected_row = 4,
+      mission_dashboard_items = {
+        [4] = { kind = "role", entry = { agent_provider = "codex" } },
+        [6] = { kind = "role", entry = { agent_provider = "grok" } },
+      },
+      mission_dashboard_win = 1,
+    },
+    is_valid_win = function()
+      return true
+    end,
+    selected_item = function(self)
+      local row = self.state.mission_dashboard_selected_row
+      return self.state.mission_dashboard_items[row]
+    end,
+    selected_row = function(self)
+      return self.state.mission_dashboard_selected_row
+    end,
+    capture_stationary_output_preview_anchor = function()
+      return nil
+    end,
+    dashboard_token_agent_provider = function(self)
+      return dashboard_render.dashboard_token_agent_provider(self)
+    end,
+    refresh_dashboard_token_usage = function(_, force)
+      table.insert(calls, { "token", force })
+      return true
+    end,
+    render_dashboard = function(_, opts)
+      table.insert(calls, { "render", opts and opts.skip_token_refresh })
+      return true
+    end,
+  }
+  local selection = require("codux.mission_dashboard_selection")
+  assert_true(selection.move_mission_selection(controller, 1))
+  assert_equal(controller.state.mission_dashboard_selected_row, 6)
+  assert_equal(calls[1][1], "token")
+  assert_true(calls[1][2], "provider change should force token refresh")
+  assert_equal(calls[2][1], "render")
+  assert_true(calls[2][2], "forced token path skips second refresh in render")
 end
 
 print("token_monitor_spec.lua: ok")

@@ -251,6 +251,10 @@ function M:dashboard_token_agent_provider()
   return dashboard_render.dashboard_token_agent_provider(self)
 end
 
+function M:dashboard_token_usage_provider()
+  return self:dashboard_token_agent_provider()
+end
+
 function M:missions_for_root(root)
   return dashboard_render.missions_for_root(self, root)
 end

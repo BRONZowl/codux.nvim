@@ -97,11 +97,25 @@ function M.move_mission_selection(controller, delta)
 
   local next_index = math.max(1, math.min(#rows, current_index + (tonumber(delta) or 0)))
   local next_row = rows[next_index]
+  local previous_provider = controller.state.mission_dashboard_token_usage_provider
   local preview_anchor = controller:capture_stationary_output_preview_anchor()
   controller.state.mission_dashboard_selected_row = next_row
   controller.state.mission_dashboard_search_confirmed = true
   controller.state.mission_dashboard_focus_match = false
-  controller:render_dashboard({ stationary_preview_anchor = preview_anchor })
+
+  local force_token = false
+  if type(controller.dashboard_token_agent_provider) == "function" then
+    local next_provider = controller:dashboard_token_agent_provider()
+    if previous_provider and next_provider and previous_provider ~= next_provider then
+      force_token = true
+    end
+  end
+  if force_token and type(controller.refresh_dashboard_token_usage) == "function" then
+    controller:refresh_dashboard_token_usage(true)
+    controller:render_dashboard({ stationary_preview_anchor = preview_anchor, skip_token_refresh = true })
+  else
+    controller:render_dashboard({ stationary_preview_anchor = preview_anchor })
+  end
   return true
 end
 

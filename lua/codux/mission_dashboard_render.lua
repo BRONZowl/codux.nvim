@@ -326,12 +326,30 @@ function M.refresh_dashboard_token_usage(controller, force, opts)
   local now = tonumber(controller.token_usage_now_ms()) or (os.time() * 1000)
   local refresh_ms = tonumber(controller.token_usage_refresh_ms()) or 60000
   refresh_ms = math.max(10000, refresh_ms)
-  local last = tonumber(controller.state.mission_dashboard_token_usage_refreshed_at)
-  if not force and last and now - last < refresh_ms then
-    return false
-  end
 
   local agent_provider = opts.agent_provider or M.dashboard_token_agent_provider(controller)
+  agent_provider = providers.normalize_provider(agent_provider) or "codex"
+
+  local previous = providers.normalize_provider(controller.state.mission_dashboard_token_usage_provider)
+  if not force and previous and previous ~= agent_provider then
+    force = true
+  end
+
+  -- Throttle per agent provider so Codex and Grok can each refresh on their own cadence.
+  local last = nil
+  if type(controller.token_usage_provider_refreshed_at) == "function" then
+    last = tonumber(controller.token_usage_provider_refreshed_at(agent_provider))
+  end
+  if last == nil then
+    local by_provider = type(controller.state.mission_dashboard_token_usage_refreshed_at_by_provider) == "table"
+        and controller.state.mission_dashboard_token_usage_refreshed_at_by_provider
+      or {}
+    last = tonumber(by_provider[agent_provider])
+  end
+  if not force and last and now - last < refresh_ms then
+    controller.state.mission_dashboard_token_usage_provider = agent_provider
+    return false
+  end
 
   -- Stamp when a refresh starts, or on permanent failures so we back off.
   -- When another request is already in flight, leave the stamp alone so the
@@ -341,7 +359,12 @@ function M.refresh_dashboard_token_usage(controller, force, opts)
   })
   if started or reason ~= "in_flight" then
     controller.state.mission_dashboard_token_usage_refreshed_at = now
+    if type(controller.state.mission_dashboard_token_usage_refreshed_at_by_provider) ~= "table" then
+      controller.state.mission_dashboard_token_usage_refreshed_at_by_provider = {}
+    end
+    controller.state.mission_dashboard_token_usage_refreshed_at_by_provider[agent_provider] = now
   end
+  controller.state.mission_dashboard_token_usage_provider = agent_provider
   return started
 end
 

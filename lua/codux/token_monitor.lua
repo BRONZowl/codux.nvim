@@ -90,6 +90,25 @@ function M:grok_config()
   return monitor.grok
 end
 
+function M:ensure_by_provider()
+  if type(self.state.by_provider) ~= "table" then
+    self.state.by_provider = { codex = {}, grok = {} }
+  end
+  if type(self.state.by_provider.codex) ~= "table" then
+    self.state.by_provider.codex = {}
+  end
+  if type(self.state.by_provider.grok) ~= "table" then
+    self.state.by_provider.grok = {}
+  end
+  return self.state.by_provider
+end
+
+function M:provider_cache(provider)
+  provider = providers.normalize_provider(provider) or "codex"
+  local caches = self:ensure_by_provider()
+  return caches[provider] or caches.codex, provider
+end
+
 function M:label(opts)
   opts = type(opts) == "table" and opts or {}
   local running = opts.running
@@ -111,6 +130,32 @@ function M:label(opts)
   })
 end
 
+--- Label usage for a specific agent provider using the per-provider cache.
+function M:label_for_provider(provider, opts)
+  opts = type(opts) == "table" and opts or {}
+  local cached, normalized = self:provider_cache(provider)
+  return token_usage.label({
+    five_hour_percent = cached.five_hour_percent,
+    weekly_percent = cached.weekly_percent,
+    tpm_percent = cached.tpm_percent,
+    rpm_percent = cached.rpm_percent,
+    last_error = cached.last_error,
+    usage_provider = normalized,
+  }, {
+    enabled = self:enabled(),
+    running = opts.running,
+    mode = opts.mode,
+    show_when_not_running = opts.show_when_not_running,
+    show_error = opts.show_error,
+    provider = normalized,
+  })
+end
+
+function M:provider_refreshed_at(provider)
+  local cached = self:provider_cache(provider)
+  return tonumber(cached.refreshed_at)
+end
+
 function M:stop_timeout_timer()
   local timer = self.state.timeout_timer
   self.state.timeout_timer = nil
@@ -127,6 +172,23 @@ function M:clear_usage()
   self.state.rpm_percent = nil
   self.state.usage_provider = nil
   self.state.last_error = nil
+  self.state.in_flight_provider = nil
+end
+
+local function now_ms()
+  return util.now_ms()
+end
+
+function M:write_provider_cache(provider, fields)
+  local cached, normalized = self:provider_cache(provider)
+  fields = type(fields) == "table" and fields or {}
+  for key, value in pairs(fields) do
+    cached[key] = value
+  end
+  if fields.refreshed_at == nil then
+    cached.refreshed_at = now_ms()
+  end
+  return normalized
 end
 
 function M:complete_request(job_id, usage, error_message, stop_job)
@@ -134,9 +196,14 @@ function M:complete_request(job_id, usage, error_message, stop_job)
     return
   end
 
+  local flight_provider = providers.normalize_provider(self.state.in_flight_provider)
+    or providers.normalize_provider(self.state.usage_provider)
+    or "codex"
+
   self:stop_timeout_timer()
   self.state.job_id = nil
   self.state.in_flight = false
+  self.state.in_flight_provider = nil
   self.state.stdout = ""
   self.state.initialized = false
 
@@ -145,14 +212,27 @@ function M:complete_request(job_id, usage, error_message, stop_job)
       self.state.tpm_percent = usage.tpm_percent
       self.state.rpm_percent = usage.rpm_percent
       self.state.usage_provider = "grok"
+      self:write_provider_cache("grok", {
+        tpm_percent = usage.tpm_percent,
+        rpm_percent = usage.rpm_percent,
+        last_error = nil,
+      })
     else
       self.state.five_hour_percent = usage.five_hour_percent
       self.state.weekly_percent = usage.weekly_percent
       self.state.usage_provider = "codex"
+      self:write_provider_cache("codex", {
+        five_hour_percent = usage.five_hour_percent,
+        weekly_percent = usage.weekly_percent,
+        last_error = nil,
+      })
     end
     self.state.last_error = nil
   elseif type(error_message) == "string" and error_message ~= "" then
     self.state.last_error = error_message
+    self:write_provider_cache(flight_provider, {
+      last_error = error_message,
+    })
   end
 
   if stop_job then
@@ -320,6 +400,11 @@ function M:refresh_grok(force)
     self.state.rpm_percent = nil
     self.state.usage_provider = "grok"
     self.state.last_error = nil
+    self:write_provider_cache("grok", {
+      tpm_percent = nil,
+      rpm_percent = nil,
+      last_error = nil,
+    })
     self.on_update()
     return false
   end
@@ -342,6 +427,11 @@ function M:refresh_grok(force)
     self.state.tpm_percent = nil
     self.state.rpm_percent = nil
     self.state.last_error = auth_error or "Grok credentials not found"
+    self:write_provider_cache("grok", {
+      tpm_percent = nil,
+      rpm_percent = nil,
+      last_error = self.state.last_error,
+    })
     self.on_update()
     return false
   end
@@ -349,6 +439,9 @@ function M:refresh_grok(force)
   if vim.fn.executable("curl") ~= 1 then
     self.state.usage_provider = "grok"
     self.state.last_error = "curl not found on PATH (required for Grok token usage)"
+    self:write_provider_cache("grok", {
+      last_error = self.state.last_error,
+    })
     self.on_update()
     return false
   end
@@ -385,6 +478,7 @@ function M:refresh_grok(force)
   }
 
   self.state.in_flight = true
+  self.state.in_flight_provider = "grok"
   self.state.stdout = ""
   self.state.initialized = false
   self.state.last_error = nil
@@ -423,7 +517,9 @@ function M:refresh_grok(force)
   if type(job_id) ~= "number" or job_id <= 0 then
     self.state.job_id = nil
     self.state.in_flight = false
+    self.state.in_flight_provider = nil
     self.state.last_error = "Failed to start Grok token usage probe"
+    self:write_provider_cache("grok", { last_error = self.state.last_error })
     self.on_update()
     return false
   end
@@ -454,17 +550,22 @@ function M:refresh_codex(force)
   local command, executable, command_error = self:app_server_command()
   if command_error then
     self.state.last_error = command_error
+    self.state.usage_provider = "codex"
+    self:write_provider_cache("codex", { last_error = command_error })
     self.on_update()
     return false
   end
 
   if vim.fn.executable(executable) ~= 1 then
     self.state.last_error = "Codex CLI not found on PATH"
+    self.state.usage_provider = "codex"
+    self:write_provider_cache("codex", { last_error = self.state.last_error })
     self.on_update()
     return false
   end
 
   self.state.in_flight = true
+  self.state.in_flight_provider = "codex"
   self.state.stdout = ""
   self.state.initialized = false
   self.state.last_error = nil
@@ -487,7 +588,9 @@ function M:refresh_codex(force)
   if type(job_id) ~= "number" or job_id <= 0 then
     self.state.job_id = nil
     self.state.in_flight = false
+    self.state.in_flight_provider = nil
     self.state.last_error = "Failed to start Codex app-server"
+    self:write_provider_cache("codex", { last_error = self.state.last_error })
     self.on_update()
     return false
   end

@@ -334,8 +334,10 @@ codux | tpm 2% | rpm 0%
 
 Token monitoring refreshes in the background while a session is running
 (`refresh_ms`, default 60s). Mission Control also refreshes usage without an
-active main-session terminal, using the agent provider of the selected mission
-role.
+active main-session terminal. The usage line follows the **selected mission
+role’s agent provider** (Codex vs Grok). Metrics are cached per provider so
+switching selection updates the label format immediately and each provider is
+throttled independently.
 
 **Codex** usage is unchanged: each check starts a short-lived `codex app-server`
 process and reads account rate limits (`timeout_ms`, default 5s), shown as
