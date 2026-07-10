@@ -7,10 +7,10 @@ local markers = {
   "open codux",
   "codex autopilot",
   "codex danger zone",
-  "send file/folder to codex",
-  "send selection to codex",
-  "send diagnostics to codex",
-  "send git diff to codex",
+  "send file/folder",
+  "send selection",
+  "send diagnostics",
+  "send git diff",
   "create codux workspace",
   "current codux workspaces",
   "switch to execute mode",
@@ -404,10 +404,10 @@ end
 function M:normal_entries(mappings)
   local candidates = {
     { lhs = mappings.open, desc = "open codux" },
-    { lhs = mappings.review_file, desc = "send file/folder to codex" },
-    { lhs = mappings.review_selection, desc = "send selection to codex" },
-    { lhs = mappings.diagnostics, desc = "send diagnostics to codex" },
-    { lhs = mappings.diff, desc = "send git diff to codex" },
+    { lhs = mappings.review_file, desc = "send file/folder" },
+    { lhs = mappings.review_selection, desc = "send selection" },
+    { lhs = mappings.diagnostics, desc = "send diagnostics" },
+    { lhs = mappings.diff, desc = "send git diff" },
     { lhs = mappings.missions, desc = "mission control" },
   }
   local entries = {}
@@ -462,7 +462,7 @@ function M:register_group(mappings)
       end
     end
     if has_visual_prefix then
-      table.insert(specs, { mappings.review_selection, desc = "send selection to codex", mode = "v" })
+      table.insert(specs, { mappings.review_selection, desc = "send selection", mode = "v" })
     end
     pcall(which_key.add, specs)
   elseif type(which_key.register) == "function" then
@@ -478,7 +478,7 @@ function M:register_group(mappings)
     if has_visual_prefix then
       local visual_spec = { z = { name = self:mode_status_label() } }
       if mappings.review_selection:match("^<leader>z.") then
-        visual_spec.z[mappings.review_selection:sub(#"<leader>z" + 1)] = "send selection to codex"
+        visual_spec.z[mappings.review_selection:sub(#"<leader>z" + 1)] = "send selection"
       end
       pcall(which_key.register, visual_spec, { prefix = "<leader>", mode = "v" })
     end
