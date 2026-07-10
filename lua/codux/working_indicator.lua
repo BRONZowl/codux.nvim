@@ -123,12 +123,12 @@ function M.start_timer(controller)
 end
 
 function M.update(controller)
-  if controller.state.codex_working and controller:working_activity_is_stale() then
-    controller:set_codex_working(false)
+  if controller.state.agent_working and controller:working_activity_is_stale() then
+    controller:set_agent_working(false)
     return
   end
 
-  if controller.state.codex_working and controller:terminal_running() and not controller:valid_win() then
+  if controller.state.agent_working and controller:terminal_running() and not controller:valid_win() then
     if controller:ensure_working_indicator() then
       controller:start_working_timer()
     end

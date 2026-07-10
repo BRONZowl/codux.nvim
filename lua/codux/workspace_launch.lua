@@ -58,19 +58,22 @@ function M.bootstrap_lua(workspace)
   local initial_prompt = workspace.initial_prompt or ""
   local initial_mode = workspace.initial_mode or ""
   local open_visible = workspace.open_visible == true
-  local codex_session_id = workspace.codex_session_id or ""
-  local codex_session_path = workspace.codex_session_path or ""
-  local codex_session_captured_at = workspace.codex_session_captured_at or ""
   local agent_session_id = workspace.agent_session_id or ""
   local agent_session_path = workspace.agent_session_path or ""
   local agent_session_captured_at = workspace.agent_session_captured_at or ""
   if agent_provider ~= "grok" then
-    agent_session_id = agent_session_id ~= "" and agent_session_id or codex_session_id
-    agent_session_path = agent_session_path ~= "" and agent_session_path or codex_session_path
-    agent_session_captured_at = agent_session_captured_at ~= "" and agent_session_captured_at or codex_session_captured_at
+    if agent_session_id == "" then
+      agent_session_id = workspace.codex_session_id or ""
+    end
+    if agent_session_path == "" then
+      agent_session_path = workspace.codex_session_path or ""
+    end
+    if agent_session_captured_at == "" then
+      agent_session_captured_at = workspace.codex_session_captured_at or ""
+    end
   end
   local resume_agent_session = workspace.resume_agent_session == true
-  local codex_status = initial_prompt ~= "" and "working" or "idle"
+  local agent_status = initial_prompt ~= "" and "working" or "idle"
   local status = initial_prompt ~= "" and "active" or "idle"
   local show_codux = open_visible or initial_prompt ~= ""
 
@@ -82,7 +85,7 @@ function M.bootstrap_lua(workspace)
     "local agent_provider=" .. M.lua_string(agent_provider),
     "local prompt=" .. M.lua_string(initial_prompt),
     "local show_codux=" .. tostring(show_codux),
-    "local workspace={name=" .. M.lua_string(name) .. ",safe_name=" .. M.lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. M.lua_string(branch) .. ",workspace_kind=" .. M.lua_string(workspace_kind) .. ",git_common_dir=" .. M.lua_string(git_common_dir) .. ",worktree_path=" .. M.lua_string(worktree_path) .. ",worktree_branch=" .. M.lua_string(worktree_branch) .. ",worktree_base=" .. M.lua_string(worktree_base) .. ",worktree_base_commit=" .. M.lua_string(worktree_base_commit) .. ",mission_id=" .. M.lua_string(mission_id) .. ",mission_name=" .. M.lua_string(mission_name) .. ",mission_role=" .. M.lua_string(mission_role) .. ",mission_objective=" .. M.lua_string(mission_objective) .. ",mission_focus_packet=" .. M.lua_string(mission_focus_packet) .. ",window_name=" .. M.lua_string(window_name) .. ",nvim_server=" .. M.lua_string(nvim_server) .. ",custom_instruction=" .. M.lua_string(custom_instruction) .. ",resolved_instruction=" .. M.lua_string(resolved_instruction) .. ",initial_mode=" .. M.lua_string(initial_mode) .. ",agent_provider=agent_provider,permission_profile=profile,codex_status=" .. M.lua_string(codex_status) .. ",status=" .. M.lua_string(status) .. ",agent_session_id=" .. M.lua_string(agent_session_id) .. ",agent_session_path=" .. M.lua_string(agent_session_path) .. ",agent_session_captured_at=" .. M.lua_string(agent_session_captured_at) .. ",codex_session_id=" .. M.lua_string(codex_session_id) .. ",codex_session_path=" .. M.lua_string(codex_session_path) .. ",codex_session_captured_at=" .. M.lua_string(codex_session_captured_at) .. ",resume_agent_session=" .. tostring(resume_agent_session) .. ",open_visible=" .. tostring(open_visible) .. "}",
+    "local workspace={name=" .. M.lua_string(name) .. ",safe_name=" .. M.lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. M.lua_string(branch) .. ",workspace_kind=" .. M.lua_string(workspace_kind) .. ",git_common_dir=" .. M.lua_string(git_common_dir) .. ",worktree_path=" .. M.lua_string(worktree_path) .. ",worktree_branch=" .. M.lua_string(worktree_branch) .. ",worktree_base=" .. M.lua_string(worktree_base) .. ",worktree_base_commit=" .. M.lua_string(worktree_base_commit) .. ",mission_id=" .. M.lua_string(mission_id) .. ",mission_name=" .. M.lua_string(mission_name) .. ",mission_role=" .. M.lua_string(mission_role) .. ",mission_objective=" .. M.lua_string(mission_objective) .. ",mission_focus_packet=" .. M.lua_string(mission_focus_packet) .. ",window_name=" .. M.lua_string(window_name) .. ",nvim_server=" .. M.lua_string(nvim_server) .. ",custom_instruction=" .. M.lua_string(custom_instruction) .. ",resolved_instruction=" .. M.lua_string(resolved_instruction) .. ",initial_mode=" .. M.lua_string(initial_mode) .. ",agent_provider=agent_provider,permission_profile=profile,agent_status=" .. M.lua_string(agent_status) .. ",status=" .. M.lua_string(status) .. ",agent_session_id=" .. M.lua_string(agent_session_id) .. ",agent_session_path=" .. M.lua_string(agent_session_path) .. ",agent_session_captured_at=" .. M.lua_string(agent_session_captured_at) .. ",resume_agent_session=" .. tostring(resume_agent_session) .. ",open_visible=" .. tostring(open_visible) .. "}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",

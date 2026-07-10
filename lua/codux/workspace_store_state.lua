@@ -1,4 +1,6 @@
+local providers = require("codux.providers")
 local text_util = require("codux.text")
+local workspace_git = require("codux.workspace_git")
 
 local M = {}
 
@@ -10,9 +12,7 @@ local function empty_dict()
   return vim.empty_dict and vim.empty_dict() or {}
 end
 
-local function inactive_like_status(status)
-  return status == "inactive" or status == "missing"
-end
+local inactive_like_status = workspace_git.inactive_like_status
 
 function M.empty_state()
   return {
@@ -34,20 +34,14 @@ function M.normalize_session_id(value)
   return nil
 end
 
-function M.normalize_codex_mode(value)
-  if value == "execute" or value == "plan" then
-    return value
-  end
-
-  return nil
+function M.normalize_agent_mode(value)
+  return workspace_git.normalize_agent_mode(value)
 end
 
-function M.normalize_agent_provider(value)
-  if value == "grok" or value == "codex" then
-    return value
-  end
+M.normalize_codex_mode = M.normalize_agent_mode
 
-  return "codex"
+function M.normalize_agent_provider(value)
+  return providers.normalize_provider(value) or "codex"
 end
 
 function M.normalize_record(store, record, safe_name, root)
@@ -63,10 +57,12 @@ function M.normalize_record(store, record, safe_name, root)
   if status ~= "active" and status ~= "question" and status ~= "idle" and status ~= "inactive" and status ~= "missing" then
     status = "inactive"
   end
-  local codex_status = record.codex_status == "working" and "working"
-    or record.codex_status == "question" and "question"
-    or "idle"
-  local codex_mode = not inactive_like_status(status) and M.normalize_codex_mode(record.codex_mode) or nil
+  -- Prefer agent_* fields; migrate legacy codex_* persisted keys on read.
+  local raw_status = record.agent_status or record.codex_status
+  local agent_status = raw_status == "working" and "working" or raw_status == "question" and "question" or "idle"
+  local agent_mode = not inactive_like_status(status)
+      and M.normalize_agent_mode(record.agent_mode or record.codex_mode)
+    or nil
   local agent_provider = M.normalize_agent_provider(record.agent_provider)
   local agent_session_id = record.agent_session_id
   local agent_session_path = record.agent_session_path
@@ -76,6 +72,7 @@ function M.normalize_record(store, record, safe_name, root)
     agent_session_path = agent_session_path or record.codex_session_path
     agent_session_captured_at = agent_session_captured_at or record.codex_session_captured_at
   end
+  agent_session_id = M.normalize_session_id(agent_session_id) or agent_session_id
 
   return {
     name = name,
@@ -105,12 +102,9 @@ function M.normalize_record(store, record, safe_name, root)
     agent_session_path = agent_session_path,
     agent_session_captured_at = agent_session_captured_at,
     permission_profile = record.permission_profile or "default",
-    codex_session_id = M.normalize_session_id(record.codex_session_id),
-    codex_session_path = record.codex_session_path,
-    codex_session_captured_at = record.codex_session_captured_at,
     status = status,
-    codex_status = codex_status,
-    codex_mode = codex_mode,
+    agent_status = agent_status,
+    agent_mode = agent_mode,
     created_at = record.created_at,
     last_opened_at = record.last_opened_at,
     last_activity_at = record.last_activity_at,
@@ -183,8 +177,11 @@ function M.workspace_from_state(record, fallback)
   record = type(record) == "table" and record or {}
   fallback = type(fallback) == "table" and fallback or {}
   local status = record.status or fallback.status or "inactive"
-  local codex_mode = not inactive_like_status(status)
-      and (M.normalize_codex_mode(record.codex_mode) or M.normalize_codex_mode(fallback.codex_mode))
+  local agent_mode = not inactive_like_status(status)
+      and (
+        M.normalize_agent_mode(record.agent_mode or record.codex_mode)
+        or M.normalize_agent_mode(fallback.agent_mode or fallback.codex_mode)
+      )
     or nil
   local agent_provider = M.normalize_agent_provider(record.agent_provider or fallback.agent_provider)
   local agent_session_id = record.agent_session_id or fallback.agent_session_id
@@ -193,8 +190,16 @@ function M.workspace_from_state(record, fallback)
   if agent_provider ~= "grok" then
     agent_session_id = agent_session_id or record.codex_session_id or fallback.codex_session_id
     agent_session_path = agent_session_path or record.codex_session_path or fallback.codex_session_path
-    agent_session_captured_at = agent_session_captured_at or record.codex_session_captured_at or fallback.codex_session_captured_at
+    agent_session_captured_at = agent_session_captured_at
+      or record.codex_session_captured_at
+      or fallback.codex_session_captured_at
   end
+  agent_session_id = M.normalize_session_id(agent_session_id) or agent_session_id
+  local agent_status = record.agent_status
+    or record.codex_status
+    or fallback.agent_status
+    or fallback.codex_status
+    or "idle"
 
   return {
     name = record.name or fallback.name,
@@ -225,12 +230,9 @@ function M.workspace_from_state(record, fallback)
     agent_session_path = agent_session_path,
     agent_session_captured_at = agent_session_captured_at,
     permission_profile = record.permission_profile or fallback.permission_profile or "default",
-    codex_session_id = M.normalize_session_id(record.codex_session_id) or M.normalize_session_id(fallback.codex_session_id),
-    codex_session_path = record.codex_session_path or fallback.codex_session_path,
-    codex_session_captured_at = record.codex_session_captured_at or fallback.codex_session_captured_at,
-    codex_status = record.codex_status or fallback.codex_status or "idle",
+    agent_status = agent_status,
     status = status,
-    codex_mode = codex_mode,
+    agent_mode = agent_mode,
     created_at = record.created_at or fallback.created_at,
     last_activity_at = record.last_activity_at or fallback.last_activity_at,
     last_target_at = record.last_target_at or fallback.last_target_at,
@@ -245,9 +247,10 @@ function M.state_record(_, workspace, existing)
   existing = type(existing) == "table" and existing or {}
   local now = M.timestamp()
   local status = workspace.status or existing.status or "idle"
-  local codex_mode = nil
+  local agent_mode = nil
   if not inactive_like_status(status) then
-    codex_mode = M.normalize_codex_mode(workspace.codex_mode) or M.normalize_codex_mode(existing.codex_mode)
+    agent_mode = M.normalize_agent_mode(workspace.agent_mode or workspace.codex_mode)
+      or M.normalize_agent_mode(existing.agent_mode or existing.codex_mode)
   end
 
   local agent_provider = M.normalize_agent_provider(workspace.agent_provider or existing.agent_provider)
@@ -255,10 +258,18 @@ function M.state_record(_, workspace, existing)
   local agent_session_path = workspace.agent_session_path or existing.agent_session_path
   local agent_session_captured_at = workspace.agent_session_captured_at or existing.agent_session_captured_at
   if agent_provider ~= "grok" then
-    agent_session_id = agent_session_id or workspace.codex_session_id
-    agent_session_path = agent_session_path or workspace.codex_session_path
-    agent_session_captured_at = agent_session_captured_at or workspace.codex_session_captured_at
+    agent_session_id = agent_session_id or workspace.codex_session_id or existing.codex_session_id
+    agent_session_path = agent_session_path or workspace.codex_session_path or existing.codex_session_path
+    agent_session_captured_at = agent_session_captured_at
+      or workspace.codex_session_captured_at
+      or existing.codex_session_captured_at
   end
+  agent_session_id = M.normalize_session_id(agent_session_id) or agent_session_id
+  local agent_status = workspace.agent_status
+    or existing.agent_status
+    or workspace.codex_status
+    or existing.codex_status
+    or "idle"
 
   return {
     name = workspace.name,
@@ -289,12 +300,9 @@ function M.state_record(_, workspace, existing)
     agent_session_path = agent_session_path,
     agent_session_captured_at = agent_session_captured_at,
     permission_profile = workspace.permission_profile or "default",
-    codex_session_id = M.normalize_session_id(workspace.codex_session_id),
-    codex_session_path = workspace.codex_session_path,
-    codex_session_captured_at = workspace.codex_session_captured_at,
     status = status,
-    codex_status = workspace.codex_status or existing.codex_status or "idle",
-    codex_mode = codex_mode,
+    agent_status = agent_status,
+    agent_mode = agent_mode,
     created_at = existing.created_at or workspace.created_at or now,
     last_opened_at = now,
     last_activity_at = workspace.last_activity_at or existing.last_activity_at,

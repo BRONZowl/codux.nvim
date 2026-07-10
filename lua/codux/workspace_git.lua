@@ -68,7 +68,7 @@ function M.relative_path_escapes_root(value)
   return value == ".." or value:sub(1, 3) == "../" or value:find("/%.%./") ~= nil or value:sub(-3) == "/.."
 end
 
-function M.normalize_codex_mode(mode)
+function M.normalize_agent_mode(mode)
   if mode == "execute" or mode == "plan" then
     return mode
   end
@@ -76,8 +76,11 @@ function M.normalize_codex_mode(mode)
   return nil
 end
 
+-- Legacy alias.
+M.normalize_codex_mode = M.normalize_agent_mode
+
 function M.inactive_like_status(status)
-  return status == "inactive"
+  return status == "inactive" or status == "missing"
 end
 
 function M.prepend_command(command, args)

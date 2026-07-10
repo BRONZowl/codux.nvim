@@ -9,26 +9,6 @@ function M.resolve_resume(runtime, workspace)
   return runtime.store:resolve_workspace_resume_session(workspace)
 end
 
-function M.codex_home(runtime)
-  return runtime.store:codex_home()
-end
-
-function M.session_files(runtime)
-  return runtime.store:codex_session_files()
-end
-
-function M.read_meta(runtime, path)
-  return runtime.store:read_codex_session_meta(path)
-end
-
-function M.session_for_id(runtime, session_id)
-  return runtime.store:codex_session_for_id(session_id)
-end
-
-function M.latest_for_cwd(runtime, cwd, min_mtime)
-  return runtime.store:latest_codex_session_for_cwd(cwd, min_mtime)
-end
-
 function M.persist_meta(runtime, workspace, meta)
   if type(workspace) ~= "table" or type(meta) ~= "table" then
     return false
@@ -60,24 +40,19 @@ function M.persist_meta(runtime, workspace, meta)
     return false
   end
 
-  record.codex_session_id = session_id
-  record.codex_session_path = meta.path
-  record.codex_session_captured_at = runtime:timestamp()
-  record.agent_provider = "codex"
+  local captured_at = runtime:timestamp()
+  record.agent_provider = record.agent_provider or "codex"
   record.agent_session_id = session_id
   record.agent_session_path = meta.path
-  record.agent_session_captured_at = record.codex_session_captured_at
-  project.updated_at = record.codex_session_captured_at
+  record.agent_session_captured_at = captured_at
+  project.updated_at = captured_at
 
   local write_ok = runtime:write_state(state_data)
   if not write_ok then
     return false
   end
 
-  workspace.codex_session_id = record.codex_session_id
-  workspace.codex_session_path = record.codex_session_path
-  workspace.codex_session_captured_at = record.codex_session_captured_at
-  workspace.agent_provider = "codex"
+  workspace.agent_provider = record.agent_provider
   workspace.agent_session_id = record.agent_session_id
   workspace.agent_session_path = record.agent_session_path
   workspace.agent_session_captured_at = record.agent_session_captured_at
@@ -85,10 +60,7 @@ function M.persist_meta(runtime, workspace, meta)
     runtime.state.workspace == workspace
     or (runtime.state.workspace and runtime.state.workspace.safe_name == safe_name and runtime.state.workspace.project_root == root)
   then
-    runtime.state.workspace.codex_session_id = record.codex_session_id
-    runtime.state.workspace.codex_session_path = record.codex_session_path
-    runtime.state.workspace.codex_session_captured_at = record.codex_session_captured_at
-    runtime.state.workspace.agent_provider = "codex"
+    runtime.state.workspace.agent_provider = record.agent_provider
     runtime.state.workspace.agent_session_id = record.agent_session_id
     runtime.state.workspace.agent_session_path = record.agent_session_path
     runtime.state.workspace.agent_session_captured_at = record.agent_session_captured_at
@@ -116,7 +88,8 @@ function M.schedule_capture(runtime, workspace, min_mtime)
   local function capture()
     attempts = attempts + 1
     local meta = nil
-    local session_id = runtime.store.normalize_session_id(workspace.codex_session_id)
+    local session_id = runtime.store.normalize_session_id(workspace.agent_session_id)
+      or runtime.store.normalize_session_id(workspace.codex_session_id)
     if session_id then
       meta = runtime:codex_session_for_id(session_id)
     end

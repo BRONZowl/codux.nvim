@@ -107,7 +107,7 @@ do
   local old_key_choice_menu = ui_mod.key_choice_menu
   local prompt_opts = {}
   local calls = {}
-  local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", codex_status = "question" }
+  local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", agent_status = "question" }
   ui_mod.key_choice_menu = function(_, callback)
     callback({ action = "option_note" })
     return true
@@ -307,7 +307,7 @@ do
     safe_name = "alpha-builder",
     mission_role = "Builder",
     status = "active",
-    codex_status = "working",
+    agent_status = "working",
   }
   local controller = mission_control_mod.new({
     notify = notify,
@@ -348,7 +348,7 @@ do
     safe_name = "alpha-builder",
     mission_role = "Builder",
     status = "idle",
-    codex_status = "idle",
+    agent_status = "idle",
   }
   local controller = mission_control_mod.new({
     ui = {
@@ -381,7 +381,7 @@ do
     safe_name = "alpha-builder",
     mission_role = "Builder",
     status = "active",
-    codex_status = "working",
+    agent_status = "working",
   }
   local controller = mission_control_mod.new({
     notify = notify,
@@ -412,7 +412,7 @@ do
     safe_name = "alpha-builder",
     mission_role = "Builder",
     status = "idle",
-    codex_mode = "plan",
+    agent_mode = "plan",
   }
   local controller = mission_control_mod.new({
     notify = notify,
@@ -443,7 +443,7 @@ do
     safe_name = "alpha-builder",
     mission_role = "Builder",
     status = "idle",
-    codex_mode = "plan",
+    agent_mode = "plan",
   }
   local controller = mission_control_mod.new({
     notify = notify,

@@ -204,8 +204,8 @@ do
     function controller:valid_win()
       return false
     end
-    function controller:set_codex_working(value)
-      self.state.codex_working = value
+    function controller:set_agent_working(value)
+      self.state.agent_working = value
     end
     function controller:mark_terminal_prompt_submission()
       self.state.marked_prompt_submission = true
@@ -267,7 +267,7 @@ do
     assert_equal(controller.state.mode, "plan")
     assert_nil(env.command_prompt)
     assert_equal(#env.sent, 0)
-    assert_false(controller.state.codex_working)
+    assert_false(controller.state.agent_working)
   end)
 
   with_terminal_start_env({
@@ -277,7 +277,7 @@ do
   }, function(controller)
     controller.state.job_id = 42
     assert_false(controller:send_startup_plan_toggle())
-    assert_equal(controller.state.last_startup_send_error, "Failed to send startup plan command to Codex: EPIPE")
+    assert_equal(controller.state.last_startup_send_error, "Failed to send startup plan command to agent: EPIPE")
   end)
 
   with_terminal_start_env({
@@ -287,7 +287,7 @@ do
   }, function(controller)
     controller.state.job_id = 42
     assert_false(controller:paste_startup_prompt("hello"))
-    assert_equal(controller.state.last_startup_send_error, "Failed to send startup prompt to Codex: broken pipe")
+    assert_equal(controller.state.last_startup_send_error, "Failed to send startup prompt to agent: broken pipe")
     assert_nil(controller.state.marked_prompt_submission)
   end)
 
@@ -306,7 +306,7 @@ do
     assert_nil(env.command_prompt)
     assert_equal(#env.sent, 1)
     assert_equal(env.sent[1], "\27[200~hello\27[201~\r")
-    assert_true(controller.state.codex_working)
+    assert_true(controller.state.agent_working)
     assert_true(controller.state.marked_prompt_submission)
   end)
 
@@ -341,7 +341,7 @@ do
     assert_equal(controller.state.mode, "execute")
     assert_equal(env.command_prompt, "hello")
     assert_equal(#env.sent, 0)
-    assert_true(controller.state.codex_working)
+    assert_true(controller.state.agent_working)
   end)
 
   with_terminal_start_env({
@@ -473,7 +473,7 @@ do
     controller.state.mode = "execute"
     controller:confirm_startup_plan_sequence(nil, false, 1, false)
     assert_equal(#env.notifications, 1)
-    assert_equal(env.notifications[1].message, "Codex did not confirm plan mode on startup")
+    assert_equal(env.notifications[1].message, "Agent did not confirm plan mode on startup")
   end)
 
   with_terminal_start_env({
@@ -560,17 +560,17 @@ do
 
   local controller = terminal_mod.new({})
   controller.state.job_id = 42
-  controller.state.codex_working = true
+  controller.state.agent_working = true
   controller.state.terminal_prompt_input = "unfinished"
   controller.state.terminal_prompt_tracking_valid = false
   function controller:terminal_running()
     return true
   end
 
-  assert_true(controller:interrupt_codex_session())
+  assert_true(controller:interrupt_agent_session())
   assert_equal(sent[1], "\3")
   assert_equal(sent[2], nil)
-  assert_false(controller.state.codex_working)
+  assert_false(controller.state.agent_working)
   assert_equal(controller.state.terminal_prompt_input, "")
   assert_true(controller.state.terminal_prompt_tracking_valid)
 
@@ -615,14 +615,14 @@ do
   local controller = terminal_mod.new({})
   controller.state.buf = 9
   controller.state.job_id = 42
-  controller.state.codex_working = true
+  controller.state.agent_working = true
   controller.state.terminal_prompt_input = "unfinished"
   controller.state.terminal_prompt_tracking_valid = false
   function controller:terminal_running()
     return true
   end
 
-  assert_true(controller:interrupt_codex_session())
+  assert_true(controller:interrupt_agent_session())
   assert_equal(sent[1], "\3")
   assert_equal(sent[2], nil)
   assert_equal(#scheduled, 1)
@@ -666,8 +666,8 @@ do
   function controller:mark_terminal_prompt_submission()
     self.state.marked_prompt_submission = true
   end
-  function controller:set_codex_working(working)
-    self.state.codex_working = working == true
+  function controller:set_agent_working(working)
+    self.state.agent_working = working == true
   end
 
   assert_true(controller:submit_terminal_prompt())
@@ -676,7 +676,7 @@ do
   assert_equal(controller.state.terminal_prompt_input, "")
   assert_true(controller.state.terminal_prompt_tracking_valid)
   assert_true(controller.state.marked_prompt_submission)
-  assert_true(controller.state.codex_working)
+  assert_true(controller.state.agent_working)
 
   vim.fn.chansend = old_chansend
 end
@@ -701,8 +701,8 @@ do
   function controller:mark_terminal_prompt_submission()
     self.state.marked_prompt_submission = true
   end
-  function controller:set_codex_working(working)
-    self.state.codex_working = working == true
+  function controller:set_agent_working(working)
+    self.state.agent_working = working == true
   end
 
   assert_true(controller:submit_terminal_prompt())
@@ -712,7 +712,7 @@ do
   assert_equal(controller.state.terminal_prompt_input, "")
   assert_true(controller.state.terminal_prompt_tracking_valid)
   assert_true(controller.state.marked_prompt_submission)
-  assert_true(controller.state.codex_working)
+  assert_true(controller.state.agent_working)
 
   vim.fn.chansend = old_chansend
 end
@@ -739,17 +739,17 @@ do
   function controller:terminal_running()
     return true
   end
-  function controller:ensure_codex()
+  function controller:ensure_agent()
     return true
   end
   function controller:mark_terminal_prompt_submission()
     self.state.marked_prompt_submission = true
   end
-  function controller:set_codex_working(working)
-    self.state.codex_working = working == true
+  function controller:set_agent_working(working)
+    self.state.agent_working = working == true
   end
 
-  assert_true(controller:send_to_codex("ship it"))
+  assert_true(controller:send_to_agent("ship it"))
   assert_equal(sent[1], "\21")
   assert_equal(sent[2], "\27[200~ship it\27[201~\r")
   assert_equal(sent[3], nil)
@@ -758,7 +758,7 @@ do
   assert_equal(controller.state.terminal_prompt_input, "")
   assert_false(controller.state.terminal_prompt_tracking_valid)
   assert_true(controller.state.marked_prompt_submission)
-  assert_true(controller.state.codex_working)
+  assert_true(controller.state.agent_working)
 
   vim.fn.chansend = old_chansend
   vim.fn.sleep = old_sleep
@@ -790,8 +790,8 @@ do
   function controller:mark_terminal_prompt_submission()
     table.insert(sent, "mark")
   end
-  function controller:set_codex_working(working)
-    self.state.codex_working = working == true
+  function controller:set_agent_working(working)
+    self.state.agent_working = working == true
   end
 
   local up = "\27[A"
@@ -799,7 +799,7 @@ do
   local function reset_records()
     sent = {}
     sleeps = {}
-    controller.state.codex_working = false
+    controller.state.agent_working = false
   end
   local function assert_option_sequence(expected_down_count, submit_key, mark_expected)
     local index = 1
@@ -824,29 +824,29 @@ do
     assert_equal(sent[index], nil)
   end
 
-  assert_true(controller:select_codex_question_option("1", false))
+  assert_true(controller:select_agent_question_option("1", false))
   assert_option_sequence(0, "\r", true)
 
   reset_records()
-  assert_true(controller:select_codex_question_option("2", false))
+  assert_true(controller:select_agent_question_option("2", false))
   assert_option_sequence(1, "\r", true)
-  assert_true(controller.state.codex_working)
+  assert_true(controller.state.agent_working)
 
   reset_records()
-  assert_true(controller:select_codex_question_option("3", true))
+  assert_true(controller:select_agent_question_option("3", true))
   assert_option_sequence(2, "\t", false)
   assert_equal(sleeps[23], "40m")
   assert_equal(sleeps[24], "40m")
   assert_equal(sleeps[25], nil)
 
   reset_records()
-  assert_true(controller:submit_codex_question_note("ship it"))
+  assert_true(controller:submit_agent_question_note("ship it"))
   assert_equal(sent[1], "\27[200~ship it\27[201~\r")
   assert_equal(sent[2], "mark")
 
-  assert_false(controller:select_codex_question_option("two", false))
-  assert_false(controller:select_codex_question_option("0", false))
-  assert_false(controller:select_codex_question_option("5", false))
+  assert_false(controller:select_agent_question_option("two", false))
+  assert_false(controller:select_agent_question_option("0", false))
+  assert_false(controller:select_agent_question_option("5", false))
   assert_equal(sent[3], nil)
 
   vim.fn.chansend = old_chansend

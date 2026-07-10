@@ -98,13 +98,13 @@ function M.activity_timestamp(entry)
   return entry.last_activity_at
     or entry.last_target_at
     or entry.last_opened_at
-    or entry.codex_session_captured_at
+    or entry.agent_session_captured_at
     or entry.created_at
 end
 
 function M.session_timestamp(entry)
   entry = type(entry) == "table" and entry or {}
-  return entry.created_at or entry.codex_session_captured_at
+  return entry.created_at or entry.agent_session_captured_at
 end
 
 function M.timestamp_sort_value(value)
@@ -149,10 +149,10 @@ function M.manager_mode_label(entry)
   if entry.status == "inactive" then
     return "--"
   end
-  if entry.codex_mode == "execute" then
+  if entry.agent_mode == "execute" then
     return "exec"
   end
-  if entry.codex_mode == "plan" then
+  if entry.agent_mode == "plan" then
     return "plan"
   end
   return "--"

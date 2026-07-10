@@ -99,7 +99,7 @@ do
           mission_role = "Builder",
           mission_objective = "Build the dashboard\nKeep it sharp",
           status = "active",
-          codex_mode = "execute",
+          agent_mode = "execute",
           permission_profile = "auto",
           target_path = "/repo/lua/codux/init.lua",
           workspace_kind = "worktree",

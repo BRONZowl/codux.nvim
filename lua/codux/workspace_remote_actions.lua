@@ -167,7 +167,7 @@ function M.send_prompt_to_workspace(runtime, entry, prompt, opts)
     return false, plan_error or "Failed to switch workspace to plan mode"
   end
 
-  return runtime:remote_workspace_call(entry, "require('codux')._v5.remote_send_to_codex(" .. runtime:lua_string(prompt) .. ")", {
+  return runtime:remote_workspace_call(entry, "require('codux')._v5.remote_send_to_agent(" .. runtime:lua_string(prompt) .. ")", {
     attempts = opts.attempts,
     sleep_ms = opts.sleep_ms,
     remote_attempts = opts.remote_attempts,
@@ -189,7 +189,7 @@ function M.select_workspace_question_option(runtime, entry, option, opts)
 
   return runtime:remote_workspace_call(
     entry,
-    "require('codux')._v5.remote_select_codex_question_option("
+    "require('codux')._v5.remote_select_agent_question_option("
       .. runtime:lua_string(option)
       .. ", "
       .. tostring(opts.with_note == true)
@@ -213,7 +213,7 @@ function M.submit_workspace_question_note(runtime, entry, note, opts)
 
   return runtime:remote_workspace_call(
     entry,
-    "require('codux')._v5.remote_submit_codex_question_note(" .. runtime:lua_string(note) .. ")",
+    "require('codux')._v5.remote_submit_agent_question_note(" .. runtime:lua_string(note) .. ")",
     {
       attempts = opts.attempts,
       sleep_ms = opts.sleep_ms,
@@ -226,7 +226,7 @@ end
 
 function M.interrupt_workspace(runtime, entry, opts)
   opts = type(opts) == "table" and opts or {}
-  return runtime:remote_workspace_call(entry, "require('codux')._v5.remote_interrupt_codex_session()", {
+  return runtime:remote_workspace_call(entry, "require('codux')._v5.remote_interrupt_agent_session()", {
     attempts = opts.attempts,
     sleep_ms = opts.sleep_ms,
     remote_attempts = opts.remote_attempts,
@@ -237,7 +237,7 @@ end
 
 function M.switch_workspace_mode(runtime, entry, opts)
   opts = type(opts) == "table" and opts or {}
-  return runtime:remote_workspace_call(entry, "require('codux')._v5.remote_switch_codex_mode()", {
+  return runtime:remote_workspace_call(entry, "require('codux')._v5.remote_switch_agent_mode()", {
     attempts = opts.attempts,
     sleep_ms = opts.sleep_ms,
     remote_attempts = opts.remote_attempts,

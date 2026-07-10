@@ -40,11 +40,11 @@ local function runtime(opts)
     end,
     dashboard_workspace_status = function(_, record, window_id)
       if window_id then
-        return record.codex_status == "question" and "question" or "idle"
+        return record.agent_status == "question" and "question" or "idle"
       end
       return "inactive"
     end,
-    normalize_codex_mode = function(_, mode)
+    normalize_agent_mode = function(_, mode)
       return mode == "execute" and "execute" or mode == "plan" and "plan" or nil
     end,
     workspace_server_path = function(_, root, safe_name)
@@ -97,7 +97,7 @@ do
               name = "Review",
               safe_name = "review",
               project_root = "/repo",
-              codex_mode = "plan",
+              agent_mode = "plan",
               permission_profile = "auto",
               tmux_window = "review",
             },
@@ -120,7 +120,7 @@ do
   assert_true(entries[1].instruction_file_only)
   assert_equal(entries[2].name, "Review")
   assert_equal(entries[2].status, "idle")
-  assert_equal(entries[2].codex_mode, "plan")
+  assert_equal(entries[2].agent_mode, "plan")
   assert_equal(entries[2].tmux_target, "session:review")
 end
 

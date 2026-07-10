@@ -18,16 +18,25 @@ M.mission_control = {
   ["codux-mission-workspace-prompt"] = true,
 }
 
-M.workspace = {
+-- Floating manager chrome (list/search/command/action). Closing the manager
+-- only tears these down — create/instruction editors are separate flows.
+M.workspace_manager = {
   ["codux-workspaces"] = true,
   ["codux-workspaces-footer"] = true,
   ["codux-workspaces-search"] = true,
   ["codux-workspaces-command"] = true,
   ["codux-workspaces-actions"] = true,
+}
+
+M.workspace = {
   ["codux-workspace-create"] = true,
   ["codux-workspace-create-footer"] = true,
   ["codux-workspace-instruction"] = true,
 }
+
+for filetype in pairs(M.workspace_manager) do
+  M.workspace[filetype] = true
+end
 
 M.internal = {
   codux = true,

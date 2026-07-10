@@ -240,10 +240,10 @@ function M.mission_mode_label(_, entry)
   if entry.status == "inactive" then
     return "not set"
   end
-  if entry.codex_mode == "execute" then
+  if entry.agent_mode == "execute" then
     return "execute"
   end
-  if entry.codex_mode == "plan" then
+  if entry.agent_mode == "plan" then
     return "plan"
   end
   return "not set"

@@ -1,14 +1,9 @@
+local filetypes = require("codux.filetypes")
 local ui = require("codux.ui")
 
 local M = {}
 
-local dashboard_filetypes = {
-  ["codux-workspaces"] = true,
-  ["codux-workspaces-footer"] = true,
-  ["codux-workspaces-search"] = true,
-  ["codux-workspaces-command"] = true,
-  ["codux-workspaces-actions"] = true,
-}
+local dashboard_filetypes = filetypes.workspace_manager
 
 function M.stop_refresh_timer(controller)
   local timer = controller.state.workspace_manager_refresh_timer

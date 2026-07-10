@@ -6,8 +6,6 @@ local codux_icon = "󰚩"
 local markers = {
   "open codux",
   "set default provider",
-  "codex autopilot",
-  "codex danger zone",
   "send file/folder",
   "send selection",
   "send diagnostics",

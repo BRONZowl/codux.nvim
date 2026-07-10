@@ -24,7 +24,7 @@ local function runtime(opts)
             project_root = "/repo",
             tmux_window = "review",
             status = "idle",
-            codex_status = "idle",
+            agent_status = "idle",
           },
         },
       },
@@ -133,7 +133,7 @@ do
   assert_true(ok)
   local record = rt:state_data().projects["/repo"].workspaces.review
   assert_equal(record.status, "inactive")
-  assert_equal(record.codex_status, "idle")
+  assert_equal(record.agent_status, "idle")
   assert_equal(rt:killed()[1], "@1")
   assert_equal(rt:notifications()[1], "Closed 1 Codux workspaces")
 end

@@ -28,15 +28,15 @@ function M.create(codux, deps)
 
   vim.api.nvim_create_user_command("Codux", function()
     codux.open()
-  end, { force = true, desc = "Open or focus the Codex popup" })
+  end, { force = true, desc = "Open or focus the Codux agent popup" })
 
   vim.api.nvim_create_user_command("CoduxOpen", function()
     codux.open()
-  end, { force = true, desc = "Open or focus the Codex popup" })
+  end, { force = true, desc = "Open or focus the Codux agent popup" })
 
   vim.api.nvim_create_user_command("CoduxOpenAuto", function()
     codux.open_workspace_auto()
-  end, { force = true, desc = "Open Codex autopilot with approve-for-me permissions" })
+  end, { force = true, desc = "Open Codux autopilot with approve-for-me permissions" })
 
   vim.api.nvim_create_user_command("CoduxOpenDanger", function()
     codux.open_danger_full_access()
@@ -203,35 +203,35 @@ function M.create(codux, deps)
 
   vim.api.nvim_create_user_command("CoduxToggle", function()
     codux.toggle()
-  end, { force = true, desc = "Toggle the Codex popup" })
+  end, { force = true, desc = "Toggle the Codux agent popup" })
 
   vim.api.nvim_create_user_command("CoduxClose", function()
     codux.close()
-  end, { force = true, desc = "Hide the Codex popup without stopping Codex" })
+  end, { force = true, desc = "Hide the Codux popup without stopping the agent" })
 
   vim.api.nvim_create_user_command("CoduxExit", function()
     codux.exit()
-  end, { force = true, desc = "Stop Codex and close the popup" })
+  end, { force = true, desc = "Stop the agent and close the popup" })
 
   vim.api.nvim_create_user_command("CoduxReview", function()
     codux.send_file_review()
-  end, { force = true, desc = "Send current file or explorer node to Codex for review" })
+  end, { force = true, desc = "Send current file or explorer node to the agent for review" })
 
   vim.api.nvim_create_user_command("CoduxReviewSelection", function(opts)
     codux.send_selection(opts)
-  end, { force = true, range = true, desc = "Send selected code to Codex for review" })
+  end, { force = true, range = true, desc = "Send selected code to the agent for review" })
 
   vim.api.nvim_create_user_command("CoduxDiagnostics", function()
     codux.send_diagnostics()
-  end, { force = true, desc = "Send diagnostics, lists, and headless health output to Codex" })
+  end, { force = true, desc = "Send diagnostics, lists, and headless health output to the agent" })
 
   vim.api.nvim_create_user_command("CoduxDiff", function()
     codux.send_git_diff()
-  end, { force = true, desc = "Send Git changes to Codex for review" })
+  end, { force = true, desc = "Send Git changes to the agent for review" })
 
   vim.api.nvim_create_user_command("CoduxTogglePlan", function()
     codux.toggle_plan_mode()
-  end, { force = true, desc = "Toggle Codex plan mode" })
+  end, { force = true, desc = "Toggle agent plan mode" })
 
   vim.api.nvim_create_user_command("CoduxHealth", function()
     codux.health()

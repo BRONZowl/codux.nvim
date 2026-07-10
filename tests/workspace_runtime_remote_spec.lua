@@ -70,11 +70,11 @@ do
     assert_true(ok)
     local command_text = harness.command_text()
     local ensure_index = command_text:find("remote_ensure_plan_mode", 1, true)
-    local send_index = command_text:find("remote_send_to_codex", 1, true)
+    local send_index = command_text:find("remote_send_to_agent", 1, true)
     assert_true(type(ensure_index) == "number")
     assert_true(type(send_index) == "number")
     assert_true(ensure_index < send_index)
-    assert_contains(command_text, "remote_send_to_codex")
+    assert_contains(command_text, "remote_send_to_agent")
     assert_contains(command_text, "  /plan  ")
     assert_contains(command_text, expected_server)
     assert_equal(command_text:find(runtime:workspace_server_path("/repo", "review"), 1, true), nil)
@@ -90,7 +90,7 @@ do
     assert_true(ok)
     local command_text = harness.command_text()
     local ensure_index = command_text:find("remote_ensure_plan_mode", 1, true)
-    local answer_index = command_text:find("remote_select_codex_question_option", 1, true)
+    local answer_index = command_text:find("remote_select_agent_question_option", 1, true)
     assert_true(type(answer_index) == "number")
     assert_nil(ensure_index)
     assert_contains(command_text, '\\"2\\"')
@@ -110,7 +110,7 @@ do
     assert_nil(error_message)
     assert_true(ok)
     local command_text = harness.command_text()
-    assert_contains(command_text, "remote_select_codex_question_option")
+    assert_contains(command_text, "remote_select_agent_question_option")
     assert_equal(command_text:find("remote_ensure_plan_mode", 1, true), nil)
     assert_contains(command_text, '\\"3\\"')
     assert_contains(command_text, "true")
@@ -138,7 +138,7 @@ do
     assert_nil(error_message)
     assert_true(ok)
     local command_text = harness.command_text()
-    assert_contains(command_text, "remote_submit_codex_question_note")
+    assert_contains(command_text, "remote_submit_agent_question_note")
     assert_contains(command_text, "ship it")
     assert_equal(command_text:find("remote_ensure_plan_mode", 1, true), nil)
   end)
@@ -151,7 +151,7 @@ do
         if command:find("remote_ensure_plan_mode", 1, true) then
           return "failed\n", 0
         end
-        if command:find("remote_send_to_codex", 1, true) then
+        if command:find("remote_send_to_agent", 1, true) then
           error("prompt should not be sent before plan mode is confirmed")
         end
       end,
@@ -162,7 +162,7 @@ do
     assert_equal(error_message, "failed")
     local command_text = harness.command_text()
     assert_contains(command_text, "remote_ensure_plan_mode")
-    assert_equal(command_text:find("remote_send_to_codex", 1, true), nil)
+    assert_equal(command_text:find("remote_send_to_agent", 1, true), nil)
   end)
 end
 
@@ -174,7 +174,7 @@ do
     assert_nil(error_message)
     assert_true(ok)
     local command_text = harness.command_text()
-    assert_contains(command_text, "remote_switch_codex_mode")
+    assert_contains(command_text, "remote_switch_agent_mode")
     assert_contains(command_text, expected_server)
     assert_equal(command_text:find(runtime:workspace_server_path("/repo", "review"), 1, true), nil)
   end)
@@ -236,7 +236,7 @@ do
     }, { attempts = 1 })
     assert_false(ok)
     assert_equal(error_message, "workspace is inactive")
-    assert_equal(table.concat(commands, "\n"):find("remote_switch_codex_mode", 1, true), nil)
+    assert_equal(table.concat(commands, "\n"):find("remote_switch_agent_mode", 1, true), nil)
   end)
 end
 
@@ -248,7 +248,7 @@ do
     assert_nil(error_message)
     assert_true(ok)
     local command_text = harness.command_text()
-    assert_contains(command_text, "remote_interrupt_codex_session")
+    assert_contains(command_text, "remote_interrupt_agent_session")
     assert_contains(command_text, expected_server)
     assert_equal(command_text:find(runtime:workspace_server_path("/repo", "review"), 1, true), nil)
   end)
@@ -279,7 +279,7 @@ do
     }, "/plan", { attempts = 1 })
     assert_false(ok)
     assert_equal(error_message, "workspace is inactive")
-    assert_equal(table.concat(commands, "\n"):find("remote_send_to_codex", 1, true), nil)
+    assert_equal(table.concat(commands, "\n"):find("remote_send_to_agent", 1, true), nil)
   end)
 end
 
@@ -311,7 +311,7 @@ do
     }, { attempts = 1 })
     assert_false(ok)
     assert_equal(error_message, "workspace is inactive")
-    assert_equal(table.concat(commands, "\n"):find("remote_interrupt_codex_session", 1, true), nil)
+    assert_equal(table.concat(commands, "\n"):find("remote_interrupt_agent_session", 1, true), nil)
   end)
 end
 
@@ -343,7 +343,7 @@ do
     }, "/plan", { attempts = 1 })
     assert_false(ok)
     assert_equal(error_message, "workspace is inactive")
-    assert_equal(table.concat(commands, "\n"):find("remote_send_to_codex", 1, true), nil)
+    assert_equal(table.concat(commands, "\n"):find("remote_send_to_agent", 1, true), nil)
   end)
 end
 

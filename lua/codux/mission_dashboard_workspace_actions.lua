@@ -357,7 +357,7 @@ function M.interrupt_workspace_action(controller, entry)
   if not entry then
     return false
   end
-  if entry.status ~= "active" and entry.codex_status ~= "working" then
+  if entry.status ~= "active" and entry.agent_status ~= "working" then
     return false
   end
 

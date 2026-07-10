@@ -52,7 +52,9 @@ local git_root_for
 local render_workspace_manager
 local close_workspace_manager
 
-M._v5 = {}
+-- Private composition root. M._v5 remains the public/remote surface (aliases app).
+local app = {}
+M._v5 = app
 
 local notify = util.notify
 
@@ -60,7 +62,7 @@ local function trim(value)
   return text_util.trim(value)
 end
 
-compat_mod.install(M._v5, {
+compat_mod.install(app, {
   project_root = function()
     return workspace_manager_project_root()
   end,
@@ -169,9 +171,9 @@ terminal = terminal_mod.new({
   augroup = augroup,
   command_util = command_util,
   ui = ui,
-  sync_workspace_activity = function(codex_status)
+  sync_workspace_activity = function(agent_status)
     if type(M._sync_workspace_activity) == "function" then
-      return M._sync_workspace_activity(codex_status)
+      return M._sync_workspace_activity(agent_status)
     end
     return false
   end,
@@ -187,8 +189,8 @@ terminal = terminal_mod.new({
     state.workspace_target_update_pending = false
   end,
   capture_workspace_session = function(workspace, min_mtime)
-    if type(M._v5.schedule_workspace_session_capture) == "function" then
-      return M._v5.schedule_workspace_session_capture(workspace, min_mtime)
+    if type(app.schedule_workspace_session_capture) == "function" then
+      return app.schedule_workspace_session_capture(workspace, min_mtime)
     end
     return false
   end,
@@ -228,12 +230,12 @@ local function terminal_running()
   return terminal:terminal_running()
 end
 
-compat_mod.install_ui(M._v5, {
+compat_mod.install_ui(app, {
   ui = ui,
   notify = notify,
 })
 
-compat_mod.install_terminal(M._v5, {
+compat_mod.install_terminal(app, {
   terminal = terminal,
   command_util = command_util,
 })
@@ -327,7 +329,7 @@ local function sanitize_workspace_name(name)
   return workspace_runtime_mod.sanitize_workspace_name(name)
 end
 
-compat_mod.install_workspace_static(M._v5)
+compat_mod.install_workspace_static(app)
 
 local workspace_store = workspace_store_mod.new({
   get_workspace_config = workspace_config,
@@ -335,7 +337,7 @@ local workspace_store = workspace_store_mod.new({
   json_encode = json.encode,
   json_decode = json.decode,
   sanitize_workspace_name = sanitize_workspace_name,
-  workspace_window_name = M._v5.workspace_window_name,
+  workspace_window_name = app.workspace_window_name,
 })
 
 workspace_runtime = workspace_runtime_mod.new({
@@ -388,7 +390,7 @@ local function current_tmux_session()
   return workspace_runtime:current_tmux_session()
 end
 
-compat_mod.install_workspace_runtime(M._v5, {
+compat_mod.install_workspace_runtime(app, {
   runtime = workspace_runtime,
   store = workspace_store,
 })
@@ -401,8 +403,8 @@ local function read_workspace_state()
   return workspace_runtime:read_state()
 end
 
-M._sync_workspace_activity = function(codex_status)
-  return workspace_runtime:sync_activity(codex_status)
+M._sync_workspace_activity = function(agent_status)
+  return workspace_runtime:sync_activity(agent_status)
 end
 
 M._sync_workspace_mode = function(mode)
@@ -451,7 +453,7 @@ local function edit_saved_workspace_instruction(entry)
     return false
   end
 
-  local request, request_error = M._v5.saved_workspace_instruction_request(entry)
+  local request, request_error = app.saved_workspace_instruction_request(entry)
   if not request then
     notify(request_error or "workspace not found", vim.log.levels.ERROR)
     return false
@@ -459,7 +461,7 @@ local function edit_saved_workspace_instruction(entry)
 
   return workspace_create_controller:open_instruction_editor(request, {
     on_save = function(saved_request)
-      local ok, write_error = M._v5.update_saved_workspace_instruction(entry, saved_request.resolved_instruction)
+      local ok, write_error = app.update_saved_workspace_instruction(entry, saved_request.resolved_instruction)
       if not ok then
         notify(write_error or "Failed to save Codux workspace instruction", vim.log.levels.ERROR)
         return
@@ -499,27 +501,27 @@ workspace_manager_controller = workspace_manager_mod.new({
   edit_saved_workspace_instruction = edit_saved_workspace_instruction,
   delete_saved_workspace = delete_saved_workspace,
   close_saved_workspace_window = function(entry)
-    return M._v5.close_saved_workspace_window(entry)
+    return app.close_saved_workspace_window(entry)
   end,
   select_provider_profile = function(opts)
-    return M._v5.select_keyed_provider_profile(opts)
+    return app.select_keyed_provider_profile(opts)
   end,
   switch_workspace_profile = function(entry, agent_provider, permission_profile, opts)
     return workspace_runtime:update_workspace_profile(entry, agent_provider, permission_profile, opts)
   end,
   close_all_saved_workspace_windows = function(root)
-    return M._v5.close_all_saved_workspace_windows(root)
+    return app.close_all_saved_workspace_windows(root)
   end,
   doctor = function()
     return M.doctor()
   end,
-  single_line_prompt = M._v5.single_line_prompt,
-  set_buffer_keymap = M._v5.set_buffer_keymap,
-  bind_close_keys = M._v5.bind_close_keys,
+  single_line_prompt = app.single_line_prompt,
+  set_buffer_keymap = app.set_buffer_keymap,
+  bind_close_keys = app.bind_close_keys,
   namespace = state.workspace_manager_ns,
 })
 
-compat_mod.install_workspace_manager(M._v5, {
+compat_mod.install_workspace_manager(app, {
   controller = workspace_manager_controller,
   runtime = workspace_runtime,
 })
@@ -605,7 +607,7 @@ end
 
 function M.set_default_provider_menu(opts)
   opts = type(opts) == "table" and opts or {}
-  return M._v5.select_default_agent_provider({
+  return app.select_default_agent_provider({
     agent_provider = opts.agent_provider,
     menu = opts.menu,
     on_select = function(choice)
@@ -660,8 +662,8 @@ function M.set_grok_theme_menu(opts)
     return M.set_grok_theme(choice.theme)
   end, {
     notify = notify,
-    set_buffer_keymap = M._v5.set_buffer_keymap,
-    bind_close_keys = M._v5.bind_close_keys,
+    set_buffer_keymap = app.set_buffer_keymap,
+    bind_close_keys = app.bind_close_keys,
   })
 end
 
@@ -680,11 +682,11 @@ function M.open_with_keyed_profile_menu(opts)
     return false
   end
 
-  if not M._v5.should_select_permission_profile(state.job_id) then
+  if not app.should_select_permission_profile(state.job_id) then
     return terminal:open(opts)
   end
 
-  return M._v5.select_keyed_provider_profile_open({
+  return app.select_keyed_provider_profile_open({
     config = config,
     agent_provider = providers.default_provider(config),
     initial_prompt = opts.initial_prompt,
@@ -700,7 +702,7 @@ function M.open_with_profile_menu(opts)
   return M.open_with_keyed_profile_menu(opts)
 end
 
-compat_mod.install_prompt_open(M._v5, {
+compat_mod.install_prompt_open(app, {
   state = state,
   terminal = terminal,
   open_with_keyed_profile_menu = function(opts)
@@ -719,7 +721,7 @@ function M.open_workspace_session(workspace, initial_prompt, opts)
     capture_workspace_session = workspace ~= nil,
     initial_mode = workspace and workspace.initial_mode,
     agent_provider = agent_provider,
-    suppress_startup_plan_warning = M._v5.suppress_startup_plan_warning_for_workspace(workspace),
+    suppress_startup_plan_warning = app.suppress_startup_plan_warning_for_workspace(workspace),
   })
 end
 
@@ -815,14 +817,14 @@ workspace_create_controller = workspace_create_mod.new({
   workspace_ui = workspace_ui,
   is_loaded_buf = is_loaded_buf,
   is_valid_win = is_valid_win,
-  set_buffer_keymap = M._v5.set_buffer_keymap,
-  bind_close_keys = M._v5.bind_close_keys,
-  single_line_prompt = M._v5.single_line_prompt,
+  set_buffer_keymap = app.set_buffer_keymap,
+  bind_close_keys = app.bind_close_keys,
+  single_line_prompt = app.single_line_prompt,
   has_tmux_session = function()
     return current_tmux_session() ~= nil
   end,
   select_provider_profile = function(opts)
-    return M._v5.select_keyed_provider_profile(opts)
+    return app.select_keyed_provider_profile(opts)
   end,
   default_agent_provider = function()
     return providers.default_provider(config)
@@ -833,7 +835,7 @@ workspace_create_controller = workspace_create_mod.new({
   namespace = state.workspace_manager_ns,
 })
 
-compat_mod.install_workspace_create(M._v5, {
+compat_mod.install_workspace_create(app, {
   controller = workspace_create_controller,
 })
 
@@ -871,8 +873,8 @@ mission_controller = mission_setup_mod.new({
     return providers.default_provider(config)
   end,
   project_root = workspace_manager_project_root,
-  set_buffer_keymap = M._v5.set_buffer_keymap,
-  bind_close_keys = M._v5.bind_close_keys,
+  set_buffer_keymap = app.set_buffer_keymap,
+  bind_close_keys = app.bind_close_keys,
   namespace = state.workspace_manager_ns,
 })
 
@@ -924,8 +926,8 @@ function M.toggle_plan_mode()
   return terminal:toggle_plan_mode()
 end
 
-local function send_to_codex(message)
-  return M._v5.send_prompt_or_open_with_profile(message)
+local function send_to_agent(message)
+  return app.send_prompt_or_open_with_profile(message)
 end
 
 prompt_actions = prompt_actions_mod.new({
@@ -933,7 +935,7 @@ prompt_actions = prompt_actions_mod.new({
     return config
   end,
   notify = notify,
-  send_to_codex = send_to_codex,
+  send_to_agent = send_to_agent,
   exit = function()
     return M.exit()
   end,
@@ -992,8 +994,8 @@ function M.doctor()
     tmux_cmd = tmux_cmd,
     current_tmux_session = current_tmux_session,
     workspace_state_file = workspace_state_file,
-    workspace_instruction_directory = M._v5.workspace_instruction_directory,
-    workspace_instruction_ignore_status = M._v5.workspace_instruction_ignore_status,
+    workspace_instruction_directory = app.workspace_instruction_directory,
+    workspace_instruction_ignore_status = app.workspace_instruction_ignore_status,
     project_root = workspace_manager_project_root,
     read_workspace_state = read_workspace_state,
     workspace_entries_for_project = workspace_entries_for_project,
@@ -1019,7 +1021,7 @@ function M.health_info()
     last_agent_provider = terminal_info.last_agent_provider,
     permission_profile = terminal_info.permission_profile,
     last_permission_profile = terminal_info.last_permission_profile,
-    codex_working = terminal_info.codex_working,
+    agent_working = terminal_info.agent_working,
     working_indicator_visible = terminal_info.working_indicator_visible,
     token_usage = {
       five_hour_percent = state.token_usage.five_hour_percent,
@@ -1034,8 +1036,8 @@ function M.health_info()
     },
     workspace = state.workspace,
     workspace_state_file = workspace_state_file(),
-    workspace_instruction_directory = M._v5.workspace_instruction_directory(workspace_manager_project_root()),
-    workspace_instruction_ignore_status = M._v5.workspace_instruction_ignore_status(workspace_manager_project_root()),
+    workspace_instruction_directory = app.workspace_instruction_directory(workspace_manager_project_root()),
+    workspace_instruction_ignore_status = app.workspace_instruction_ignore_status(workspace_manager_project_root()),
   }
 end
 
@@ -1070,7 +1072,7 @@ which_key_controller = which_key_mod.new({
   is_valid_win = is_valid_win,
   is_loaded_buf = is_loaded_buf,
   set_mapping = set_mapping,
-  set_buffer_keymap = M._v5.set_buffer_keymap,
+  set_buffer_keymap = app.set_buffer_keymap,
   toggle_plan_mode = M.toggle_plan_mode,
 })
 

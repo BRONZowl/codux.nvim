@@ -397,9 +397,9 @@ if type(vim.api) == "table" then
   codux.setup({ token_monitor = false })
   assert_true(codux._v5.should_select_permission_profile(nil))
   assert_false(codux._v5.should_select_permission_profile(12))
-  assert_equal(codux._v5.remote_show_existing_codex_terminal(), "not_running")
-  assert_equal(codux._v5.remote_interrupt_codex_session(), "failed")
-  assert_equal(codux._v5.remote_switch_codex_mode(), "failed")
+  assert_equal(codux._v5.remote_show_existing_agent_terminal(), "not_running")
+  assert_equal(codux._v5.remote_interrupt_agent_session(), "failed")
+  assert_equal(codux._v5.remote_switch_agent_mode(), "failed")
 
   assert_true(codux._v5.suppress_startup_plan_warning_for_workspace({
     mission_id = "mission:alpha",

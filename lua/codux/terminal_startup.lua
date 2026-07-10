@@ -53,7 +53,7 @@ function M.startup_plan_command_busy(controller)
 end
 
 local function startup_send_error(label, detail)
-  local message = "Failed to send " .. label .. " to Codex"
+  local message = "Failed to send " .. label .. " to agent"
   if detail ~= nil and tostring(detail) ~= "" then
     message = message .. ": " .. tostring(detail)
   end
@@ -93,7 +93,7 @@ function M.paste_startup_prompt(controller, initial_prompt)
   if paste_ok then
     controller:mark_terminal_prompt_submission()
     controller:invalidate_terminal_prompt_tracking()
-    controller:set_codex_working(true)
+    controller:set_agent_working(true)
     return true
   end
 
@@ -143,7 +143,7 @@ function M.confirm_startup_plan_sequence(controller, initial_prompt, prompt_afte
     end
 
     if opts.suppress_warning ~= true then
-      controller.notify("Codex did not confirm plan mode on startup", vim.log.levels.WARN)
+      controller.notify("Agent did not confirm plan mode on startup", vim.log.levels.WARN)
     end
   end
 

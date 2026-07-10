@@ -123,7 +123,7 @@ function M.ensure_buffer(controller)
         controller.state.job_id = nil
         controller.state.last_prompt_line = nil
         controller:reset_terminal_prompt_input()
-        controller:set_codex_working(false, { force_idle = true })
+        controller:set_agent_working(false, { force_idle = true })
         controller:set_mode("not running")
       end
     end,

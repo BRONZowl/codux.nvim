@@ -129,7 +129,7 @@ assert_equal(
   providers.workspace_command(config, {
     agent_provider = "codex",
     permission_profile = "default",
-    codex_session_id = "codex-session",
+    agent_session_id = "codex-session",
   }),
   "codex-default 'resume' 'codex-session'"
 )

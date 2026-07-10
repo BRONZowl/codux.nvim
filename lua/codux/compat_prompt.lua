@@ -9,7 +9,7 @@ function M.install_prompt_open(api, deps)
 
   function api.send_prompt_or_open_with_profile(message)
     if not api.should_select_permission_profile(state.job_id) then
-      return terminal:send_to_codex(message)
+      return terminal:send_to_agent(message)
     end
 
     return open_with_keyed_profile_menu({

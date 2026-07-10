@@ -36,7 +36,7 @@ function M.review_workspace_record(fields)
     project_root = "/repo",
     tmux_window = "review",
     status = "inactive",
-    codex_status = "idle",
+    agent_status = "idle",
   }
   for key, value in pairs(fields or {}) do
     record[key] = value
@@ -107,7 +107,7 @@ function M.default_state_record(_, workspace)
     permission_profile = workspace.permission_profile,
     tmux_window = workspace.window_name,
     status = workspace.status,
-    codex_status = workspace.codex_status,
+    agent_status = workspace.agent_status,
     git_branch = workspace.git_branch,
     workspace_kind = workspace.workspace_kind,
     git_common_dir = workspace.git_common_dir,
@@ -122,7 +122,7 @@ function M.default_state_record(_, workspace)
     mission_focus_packet = workspace.mission_focus_packet,
     nvim_server = workspace.nvim_server,
     initial_mode = workspace.initial_mode,
-    codex_mode = workspace.codex_mode,
+    agent_mode = workspace.agent_mode,
   }
 end
 
@@ -451,16 +451,16 @@ function M.review_debug_workspace_state(opts)
   opts = opts or {}
   local review = M.review_workspace_record({
     status = "idle",
-    codex_status = "idle",
-    codex_mode = "plan",
+    agent_status = "idle",
+    agent_mode = "plan",
   })
   local debug = M.review_workspace_record({
     name = "debug",
     safe_name = "debug",
     tmux_window = "debug",
     status = "active",
-    codex_status = "working",
-    codex_mode = "execute",
+    agent_status = "working",
+    agent_mode = "execute",
   })
   for key, value in pairs(opts.review or {}) do
     review[key] = value

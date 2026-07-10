@@ -104,7 +104,11 @@ function M:ns()
 end
 
 function M:action_palette_controller()
-  return action_palette_mod.new({
+  if self._action_palette then
+    return self._action_palette
+  end
+
+  self._action_palette = action_palette_mod.new({
     state = self.state,
     ui = self.ui,
     is_valid_win = self.is_valid_win,
@@ -145,10 +149,15 @@ function M:action_palette_controller()
       return self:run_action(action, item)
     end,
   })
+  return self._action_palette
 end
 
 function M:dashboard_search_controller()
-  return dashboard_search_mod.new({
+  if self._search then
+    return self._search
+  end
+
+  self._search = dashboard_search_mod.new({
     state = self.state,
     ui = self.ui,
     is_valid_win = self.is_valid_win,
@@ -204,6 +213,7 @@ function M:dashboard_search_controller()
     augroup_prefix = "codux-workspace-search-",
     update_existing_config = false,
   })
+  return self._search
 end
 
 function M:stop_refresh_timer()

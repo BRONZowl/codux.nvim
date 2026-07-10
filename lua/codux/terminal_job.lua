@@ -106,7 +106,7 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
         controller.state.last_prompt_line = nil
         controller:reset_terminal_prompt_input()
         controller.stop_token_monitor_timer()
-        controller:set_codex_working(false, { force_idle = true })
+        controller:set_agent_working(false, { force_idle = true })
         controller:set_mode("not running")
         controller.reset_workspace_runtime()
       end
@@ -153,7 +153,7 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
   end
   controller:set_mode("execute")
   controller.start_token_monitor_timer()
-  controller:set_codex_working(has_initial_prompt and not prompt_after_mode)
+  controller:set_agent_working(has_initial_prompt and not prompt_after_mode)
   if apply_initial_mode then
     controller:schedule_startup_plan_sequence(initial_prompt, prompt_after_mode, nil, {
       suppress_warning = opts.suppress_startup_plan_warning == true,
@@ -178,7 +178,7 @@ function M.start(controller, focus, initial_prompt, command, workspace, permissi
   return true
 end
 
-function M.ensure_codex(controller, focus, initial_prompt)
+function M.ensure_agent(controller, focus, initial_prompt)
   if controller:terminal_running() then
     return controller:open_window(focus)
   end
@@ -190,6 +190,8 @@ function M.ensure_codex(controller, focus, initial_prompt)
 
   return controller:start_terminal(focus, initial_prompt, nil, nil, "default")
 end
+
+M.ensure_codex = M.ensure_agent
 
 function M.open(controller, opts)
   opts = opts or {}
@@ -257,7 +259,7 @@ function M.exit(controller)
   controller.state.last_prompt_line = nil
   controller:reset_terminal_prompt_input()
   controller.stop_token_monitor_timer()
-  controller:set_codex_working(false, { force_idle = true })
+  controller:set_agent_working(false, { force_idle = true })
   controller:set_mode("not running")
   controller.reset_workspace_runtime()
 
@@ -270,14 +272,14 @@ function M.exit(controller)
   if not running and is_valid_buf(bufnr) then
     controller:delete_buffer_deferred(bufnr)
   end
-  controller:set_codex_working(false, { force_idle = true })
+  controller:set_agent_working(false, { force_idle = true })
 
   return true
 end
 
-function M.send_to_codex(controller, message)
+function M.send_to_agent(controller, message)
   local running = controller:terminal_running()
-  if not controller:ensure_codex(controller:config().auto_focus, running and nil or message) then
+  if not controller:ensure_agent(controller:config().auto_focus, running and nil or message) then
     return false
   end
 
@@ -303,8 +305,10 @@ function M.send_to_codex(controller, message)
 
   controller:mark_terminal_prompt_submission()
   controller:invalidate_terminal_prompt_tracking()
-  controller:set_codex_working(true)
+  controller:set_agent_working(true)
   return true
 end
+
+M.send_to_codex = M.send_to_agent
 
 return M

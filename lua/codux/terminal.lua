@@ -112,7 +112,7 @@ function M:set_mode(mode)
   if
     mode ~= "plan"
     and type(self.state.workspace) == "table"
-    and self.state.workspace.codex_status == "question"
+    and self.state.workspace.agent_status == "question"
   then
     self.sync_workspace_activity("idle")
   end
@@ -125,7 +125,7 @@ function M:terminal_running()
     self.stop_token_monitor_timer()
     self.state.last_prompt_line = nil
     self:reset_terminal_prompt_input()
-    self:set_codex_working(false, { force_idle = true })
+    self:set_agent_working(false, { force_idle = true })
     self:set_mode("not running")
     return false
   end
@@ -137,7 +137,7 @@ function M:terminal_running()
     self.stop_token_monitor_timer()
     self.state.last_prompt_line = nil
     self:reset_terminal_prompt_input()
-    self:set_codex_working(false, { force_idle = true })
+    self:set_agent_working(false, { force_idle = true })
     self:set_mode("not running")
     return false
   end
@@ -149,7 +149,7 @@ function M:terminal_running()
     self.stop_token_monitor_timer()
     self.state.last_prompt_line = nil
     self:reset_terminal_prompt_input()
-    self:set_codex_working(false, { force_idle = true })
+    self:set_agent_working(false, { force_idle = true })
     self:set_mode("not running")
     return false
   end
@@ -162,7 +162,7 @@ function M:terminal_running()
   self.stop_token_monitor_timer()
   self.state.last_prompt_line = nil
   self:reset_terminal_prompt_input()
-  self:set_codex_working(false, { force_idle = true })
+  self:set_agent_working(false, { force_idle = true })
   self:set_mode("not running")
   return false
 end
@@ -314,18 +314,18 @@ function M:start_working_idle_timer()
 
   self.state.working_idle_timer = timer
   timer:start(self:working_idle_ms(), 500, vim.schedule_wrap(function()
-    if not self.state.codex_working then
+    if not self.state.agent_working then
       self:stop_working_idle_timer()
       return
     end
 
     if not self:terminal_running() then
-      self:set_codex_working(false, { force_idle = true })
+      self:set_agent_working(false, { force_idle = true })
       return
     end
 
     if now_ms() - self.state.last_working_activity >= self:working_idle_ms() then
-      self:set_codex_working(false)
+      self:set_agent_working(false)
       return
     end
 
@@ -341,16 +341,16 @@ function M:plan_question_pending()
   return terminal_prompt.plan_question_pending(self)
 end
 
-function M:set_codex_working(working, opts)
+function M:set_agent_working(working, opts)
   opts = opts or {}
-  local was_working = self.state.codex_working == true
-  self.state.codex_working = working == true
-  if not self.state.codex_working then
-    local codex_status = "idle"
+  local was_working = self.state.agent_working == true
+  self.state.agent_working = working == true
+  if not self.state.agent_working then
+    local agent_status = "idle"
     if was_working and opts.force_idle ~= true and self:plan_question_pending() then
-      codex_status = "question"
+      agent_status = "question"
     end
-    self.sync_workspace_activity(codex_status)
+    self.sync_workspace_activity(agent_status)
     self.state.last_working_activity = 0
     self:stop_working_idle_timer()
     self:close_working_indicator()
@@ -362,8 +362,11 @@ function M:set_codex_working(working, opts)
   end
 end
 
+-- Legacy alias.
+M.set_codex_working = M.set_agent_working
+
 function M:note_terminal_activity()
-  if not self.state.codex_working then
+  if not self.state.agent_working then
     return
   end
 
@@ -520,9 +523,11 @@ function M:interrupt_terminal_prompt()
   return terminal_prompt.interrupt(self)
 end
 
-function M:interrupt_codex_session()
+function M:interrupt_agent_session()
   return terminal_prompt.interrupt(self)
 end
+
+M.interrupt_codex_session = M.interrupt_agent_session
 
 function M:ensure_buffer()
   return terminal_window.ensure_buffer(self)
@@ -536,9 +541,11 @@ function M:start_terminal(focus, initial_prompt, command, workspace, permission_
   return terminal_job.start(self, focus, initial_prompt, command, workspace, permission_profile, opts)
 end
 
-function M:ensure_codex(focus, initial_prompt)
-  return terminal_job.ensure_codex(self, focus, initial_prompt)
+function M:ensure_agent(focus, initial_prompt)
+  return terminal_job.ensure_agent(self, focus, initial_prompt)
 end
+
+M.ensure_codex = M.ensure_agent
 
 function M:open(opts)
   return terminal_job.open(self, opts)
@@ -568,17 +575,23 @@ function M:exit()
   return terminal_job.exit(self)
 end
 
-function M:send_to_codex(message)
-  return terminal_job.send_to_codex(self, message)
+function M:send_to_agent(message)
+  return terminal_job.send_to_agent(self, message)
 end
 
-function M:select_codex_question_option(option, with_note)
+M.send_to_codex = M.send_to_agent
+
+function M:select_agent_question_option(option, with_note)
   return terminal_question.select_option(self, option, with_note)
 end
 
-function M:submit_codex_question_note(note)
+M.select_codex_question_option = M.select_agent_question_option
+
+function M:submit_agent_question_note(note)
   return terminal_question.submit_note(self, note)
 end
+
+M.submit_codex_question_note = M.submit_agent_question_note
 
 function M:terminal_snapshot(max_lines)
   if not self:valid_buf() then
@@ -607,7 +620,7 @@ function M:health_info()
     last_permission_profile = self.state.last_permission_profile,
     agent_provider = self.state.agent_provider,
     last_agent_provider = self.state.last_agent_provider,
-    codex_working = self.state.codex_working,
+    agent_working = self.state.agent_working,
     working_indicator_visible = is_valid_win(self.state.working_win),
   }
 end

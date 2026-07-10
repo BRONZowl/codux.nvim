@@ -145,7 +145,7 @@ function M.file_records(store, root)
           project_root = root,
           resolved_instruction = instruction,
           status = "inactive",
-          codex_status = "idle",
+          agent_status = "idle",
           instruction_file = path,
           instruction_file_only = true,
         }

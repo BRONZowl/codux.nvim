@@ -16,7 +16,7 @@ local function runtime(opts)
             project_root = "/repo",
             tmux_window = "review",
             status = "idle",
-            codex_status = "idle",
+            agent_status = "idle",
           },
         },
       },
@@ -34,7 +34,7 @@ local function runtime(opts)
       },
     },
     tmux_target = runtime_mod.tmux_target,
-    normalize_codex_mode = function(_, mode)
+    normalize_agent_mode = function(_, mode)
       return mode == "execute" and "execute" or mode == "plan" and "plan" or nil
     end,
     read_state = function()
@@ -76,7 +76,7 @@ do
   local rt = runtime()
   assert_true(workspace_sync.sync_activity(rt, "working"))
   local record = rt:state_data().projects["/repo"].workspaces.review
-  assert_equal(record.codex_status, "working")
+  assert_equal(record.agent_status, "working")
   assert_equal(record.status, "active")
   assert_equal(rt.state.workspace.status, "active")
   assert_equal(rt:writes(), 1)
@@ -87,8 +87,8 @@ do
   local rt = runtime()
   assert_true(workspace_sync.sync_mode(rt, "plan"))
   local record = rt:state_data().projects["/repo"].workspaces.review
-  assert_equal(record.codex_mode, "plan")
-  assert_equal(rt.state.workspace.codex_mode, "plan")
+  assert_equal(record.agent_mode, "plan")
+  assert_equal(rt.state.workspace.agent_mode, "plan")
   assert_equal(rt:writes(), 1)
 end
 

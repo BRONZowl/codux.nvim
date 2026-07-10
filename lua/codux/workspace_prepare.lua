@@ -9,7 +9,7 @@ local function trim(value)
   return text_util.trim(value)
 end
 
-local normalize_codex_mode = workspace_git.normalize_codex_mode
+local normalize_agent_mode = workspace_git.normalize_agent_mode
 local inactive_like_status = workspace_git.inactive_like_status
 
 local function mission_role_specs(runtime, mission, base_root)
@@ -118,7 +118,7 @@ function M.prepare(runtime, name, opts)
   if initial_prompt == "" then
     initial_prompt = nil
   end
-  local initial_mode = normalize_codex_mode(opts.initial_mode)
+  local initial_mode = normalize_agent_mode(opts.initial_mode)
   local runtime_agent_provider = type(runtime.agent_provider) == "function" and runtime:agent_provider() or "codex"
   local agent_provider = providers.normalize_provider(opts.agent_provider) or runtime_agent_provider
   local permission_profile = opts.permission_profile == "auto" and "auto"
@@ -197,7 +197,7 @@ function M.prepare(runtime, name, opts)
     initial_mode = initial_mode,
     agent_provider = agent_provider,
     permission_profile = permission_profile,
-    codex_status = "idle",
+    agent_status = "idle",
     status = "idle",
   }
   local workspace = runtime:workspace_from_state(existing, fallback)
@@ -304,22 +304,22 @@ function M.prepare(runtime, name, opts)
   workspace.window_id = window_id
   workspace.window_created = created == true
   if created and not workspace.initial_prompt then
-    workspace.codex_status = "idle"
+    workspace.agent_status = "idle"
   end
   workspace.status = runtime:dashboard_workspace_status(workspace, window_id)
   if created and workspace.initial_prompt then
     workspace.status = "active"
-    workspace.codex_status = "working"
-    workspace.codex_mode = workspace.initial_mode == "plan" and "plan" or workspace.codex_mode
+    workspace.agent_status = "working"
+    workspace.agent_mode = workspace.initial_mode == "plan" and "plan" or workspace.agent_mode
   elseif workspace.status ~= "active" then
     if workspace.status == "question" then
-      workspace.codex_status = "question"
+      workspace.agent_status = "question"
     else
-      workspace.codex_status = "idle"
+      workspace.agent_status = "idle"
     end
   end
   if inactive_like_status(workspace.status) then
-    workspace.codex_mode = nil
+    workspace.agent_mode = nil
   end
   local had_initial_prompt = workspace.initial_prompt ~= nil
   workspace.initial_prompt = nil
@@ -371,8 +371,8 @@ function M.prepare(runtime, name, opts)
         local record = current_project.workspaces[workspace.safe_name]
         if type(record) == "table" then
           record.status = "inactive"
-          record.codex_status = "idle"
-          record.codex_mode = nil
+          record.agent_status = "idle"
+          record.agent_mode = nil
           record.tmux_target = nil
           record.last_reconciled_at = runtime:timestamp()
           current_project.updated_at = record.last_reconciled_at

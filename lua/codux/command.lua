@@ -41,7 +41,7 @@ function M.executable(command)
 end
 
 function M.error(command, label)
-  label = label or "Codex command"
+  label = label or "Agent command"
   if type(command) == "string" then
     if command:match("^%s*$") then
       return label .. " must not be empty"

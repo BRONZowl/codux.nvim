@@ -30,11 +30,19 @@ function M.new(opts)
 end
 
 function M:action_palette_controller()
-  return dashboard_action_palette.new(self)
+  if self._action_palette then
+    return self._action_palette
+  end
+  self._action_palette = dashboard_action_palette.new(self)
+  return self._action_palette
 end
 
 function M:dashboard_search_controller()
-  return dashboard_search_controller.new(self)
+  if self._search then
+    return self._search
+  end
+  self._search = dashboard_search_controller.new(self)
+  return self._search
 end
 
 function M:window_height()

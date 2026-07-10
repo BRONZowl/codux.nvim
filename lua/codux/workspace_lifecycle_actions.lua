@@ -559,8 +559,8 @@ function M.close_saved_workspace_window(runtime, entry)
   end
 
   existing.status = "inactive"
-  existing.codex_status = "idle"
-  existing.codex_mode = nil
+  existing.agent_status = "idle"
+  existing.agent_mode = nil
   existing.tmux_window = window_name
   existing.tmux_target = nil
   existing.last_reconciled_at = runtime:timestamp()
@@ -616,8 +616,8 @@ function M.close_all_saved_workspace_windows(runtime, root)
 
       if not close_failed then
         record.status = "inactive"
-        record.codex_status = "idle"
-        record.codex_mode = nil
+        record.agent_status = "idle"
+        record.agent_mode = nil
         record.tmux_target = nil
       end
       record.tmux_window = window_name
@@ -636,8 +636,8 @@ function M.close_all_saved_workspace_windows(runtime, root)
     local current_safe_name = runtime.state.workspace.safe_name
     if close_results[current_safe_name] then
       runtime.state.workspace.status = "inactive"
-      runtime.state.workspace.codex_status = "idle"
-      runtime.state.workspace.codex_mode = nil
+      runtime.state.workspace.agent_status = "idle"
+      runtime.state.workspace.agent_mode = nil
       runtime.state.workspace.tmux_target = nil
     end
   end

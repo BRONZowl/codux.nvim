@@ -32,7 +32,7 @@ local function worktree_record(path, safe_name, role, fields)
     tmux_window = safe_name,
     nvim_server = fields.nvim_server,
     status = fields.status or "idle",
-    codex_status = "idle",
+    agent_status = "idle",
   }
   return record
 end

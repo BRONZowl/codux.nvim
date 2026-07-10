@@ -89,8 +89,8 @@ local function entry_from_record(record, safe_name, root, fallback)
   updated.tmux_window = record.tmux_window or record.window_name or fallback.tmux_window
   updated.tmux_target = record.tmux_target or fallback.tmux_target
   updated.status = fallback.status or record.status
-  updated.codex_status = record.codex_status or fallback.codex_status
-  updated.codex_mode = record.codex_mode or fallback.codex_mode
+  updated.agent_status = record.agent_status or fallback.agent_status
+  updated.agent_mode = record.agent_mode or fallback.agent_mode
   updated.last_reconciled_at = record.last_reconciled_at
   return updated
 end

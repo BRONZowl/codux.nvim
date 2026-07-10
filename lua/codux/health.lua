@@ -341,7 +341,7 @@ function M.check()
       health_ok("Codux workspace: " .. tostring(info.workspace.name or "unknown"))
     end
   else
-    health_ok("Codex terminal job is not running (starts on demand)")
+    health_ok("Agent terminal job is not running (starts on demand)")
   end
 end
 

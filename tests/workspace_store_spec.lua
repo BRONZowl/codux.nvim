@@ -200,6 +200,7 @@ end
 
 do
   local store = workspace_store_mod.new({})
+  -- Legacy codex_session_* fields must not become agent sessions for Grok.
   local normalized = store:normalize_record({
     name = "grok-review",
     safe_name = "grok-review",
@@ -248,6 +249,25 @@ do
   assert_nil(state_record.agent_session_id)
   assert_nil(state_record.agent_session_path)
   assert_nil(state_record.agent_session_captured_at)
+end
+
+do
+  -- Codex legacy codex_session_* migrates into agent_session_* on normalize.
+  local store = workspace_store_mod.new({})
+  local normalized = store:normalize_record({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    agent_provider = "codex",
+    codex_session_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    codex_session_path = "/codex/session.jsonl",
+    codex_session_captured_at = "2026-07-09T12:00:00Z",
+  }, "review", "/repo")
+
+  assert_equal(normalized.agent_session_id, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+  assert_equal(normalized.agent_session_path, "/codex/session.jsonl")
+  assert_equal(normalized.agent_session_captured_at, "2026-07-09T12:00:00Z")
+  assert_nil(normalized.codex_session_id)
 end
 
 print("workspace_store_spec.lua: ok")

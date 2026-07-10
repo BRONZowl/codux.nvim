@@ -53,7 +53,7 @@ function M.new(opts)
       return {}
     end,
     notify = type(opts.notify) == "function" and opts.notify or util.notify,
-    send_to_codex = type(opts.send_to_codex) == "function" and opts.send_to_codex or function()
+    send_to_agent = type(opts.send_to_agent) == "function" and opts.send_to_agent or function()
       return false
     end,
     exit = type(opts.exit) == "function" and opts.exit or util.noop,
@@ -101,7 +101,7 @@ function M:send_prompt(prompt_key, prompt_context)
     return false
   end
 
-  return self.send_to_codex(prompt)
+  return self.send_to_agent(prompt)
 end
 
 function M:send_file_review()

@@ -47,7 +47,7 @@ do
     assert_true(runtime:close_all_saved_workspace_windows("/repo"))
     assert_equal(harness.state_data().projects["/repo"].workspaces.review.status, "inactive")
     assert_equal(harness.state_data().projects["/repo"].workspaces.debug.status, "inactive")
-    assert_nil(harness.state_data().projects["/repo"].workspaces.debug.codex_mode)
+    assert_nil(harness.state_data().projects["/repo"].workspaces.debug.agent_mode)
     assert_contains(harness.messages[#harness.messages], "Closed 2 Codux workspaces")
   end)
 end
@@ -60,8 +60,8 @@ do
           project_root = "/repo",
           safe_name = "debug",
           status = "active",
-          codex_status = "working",
-          codex_mode = "execute",
+          agent_status = "working",
+          agent_mode = "execute",
           tmux_target = "session:debug",
         },
       },
@@ -88,11 +88,11 @@ do
     assert_false(runtime:close_all_saved_workspace_windows("/repo"))
     assert_equal(harness.state_data().projects["/repo"].workspaces.review.status, "inactive")
     assert_equal(harness.state_data().projects["/repo"].workspaces.debug.status, "active")
-    assert_equal(harness.state_data().projects["/repo"].workspaces.debug.codex_status, "working")
-    assert_equal(harness.state_data().projects["/repo"].workspaces.debug.codex_mode, "execute")
+    assert_equal(harness.state_data().projects["/repo"].workspaces.debug.agent_status, "working")
+    assert_equal(harness.state_data().projects["/repo"].workspaces.debug.agent_mode, "execute")
     assert_equal(runtime.state.workspace.status, "active")
-    assert_equal(runtime.state.workspace.codex_status, "working")
-    assert_equal(runtime.state.workspace.codex_mode, "execute")
+    assert_equal(runtime.state.workspace.agent_status, "working")
+    assert_equal(runtime.state.workspace.agent_mode, "execute")
     assert_equal(runtime.state.workspace.tmux_target, "session:debug")
   end)
 end
@@ -105,8 +105,8 @@ do
           project_root = "/repo",
           safe_name = "review",
           status = "idle",
-          codex_status = "idle",
-          codex_mode = "plan",
+          agent_status = "idle",
+          agent_mode = "plan",
           tmux_target = "session:review",
         },
       },
@@ -134,8 +134,8 @@ do
     assert_equal(harness.state_data().projects["/repo"].workspaces.review.status, "inactive")
     assert_equal(harness.state_data().projects["/repo"].workspaces.debug.status, "active")
     assert_equal(runtime.state.workspace.status, "inactive")
-    assert_equal(runtime.state.workspace.codex_status, "idle")
-    assert_nil(runtime.state.workspace.codex_mode)
+    assert_equal(runtime.state.workspace.agent_status, "idle")
+    assert_nil(runtime.state.workspace.agent_mode)
     assert_nil(runtime.state.workspace.tmux_target)
   end)
 end
@@ -152,7 +152,7 @@ do
             tmux_window = "review",
             tmux_target = "session:review",
             status = "idle",
-            codex_status = "idle",
+            agent_status = "idle",
           },
         },
       },
@@ -227,7 +227,7 @@ do
             tmux_window = "review",
             tmux_target = "session:review",
             status = "inactive",
-            codex_status = "idle",
+            agent_status = "idle",
           },
         },
       },
@@ -291,7 +291,7 @@ do
             tmux_window = "review",
             tmux_target = "session:review",
             status = "idle",
-            codex_status = "idle",
+            agent_status = "idle",
           },
         },
       },
@@ -365,7 +365,7 @@ do
             project_root = "/repo",
             tmux_window = "review",
             status = "idle",
-            codex_status = "idle",
+            agent_status = "idle",
           },
         },
       },
@@ -441,7 +441,7 @@ do
             project_root = "/codux-worktrees/review",
             tmux_window = "review",
             status = "idle",
-            codex_status = "idle",
+            agent_status = "idle",
             workspace_kind = "worktree",
             git_common_dir = "/repo/.git",
             worktree_path = "/codux-worktrees/review",
@@ -540,7 +540,7 @@ do
               tmux_window = "alpha-builder",
               tmux_target = "session:alpha-builder",
               status = "idle",
-              codex_status = "idle",
+              agent_status = "idle",
               workspace_kind = "worktree",
               git_common_dir = "/repo/.git",
               worktree_path = "/codux-worktrees/repo/alpha-builder",
@@ -751,8 +751,8 @@ do
             project_root = "/repo",
             tmux_window = "old",
             status = "inactive",
-            codex_status = "idle",
-            codex_session_captured_at = "2026-06-30T12:00:00Z",
+            agent_status = "idle",
+            agent_session_captured_at = "2026-06-30T12:00:00Z",
           },
           other = {
             name = "other",
@@ -760,7 +760,7 @@ do
             project_root = "/repo",
             tmux_window = "other",
             status = "inactive",
-            codex_status = "idle",
+            agent_status = "idle",
             created_at = "2026-06-01T12:00:00Z",
           },
         },
@@ -788,7 +788,7 @@ do
     by_name[entry.name] = entry
   end
 
-  assert_equal(by_name.old.codex_session_captured_at, "2026-06-30T12:00:00Z")
+  assert_equal(by_name.old.agent_session_captured_at, "2026-06-30T12:00:00Z")
   assert_equal(workspace_ui.activity_timestamp(by_name.old), "2026-06-30T12:00:00Z")
   assert_equal(workspace_ui.sort_entries(entries, "status_recent")[1].name, "old")
 end

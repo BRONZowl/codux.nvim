@@ -93,7 +93,7 @@ do
   assert_nil(err)
   local command_text = rt:calls()[1].expression .. "\n" .. rt:calls()[2].expression
   assert_contains(command_text, "remote_ensure_plan_mode")
-  assert_contains(command_text, "remote_send_to_codex")
+  assert_contains(command_text, "remote_send_to_agent")
   assert_contains(command_text, "  /plan  ")
 end
 

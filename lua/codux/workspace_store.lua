@@ -68,7 +68,7 @@ function Store:empty_state()
 end
 
 Store.normalize_session_id = workspace_store_state.normalize_session_id
-Store.normalize_codex_mode = workspace_store_state.normalize_codex_mode
+Store.normalize_agent_mode = workspace_store_state.normalize_agent_mode
 
 function Store:normalize_record(record, safe_name, root)
   return workspace_store_state.normalize_record(self, record, safe_name, root)

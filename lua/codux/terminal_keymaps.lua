@@ -22,7 +22,7 @@ function M.bind_prompt_controls(controller, bufnr, opts)
   })
   set_keymap(bufnr, { "n", "t" }, "<C-c>", function()
     return controller:interrupt_terminal_prompt()
-  end, "Interrupt Codex", {
+  end, "Interrupt Agent", {
     nowait = true,
   })
   controller.update_terminal_mode_mapping()
@@ -53,7 +53,7 @@ function M.bind_prompt_controls(controller, bufnr, opts)
   )
   set_keymap(bufnr, { "n", "t" }, "<S-Tab>", function()
     return controller:send_shift_tab_mode_toggle()
-  end, "Switch Codex Mode", {
+  end, "Switch Agent Mode", {
     nowait = true,
   })
   set_keymap(bufnr, "n", "<CR>", function()

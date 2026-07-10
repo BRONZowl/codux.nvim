@@ -34,8 +34,8 @@ do
 end
 
 do
-  assert_equal(workspace_ui.manager_mode_label({ status = "inactive", codex_mode = "plan" }), "--")
-  assert_equal(workspace_ui.manager_mode_label({ status = "idle", codex_mode = "plan" }), "plan")
+  assert_equal(workspace_ui.manager_mode_label({ status = "inactive", agent_mode = "plan" }), "--")
+  assert_equal(workspace_ui.manager_mode_label({ status = "idle", agent_mode = "plan" }), "plan")
 end
 
 do

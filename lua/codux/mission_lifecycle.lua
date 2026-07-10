@@ -73,8 +73,8 @@ function M.close(runtime, name, opts)
 
       if not close_failed then
         record.status = "inactive"
-        record.codex_status = "idle"
-        record.codex_mode = nil
+        record.agent_status = "idle"
+        record.agent_mode = nil
         record.tmux_target = nil
         closed = closed + 1
         close_results[tostring(entry_root) .. "\0" .. tostring(safe_name)] = true
@@ -95,8 +95,8 @@ function M.close(runtime, name, opts)
     local key = tostring(runtime.state.workspace.project_root or "") .. "\0" .. tostring(runtime.state.workspace.safe_name or "")
     if close_results[key] then
       runtime.state.workspace.status = "inactive"
-      runtime.state.workspace.codex_status = "idle"
-      runtime.state.workspace.codex_mode = nil
+      runtime.state.workspace.agent_status = "idle"
+      runtime.state.workspace.agent_mode = nil
       runtime.state.workspace.tmux_target = nil
     end
   end

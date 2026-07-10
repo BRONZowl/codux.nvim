@@ -80,16 +80,16 @@ do
       terminal_snapshot = function(_, max_lines)
         return "lines:" .. tostring(max_lines)
       end,
-      send_to_codex = function(_, message)
+      send_to_agent = function(_, message)
         return message == "ok"
       end,
-      select_codex_question_option = function(_, option, with_note)
+      select_agent_question_option = function(_, option, with_note)
         return option == "2" and with_note
       end,
-      submit_codex_question_note = function(_, note)
+      submit_agent_question_note = function(_, note)
         return note == "note"
       end,
-      interrupt_codex_session = function()
+      interrupt_agent_session = function()
         table.insert(calls, "interrupt")
         return true
       end,
@@ -109,14 +109,14 @@ do
   })
 
   assert_equal(api.remote_terminal_snapshot(0), "lines:1")
-  assert_equal(api.remote_send_to_codex("ok"), "ok")
-  assert_equal(api.remote_send_to_codex("no"), "failed")
-  assert_equal(api.remote_select_codex_question_option("2", true), "ok")
-  assert_equal(api.remote_submit_codex_question_note("note"), "ok")
-  assert_equal(api.remote_interrupt_codex_session(), "ok")
+  assert_equal(api.remote_send_to_agent("ok"), "ok")
+  assert_equal(api.remote_send_to_agent("no"), "failed")
+  assert_equal(api.remote_select_agent_question_option("2", true), "ok")
+  assert_equal(api.remote_submit_agent_question_note("note"), "ok")
+  assert_equal(api.remote_interrupt_agent_session(), "ok")
   assert_equal(table.concat(calls, ","), "interrupt")
-  assert_equal(api.remote_switch_codex_mode(), "ok")
-  assert_equal(api.remote_show_existing_codex_terminal(), "ok")
+  assert_equal(api.remote_switch_agent_mode(), "ok")
+  assert_equal(api.remote_show_existing_agent_terminal(), "ok")
   assert_equal(api.remote_workspace_status(), "ready")
   assert_equal(api.remote_ensure_plan_mode(), "ok")
 end
@@ -128,7 +128,7 @@ do
   compat.install_prompt_open(api, {
     state = {},
     terminal = {
-      send_to_codex = function(_, message)
+      send_to_agent = function(_, message)
         sent = message
         return true
       end,
@@ -147,7 +147,7 @@ do
   compat.install_prompt_open(api, {
     state = { job_id = 12 },
     terminal = {
-      send_to_codex = function(_, message)
+      send_to_agent = function(_, message)
         sent = message
         return true
       end,

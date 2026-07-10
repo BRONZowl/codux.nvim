@@ -11,7 +11,7 @@ local function send_key(controller, key)
   if send_ok and sent ~= 0 then
     return true
   end
-  controller.notify("Failed to answer Codex question", vim.log.levels.ERROR)
+  controller.notify("Failed to answer agent question", vim.log.levels.ERROR)
   return false
 end
 
@@ -54,7 +54,7 @@ function M.select_option(controller, option, with_note)
   controller:invalidate_terminal_prompt_tracking()
   if with_note ~= true then
     controller:mark_terminal_prompt_submission()
-    controller:set_codex_working(true)
+    controller:set_agent_working(true)
   end
   return true
 end
@@ -68,13 +68,13 @@ function M.submit_note(controller, note)
   local paste = "\27[200~" .. note .. "\27[201~\r"
   local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, paste)
   if not send_ok or sent == 0 then
-    controller.notify("Failed to send Codex question note", vim.log.levels.ERROR)
+    controller.notify("Failed to send agent question note", vim.log.levels.ERROR)
     return false
   end
 
   controller:mark_terminal_prompt_submission()
   controller:invalidate_terminal_prompt_tracking()
-  controller:set_codex_working(true)
+  controller:set_agent_working(true)
   return true
 end
 

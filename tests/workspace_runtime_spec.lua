@@ -43,8 +43,8 @@ do
   local runtime = runtime_with_tmux({})
 
   assert_equal(runtime:status_for_window(nil), "inactive")
-  assert_equal(runtime:dashboard_workspace_status({ status = "idle", codex_status = "idle" }, nil), "inactive")
-  assert_equal(runtime:dashboard_workspace_status({ status = "inactive", codex_status = "idle" }, nil), "inactive")
+  assert_equal(runtime:dashboard_workspace_status({ status = "idle", agent_status = "idle" }, nil), "inactive")
+  assert_equal(runtime:dashboard_workspace_status({ status = "inactive", agent_status = "idle" }, nil), "inactive")
 end
 
 do
@@ -99,8 +99,8 @@ do
             git_common_dir = "/repo/.git",
             worktree_path = "/codux-worktrees/alpha-builder",
             status = "active",
-            codex_status = "working",
-            codex_mode = "execute",
+            agent_status = "working",
+            agent_mode = "execute",
             mission_id = "mission:alpha",
             mission_name = "Alpha",
             mission_role = "Builder",
@@ -115,8 +115,8 @@ do
             git_common_dir = "/repo/.git",
             worktree_path = "/codux-worktrees/alpha-reviewer",
             status = "idle",
-            codex_status = "idle",
-            codex_mode = "plan",
+            agent_status = "idle",
+            agent_mode = "plan",
             mission_id = "mission:alpha",
             mission_name = "Alpha",
             mission_role = "Reviewer",
@@ -199,8 +199,8 @@ do
 
   assert_true(runtime:close_mission("Alpha", { project_root = "/repo" }))
   assert_equal(state_data.projects["/repo"].workspaces["alpha-builder"].status, "inactive")
-  assert_equal(state_data.projects["/repo"].workspaces["alpha-builder"].codex_status, "idle")
-  assert_nil(state_data.projects["/repo"].workspaces["alpha-builder"].codex_mode)
+  assert_equal(state_data.projects["/repo"].workspaces["alpha-builder"].agent_status, "idle")
+  assert_nil(state_data.projects["/repo"].workspaces["alpha-builder"].agent_mode)
   assert_equal(state_data.projects["/repo"].workspaces["alpha-reviewer"].status, "inactive")
   assert_equal(state_data.projects["/repo"].workspaces["alpha-reviewer"].mission_id, "mission:alpha")
 
@@ -560,8 +560,8 @@ do
             project_root = "/repo",
             tmux_window = "stale",
             status = "idle",
-            codex_status = "idle",
-            codex_mode = "plan",
+            agent_status = "idle",
+            agent_mode = "plan",
           },
         },
       },
@@ -607,8 +607,8 @@ do
   assert_equal(runtime:sync_activity("working"), true)
   local record = state_data.projects["/repo"].workspaces.stale
   assert_equal(record.status, "inactive", "activity sync should not revive inactive window")
-  assert_equal(record.codex_status, "idle")
-  assert_equal(record.codex_mode, nil)
+  assert_equal(record.agent_status, "idle")
+  assert_equal(record.agent_mode, nil)
   assert_equal(writes, 1)
 end
 
@@ -617,9 +617,9 @@ do
     review = review_workspace_record({
       agent_provider = "codex",
       permission_profile = "default",
-      codex_session_id = "codex-session",
-      codex_session_path = "/codex/session.jsonl",
-      codex_session_captured_at = "2026-07-09T12:00:00Z",
+      agent_session_id = "codex-session",
+      agent_session_path = "/codex/session.jsonl",
+      agent_session_captured_at = "2026-07-09T12:00:00Z",
     }),
   })
   local store = workspace_store({ state_data = state_data })
@@ -643,7 +643,7 @@ do
   local record = store.state_data().projects["/repo"].workspaces.review
   assert_equal(record.agent_provider, "codex")
   assert_equal(record.permission_profile, "danger")
-  assert_equal(record.codex_session_id, "codex-session")
+  assert_equal(record.agent_session_id, "codex-session")
 end
 
 do
@@ -653,12 +653,12 @@ do
     review = review_workspace_record({
       agent_provider = "codex",
       permission_profile = "default",
-      codex_session_id = "codex-session",
-      codex_session_path = "/codex/session.jsonl",
-      codex_session_captured_at = "2026-07-09T12:00:00Z",
+      agent_session_id = "codex-session",
+      agent_session_path = "/codex/session.jsonl",
+      agent_session_captured_at = "2026-07-09T12:00:00Z",
       status = "inactive",
-      codex_status = "idle",
-      codex_mode = "plan",
+      agent_status = "idle",
+      agent_mode = "plan",
     }),
   })
   local store = workspace_store({ state_data = state_data })
@@ -697,7 +697,7 @@ do
   local record = store.state_data().projects["/repo"].workspaces.review
   assert_equal(record.agent_provider, "grok")
   assert_equal(record.permission_profile, "auto")
-  assert_nil(record.codex_session_id)
+  assert_nil(record.agent_session_id)
   assert_nil(record.agent_session_id)
 end
 
@@ -708,15 +708,15 @@ do
     review = review_workspace_record({
       agent_provider = "codex",
       permission_profile = "default",
-      codex_session_id = "codex-session",
-      codex_session_path = "/codex/session.jsonl",
-      codex_session_captured_at = "2026-07-09T12:00:00Z",
+      agent_session_id = "codex-session",
+      agent_session_path = "/codex/session.jsonl",
+      agent_session_captured_at = "2026-07-09T12:00:00Z",
       agent_session_id = "agent-session",
       agent_session_path = "/agent/session",
       agent_session_captured_at = "2026-07-09T12:01:00Z",
       status = "idle",
-      codex_status = "idle",
-      codex_mode = "plan",
+      agent_status = "idle",
+      agent_mode = "plan",
     }),
   })
   local store = workspace_store({ state_data = state_data })
@@ -768,9 +768,9 @@ do
   local record = store.state_data().projects["/repo"].workspaces.review
   assert_equal(record.agent_provider, "grok")
   assert_equal(record.permission_profile, "auto")
-  assert_nil(record.codex_session_id)
+  assert_nil(record.agent_session_id)
   assert_nil(record.agent_session_id)
   assert_equal(runtime.state.workspace.agent_provider, "grok")
   assert_equal(runtime.state.workspace.permission_profile, "auto")
-  assert_nil(runtime.state.workspace.codex_session_id)
+  assert_nil(runtime.state.workspace.agent_session_id)
 end

@@ -31,7 +31,7 @@ local function workspace_entry(runtime, session, record, safe_name, record_root)
   local window_name = record.tmux_window or record.window_name or entry_safe_name
   local window_id = session and runtime:tmux_window_id(session, window_name) or nil
   local status = runtime:dashboard_workspace_status(record, window_id)
-  local codex_mode = not inactive_like_status(status) and runtime:normalize_codex_mode(record.codex_mode) or nil
+  local agent_mode = not inactive_like_status(status) and runtime:normalize_agent_mode(record.agent_mode) or nil
 
   return {
     name = record.name or entry_safe_name,
@@ -60,11 +60,10 @@ local function workspace_entry(runtime, session, record, safe_name, record_root)
     agent_provider = record.agent_provider or "codex",
     agent_session_id = record.agent_session_id,
     agent_session_path = record.agent_session_path,
-    agent_session_captured_at = record.agent_session_captured_at,
-    codex_status = record.codex_status or "idle",
-    codex_mode = codex_mode,
+    agent_session_captured_at = record.agent_session_captured_at or record.codex_session_captured_at,
+    agent_status = record.agent_status or record.codex_status or "idle",
+    agent_mode = agent_mode,
     permission_profile = record.permission_profile or "default",
-    codex_session_captured_at = record.codex_session_captured_at,
     created_at = record.created_at,
     last_opened_at = record.last_opened_at,
     last_activity_at = record.last_activity_at,
@@ -150,7 +149,7 @@ function M.entries_for_project(runtime, root)
       if not seen[entry_key(root, entry_safe_name)] then
         local window_name = runtime.workspace_window_name(entry_safe_name)
         local window_id = session and runtime:tmux_window_id(session, window_name) or nil
-        local status = runtime:dashboard_workspace_status({ status = "inactive", codex_status = "idle" }, window_id)
+        local status = runtime:dashboard_workspace_status({ status = "inactive", agent_status = "idle" }, window_id)
         table.insert(entries, {
           name = record.name or entry_safe_name,
           safe_name = entry_safe_name,
@@ -164,7 +163,7 @@ function M.entries_for_project(runtime, root)
           agent_session_id = record.agent_session_id,
           agent_session_path = record.agent_session_path,
           agent_session_captured_at = record.agent_session_captured_at,
-          codex_status = "idle",
+          agent_status = "idle",
           permission_profile = record.permission_profile or "default",
           codex_session_captured_at = record.codex_session_captured_at,
           created_at = record.created_at,
@@ -461,8 +460,8 @@ function M.update_workspace_profile(runtime, entry, agent_provider, permission_p
   end
   if restart then
     record.status = "inactive"
-    record.codex_status = "idle"
-    record.codex_mode = nil
+    record.agent_status = "idle"
+    record.agent_mode = nil
     record.tmux_target = nil
     record.tmux_window = window_name
     record.last_reconciled_at = now
@@ -542,14 +541,14 @@ function M.reconcile_project(runtime, root)
       end
 
       local stale_activity = inactive_like_status(status)
-        and (record.codex_status == "working" or record.codex_status == "question" or record.codex_mode ~= nil)
+        and (record.agent_status == "working" or record.agent_status == "question" or record.agent_mode ~= nil)
       if record.status ~= status or stale_activity then
         summary.changed = summary.changed + 1
       end
       record.status = status
       if inactive_like_status(status) then
-        record.codex_status = "idle"
-        record.codex_mode = nil
+        record.agent_status = "idle"
+        record.agent_mode = nil
       end
       record.tmux_window = window_name
       record.tmux_target = runtime.tmux_target(session, window_name) or record.tmux_target

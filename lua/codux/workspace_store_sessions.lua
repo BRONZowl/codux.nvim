@@ -104,13 +104,10 @@ function M.apply_meta(workspace, meta)
     return false
   end
 
-  workspace.codex_session_id = session_id
-  workspace.codex_session_path = meta.path
-  workspace.codex_session_captured_at = workspace_store_state.timestamp()
-  workspace.agent_provider = "codex"
+  workspace.agent_provider = workspace.agent_provider or "codex"
   workspace.agent_session_id = session_id
   workspace.agent_session_path = meta.path
-  workspace.agent_session_captured_at = workspace.codex_session_captured_at
+  workspace.agent_session_captured_at = workspace_store_state.timestamp()
   return true
 end
 
@@ -132,13 +129,17 @@ function M.resolve_resume(store, workspace)
     }
   end
 
-  local session_id = workspace_store_state.normalize_session_id(workspace.codex_session_id)
+  local session_id = workspace_store_state.normalize_session_id(workspace.agent_session_id)
+    or workspace_store_state.normalize_session_id(workspace.codex_session_id)
   if session_id then
     local meta = store:codex_session_for_id(session_id)
     if meta and meta.cwd == workspace.project_root then
       M.apply_meta(workspace, meta)
       return meta
     end
+    workspace.agent_session_id = nil
+    workspace.agent_session_path = nil
+    workspace.agent_session_captured_at = nil
     workspace.codex_session_id = nil
     workspace.codex_session_path = nil
     workspace.codex_session_captured_at = nil

@@ -165,7 +165,7 @@ function M.submit(controller)
   local input = tostring(controller.state.terminal_prompt_input or "")
   local tracking_valid = controller.state.terminal_prompt_tracking_valid == true
   -- Interactive submit only needs CR. Grok programmatic/startup injects still use
-  -- bracketed paste via send_to_codex / paste_startup_prompt; re-pasting here would
+  -- bracketed paste via send_to_agent / paste_startup_prompt; re-pasting here would
   -- clear and re-insert text the user already typed.
   local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, "\r")
   if send_ok and sent ~= 0 then
@@ -177,10 +177,10 @@ function M.submit(controller)
       and controller:terminal_buffer_prompt_is_plan_toggle()
     then
       controller:set_mode("plan")
-      controller.notify("Codex mode: " .. controller.state.mode)
+      controller.notify("Agent mode: " .. controller.state.mode)
     else
       controller:mark_terminal_prompt_submission()
-      controller:set_codex_working(true)
+      controller:set_agent_working(true)
     end
     controller:reset_terminal_prompt_input()
     return true
@@ -194,7 +194,7 @@ function M.interrupt(controller)
     return false
   end
 
-  controller:set_codex_working(false, { force_idle = true })
+  controller:set_agent_working(false, { force_idle = true })
   controller:reset_terminal_prompt_input()
   local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, "\3")
   if not send_ok or sent == 0 then

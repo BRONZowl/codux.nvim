@@ -23,11 +23,18 @@ local util = require("codux.util")
 
 local noop = util.noop
 
+local function delegate(mod, name)
+  return function(self, ...)
+    return mod[name](self, ...)
+  end
+end
+
+
 local function trim(value)
   return text_util.trim(value)
 end
 
-local normalize_codex_mode = workspace_git.normalize_codex_mode
+local normalize_agent_mode = workspace_git.normalize_agent_mode
 local inactive_like_status = workspace_git.inactive_like_status
 local prepend_command = workspace_git.prepend_command
 
@@ -256,113 +263,59 @@ function M:nvim_system(args)
   return self.system(prepend_command(self:nvim_cmd(), args))
 end
 
-function M:git_output(root, ...)
-  return workspace_worktree.git_output(self, root, ...)
-end
+M.git_output = delegate(workspace_worktree, "git_output")
 
-function M:git_common_dir(root)
-  return workspace_worktree.git_common_dir(self, root)
-end
+M.git_common_dir = delegate(workspace_worktree, "git_common_dir")
 
-function M:git_current_ref(root)
-  return workspace_worktree.git_current_ref(self, root)
-end
+M.git_current_ref = delegate(workspace_worktree, "git_current_ref")
 
-function M:git_rev_parse(root, ref)
-  return workspace_worktree.git_rev_parse(self, root, ref)
-end
+M.git_rev_parse = delegate(workspace_worktree, "git_rev_parse")
 
-function M:git_checkout_clean(root)
-  return workspace_worktree.git_checkout_clean(self, root)
-end
+M.git_checkout_clean = delegate(workspace_worktree, "git_checkout_clean")
 
-function M:git_branch_exists(root, branch)
-  return workspace_worktree.git_branch_exists(self, root, branch)
-end
+M.git_branch_exists = delegate(workspace_worktree, "git_branch_exists")
 
-function M:resolve_worktree_branch(root, safe_name)
-  return workspace_worktree.resolve_worktree_branch(self, root, safe_name)
-end
+M.resolve_worktree_branch = delegate(workspace_worktree, "resolve_worktree_branch")
 
-function M:worktree_path(base_root, safe_name)
-  return workspace_worktree.worktree_path(self, base_root, safe_name)
-end
+M.worktree_path = delegate(workspace_worktree, "worktree_path")
 
-function M:mission_worktree_path(base_root, safe_name)
-  return workspace_worktree.mission_worktree_path(self, base_root, safe_name)
-end
+M.mission_worktree_path = delegate(workspace_worktree, "mission_worktree_path")
 
-function M:worktree_directory(root)
-  return workspace_worktree.worktree_directory(self, root)
-end
+M.worktree_directory = delegate(workspace_worktree, "worktree_directory")
 
-function M:git_worktree_list(git_common_dir)
-  return workspace_worktree.git_worktree_list(self, git_common_dir)
-end
+M.git_worktree_list = delegate(workspace_worktree, "git_worktree_list")
 
-function M:current_worktree_path(entry, opts)
-  return workspace_worktree.current_worktree_path(self, entry, opts)
-end
+M.current_worktree_path = delegate(workspace_worktree, "current_worktree_path")
 
-function M:worktree_branch(safe_name)
-  return workspace_worktree.worktree_branch(self, safe_name)
-end
+M.worktree_branch = delegate(workspace_worktree, "worktree_branch")
 
-function M:renamed_worktree_branch(existing, safe_name)
-  return workspace_worktree.renamed_worktree_branch(self, existing, safe_name)
-end
+M.renamed_worktree_branch = delegate(workspace_worktree, "renamed_worktree_branch")
 
-function M:target_in_worktree(path, target_type, base_root, worktree_root)
-  return workspace_worktree.target_in_worktree(self, path, target_type, base_root, worktree_root)
-end
+M.target_in_worktree = delegate(workspace_worktree, "target_in_worktree")
 
-function M:create_git_worktree(base_root, worktree_path, branch, base_ref)
-  return workspace_worktree.create_git_worktree(self, base_root, worktree_path, branch, base_ref)
-end
+M.create_git_worktree = delegate(workspace_worktree, "create_git_worktree")
 
-function M:remove_git_worktree(base_root, worktree_path)
-  return workspace_worktree.remove_git_worktree(self, base_root, worktree_path)
-end
+M.remove_git_worktree = delegate(workspace_worktree, "remove_git_worktree")
 
-function M:remove_git_worktree_in_common_dir(git_common_dir, worktree_path)
-  return workspace_worktree.remove_git_worktree_in_common_dir(self, git_common_dir, worktree_path)
-end
+M.remove_git_worktree_in_common_dir = delegate(workspace_worktree, "remove_git_worktree_in_common_dir")
 
-function M:delete_git_branch(base_root, branch)
-  return workspace_worktree.delete_git_branch(self, base_root, branch)
-end
+M.delete_git_branch = delegate(workspace_worktree, "delete_git_branch")
 
-function M:delete_git_branch_in_common_dir(git_common_dir, branch)
-  return workspace_worktree.delete_git_branch_in_common_dir(self, git_common_dir, branch)
-end
+M.delete_git_branch_in_common_dir = delegate(workspace_worktree, "delete_git_branch_in_common_dir")
 
-function M:move_git_worktree(base_root, old_path, new_path)
-  return workspace_worktree.move_git_worktree(self, base_root, old_path, new_path)
-end
+M.move_git_worktree = delegate(workspace_worktree, "move_git_worktree")
 
-function M:rename_git_branch(base_root, old_branch, new_branch)
-  return workspace_worktree.rename_git_branch(self, base_root, old_branch, new_branch)
-end
+M.rename_git_branch = delegate(workspace_worktree, "rename_git_branch")
 
-function M:workspace_branch_merged(entry)
-  return workspace_worktree.workspace_branch_merged(self, entry)
-end
+M.workspace_branch_merged = delegate(workspace_worktree, "workspace_branch_merged")
 
-function M:workspace_branch_state(entry)
-  return workspace_worktree.workspace_branch_state(self, entry)
-end
+M.workspace_branch_state = delegate(workspace_worktree, "workspace_branch_state")
 
-function M:backfill_workspace_base_commit(entry)
-  return workspace_worktree.backfill_workspace_base_commit(self, entry)
-end
+M.backfill_workspace_base_commit = delegate(workspace_worktree, "backfill_workspace_base_commit")
 
-function M:prompt_merged_workspaces(root)
-  return workspace_worktree.prompt_merged_workspaces(self, root)
-end
+M.prompt_merged_workspaces = delegate(workspace_worktree, "prompt_merged_workspaces")
 
-function M:cleanup_created_worktree(base_root, worktree_path, branch)
-  return workspace_worktree.cleanup_created_worktree(self, base_root, worktree_path, branch)
-end
+M.cleanup_created_worktree = delegate(workspace_worktree, "cleanup_created_worktree")
 
 function M:mission_residue_for_project(root)
   return workspace_residue.inspect(self, root)
@@ -570,10 +523,10 @@ function M:dashboard_workspace_status(record, window_id)
   end
 
   record = type(record) == "table" and record or {}
-  if record.codex_status == "working" then
+  if record.agent_status == "working" then
     return "active"
   end
-  if record.codex_status == "question" then
+  if record.agent_status == "question" then
     return "question"
   end
   return "idle"
@@ -645,9 +598,11 @@ function M:verify_workspace_launch(workspace, opts)
   return workspace_remote_actions.verify_workspace_launch(self, workspace, opts)
 end
 
-function M:normalize_codex_mode(mode)
-  return normalize_codex_mode(mode)
+function M:normalize_agent_mode(mode)
+  return normalize_agent_mode(mode)
 end
+
+M.normalize_codex_mode = M.normalize_agent_mode
 
 function M:permission_profile()
   if self.terminal_running() then
@@ -692,6 +647,7 @@ function M:state_record(workspace, existing)
 end
 
 function M:instruction_files_config()
+  -- Prefer store; fall back for tests / partial runtimes without a store.
   return workspace_instructions.files_config(self)
 end
 
@@ -700,23 +656,23 @@ function M:instruction_directory(root)
 end
 
 function M:instruction_file_path(root, safe_name)
-  return workspace_instructions.file_path(self, root, safe_name)
+  return self.store:instruction_file_path(root, safe_name)
 end
 
 function M:read_instruction_file(root, safe_name)
-  return workspace_instructions.read_file(self, root, safe_name)
+  return self.store:read_instruction_file(root, safe_name)
 end
 
 function M:write_instruction_file(root, safe_name, instruction)
-  return workspace_instructions.write_file(self, root, safe_name, instruction)
+  return self.store:write_instruction_file(root, safe_name, instruction)
 end
 
 function M:delete_instruction_file(root, safe_name)
-  return workspace_instructions.delete_file(self, root, safe_name)
+  return self.store:delete_instruction_file(root, safe_name)
 end
 
 function M:instruction_file_records(root)
-  return workspace_instructions.file_records(self, root)
+  return self.store:instruction_file_records(root)
 end
 
 function M:normalize_record(record, safe_name, root)
@@ -732,23 +688,23 @@ function M:resolve_workspace_resume_session(workspace)
 end
 
 function M:codex_home()
-  return workspace_sessions.codex_home(self)
+  return self.store:codex_home()
 end
 
 function M:codex_session_files()
-  return workspace_sessions.session_files(self)
+  return self.store:codex_session_files()
 end
 
 function M:read_codex_session_meta(path)
-  return workspace_sessions.read_meta(self, path)
+  return self.store:read_codex_session_meta(path)
 end
 
 function M:codex_session_for_id(session_id)
-  return workspace_sessions.session_for_id(self, session_id)
+  return self.store:codex_session_for_id(session_id)
 end
 
 function M:latest_codex_session_for_cwd(cwd, min_mtime)
-  return workspace_sessions.latest_for_cwd(self, cwd, min_mtime)
+  return self.store:latest_codex_session_for_cwd(cwd, min_mtime)
 end
 
 function M:persist_workspace_session_meta(workspace, meta)
@@ -759,8 +715,8 @@ function M:schedule_workspace_session_capture(workspace, min_mtime)
   return workspace_sessions.schedule_capture(self, workspace, min_mtime)
 end
 
-function M:sync_activity(codex_status)
-  return workspace_sync.sync_activity(self, codex_status)
+function M:sync_activity(agent_status)
+  return workspace_sync.sync_activity(self, agent_status)
 end
 
 function M:sync_mode(mode)

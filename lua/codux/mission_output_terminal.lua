@@ -13,7 +13,7 @@ local function output_terminal_state(parent)
   if type(state) ~= "table" then
     state = {
       mode = "not running",
-      codex_working = false,
+      agent_working = false,
       last_prompt_line = nil,
       terminal_prompt_input = "",
       terminal_prompt_tracking_valid = true,
@@ -115,8 +115,8 @@ function M.output_terminal_controller(self)
     return math.max(1, lines - cmdheight)
   end
 
-  function controller:set_codex_working(working)
-    self.state.codex_working = working == true
+  function controller:set_agent_working(working)
+    self.state.agent_working = working == true
   end
 
   function controller:update_working_indicator()
@@ -137,7 +137,7 @@ function M.clear_output_terminal_state(self)
     controller:reset_terminal_prompt_input()
     controller.state.job_id = nil
     controller.state.last_prompt_line = nil
-    controller.state.codex_working = false
+    controller.state.agent_working = false
     controller:set_mode("not running")
   end
 end
