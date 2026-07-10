@@ -16,21 +16,14 @@ M.STATUS_ORDER = {
   inactive = 4,
 }
 
-function M.display_width(text)
-  return text_util.display_width(text)
-end
-
-function M.truncate_display_tail(text, max_width)
-  return text_util.truncate_display_tail(text, max_width)
-end
-
-function M.pad_display_right(text, width)
-  return text_util.pad_display_right(text, width)
-end
+-- Display primitives live in codux.text; re-export for existing UI callers.
+M.display_width = text_util.display_width
+M.truncate_display_tail = text_util.truncate_display_tail
+M.pad_display_right = text_util.pad_display_right
 
 function M.manager_column_widths(width)
   width = tonumber(width) or 58
-  local gap_width = M.display_width(M.MANAGER_GAP)
+  local gap_width = text_util.display_width(M.MANAGER_GAP)
   local fixed_width = M.MANAGER_STATUS_WIDTH
     + M.MANAGER_MODE_WIDTH
     + M.MANAGER_PROFILE_WIDTH
@@ -169,17 +162,17 @@ function M.manager_line(entry, width)
   local name_width, target_width = M.manager_column_widths(width)
 
   return table.concat({
-    M.pad_display_right(entry.name or "", name_width),
+    text_util.pad_display_right(entry.name or "", name_width),
     M.MANAGER_GAP,
-    M.pad_display_right(status, M.MANAGER_STATUS_WIDTH),
+    text_util.pad_display_right(status, M.MANAGER_STATUS_WIDTH),
     M.MANAGER_GAP,
-    M.pad_display_right(mode, M.MANAGER_MODE_WIDTH),
+    text_util.pad_display_right(mode, M.MANAGER_MODE_WIDTH),
     M.MANAGER_GAP,
-    M.pad_display_right(profile, M.MANAGER_PROFILE_WIDTH),
+    text_util.pad_display_right(profile, M.MANAGER_PROFILE_WIDTH),
     M.MANAGER_GAP,
-    M.pad_display_right(age, M.MANAGER_AGE_WIDTH),
+    text_util.pad_display_right(age, M.MANAGER_AGE_WIDTH),
     M.MANAGER_GAP,
-    M.truncate_display_tail(target, target_width),
+    text_util.truncate_display_tail(target, target_width),
   })
 end
 
@@ -187,15 +180,15 @@ function M.manager_header_line(width)
   local name_width = M.manager_column_widths(width)
 
   return table.concat({
-    M.pad_display_right("workspace", name_width),
+    text_util.pad_display_right("workspace", name_width),
     M.MANAGER_GAP,
-    M.pad_display_right("status", M.MANAGER_STATUS_WIDTH),
+    text_util.pad_display_right("status", M.MANAGER_STATUS_WIDTH),
     M.MANAGER_GAP,
-    M.pad_display_right("mode", M.MANAGER_MODE_WIDTH),
+    text_util.pad_display_right("mode", M.MANAGER_MODE_WIDTH),
     M.MANAGER_GAP,
-    M.pad_display_right("profile", M.MANAGER_PROFILE_WIDTH),
+    text_util.pad_display_right("profile", M.MANAGER_PROFILE_WIDTH),
     M.MANAGER_GAP,
-    M.pad_display_right("age", M.MANAGER_AGE_WIDTH),
+    text_util.pad_display_right("age", M.MANAGER_AGE_WIDTH),
     M.MANAGER_GAP,
     "target",
   })
@@ -245,7 +238,7 @@ function M.manager_action_line(item, width)
   item = type(item) == "table" and item or {}
   width = tonumber(width) or 40
   local line = tostring(item.key or "") .. "  " .. tostring(item.label or "")
-  return M.truncate_display_tail(line, width)
+  return text_util.truncate_display_tail(line, width)
 end
 
 function M.mission_action_items()
@@ -375,7 +368,7 @@ function M.manager_footer_segments(_state, width)
   }
 
   width = tonumber(width)
-  if not width or M.display_width(M.footer_line(full)) <= width then
+  if not width or text_util.display_width(M.footer_line(full)) <= width then
     return full
   end
 

@@ -1,11 +1,9 @@
 local text_util = require("codux.text")
-local workspace_git = require("codux.workspace_git")
+local path_util = require("codux.path_util")
 
 local M = {}
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 function M.git_output(runtime, root, ...)
   local args = { "git", "-C", root }
@@ -22,12 +20,12 @@ end
 function M.git_common_dir(runtime, root)
   local output = runtime:git_output(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
   if output and output ~= "" then
-    return workspace_git.strip_trailing_slashes(output)
+    return path_util.strip_trailing_slashes(output)
   end
 
   output = runtime:git_output(root, "rev-parse", "--git-common-dir")
   if output and output ~= "" then
-    return workspace_git.strip_trailing_slashes(workspace_git.normalize_absolute_path(root, output))
+    return path_util.strip_trailing_slashes(path_util.normalize_absolute_path(root, output))
   end
 
   return nil
@@ -103,22 +101,22 @@ function M.worktree_directory(runtime, base_root)
     return nil
   end
   if directory:sub(1, 1) ~= "/" then
-    directory = workspace_git.normalize_absolute_path(base_root, directory)
+    directory = path_util.normalize_absolute_path(base_root, directory)
   end
-  return workspace_git.strip_trailing_slashes(directory)
+  return path_util.strip_trailing_slashes(directory)
 end
 
 function M.worktree_path(runtime, base_root, safe_name)
   local directory = M.worktree_directory(runtime, base_root)
-  return workspace_git.normalize_absolute_path(directory, safe_name)
+  return path_util.normalize_absolute_path(directory, safe_name)
 end
 
 function M.mission_worktree_path(runtime, base_root, safe_name)
   local directory = M.worktree_directory(runtime, base_root)
-  local normalized_root = workspace_git.strip_trailing_slashes(base_root)
+  local normalized_root = path_util.strip_trailing_slashes(base_root)
   local project_name = normalized_root:match("([^/]+)$") or normalized_root
-  local project_token = workspace_git.path_token(project_name)
-  return workspace_git.normalize_absolute_path(workspace_git.normalize_absolute_path(directory, project_token), safe_name)
+  local project_token = path_util.path_token(project_name)
+  return path_util.normalize_absolute_path(path_util.normalize_absolute_path(directory, project_token), safe_name)
 end
 
 function M.parse_worktree_list_porcelain(output)
@@ -129,7 +127,7 @@ function M.parse_worktree_list_porcelain(output)
     local path = line:match("^worktree%s+(.+)$")
     if path then
       current = {
-        path = workspace_git.strip_trailing_slashes(path),
+        path = path_util.strip_trailing_slashes(path),
       }
       table.insert(entries, current)
     elseif current then
@@ -193,7 +191,7 @@ local function sibling_directories(path)
   local directories = {}
   for _, candidate in ipairs(files) do
     if path_is_directory(candidate) then
-      table.insert(directories, workspace_git.strip_trailing_slashes(candidate))
+      table.insert(directories, path_util.strip_trailing_slashes(candidate))
     end
   end
   return directories
@@ -287,9 +285,9 @@ function M.target_in_worktree(_, path, target_type, base_root, worktree_root)
     return worktree_root, "directory"
   end
 
-  local normalized_base = workspace_git.strip_trailing_slashes(base_root)
-  local normalized_path = workspace_git.strip_trailing_slashes(path)
-  if workspace_git.starts_with_path(normalized_path, normalized_base) then
+  local normalized_base = path_util.strip_trailing_slashes(base_root)
+  local normalized_path = path_util.strip_trailing_slashes(path)
+  if path_util.starts_with_path(normalized_path, normalized_base) then
     local suffix = normalized_path:sub(#normalized_base + 1)
     if suffix:sub(1, 1) == "/" then
       suffix = suffix:sub(2)
@@ -297,7 +295,7 @@ function M.target_in_worktree(_, path, target_type, base_root, worktree_root)
     if suffix == "" then
       return worktree_root, "directory"
     end
-    return workspace_git.normalize_absolute_path(worktree_root, suffix), target_type == "directory" and "directory" or "file"
+    return path_util.normalize_absolute_path(worktree_root, suffix), target_type == "directory" and "directory" or "file"
   end
 
   return worktree_root, "directory"

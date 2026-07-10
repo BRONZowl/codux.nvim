@@ -15,6 +15,7 @@ local workspace_registry = require("codux.workspace_registry")
 local workspace_reconcile = require("codux.workspace_reconcile")
 local workspace_residue = require("codux.workspace_residue")
 local workspace_sessions = require("codux.workspace_sessions")
+local workspace_status = require("codux.workspace_status")
 local workspace_sync = require("codux.workspace_sync")
 local workspace_target = require("codux.workspace_target")
 local workspace_worktree = require("codux.workspace_worktree")
@@ -29,13 +30,10 @@ local function delegate(mod, name)
   end
 end
 
+local trim = text_util.trim
 
-local function trim(value)
-  return text_util.trim(value)
-end
-
-local normalize_agent_mode = workspace_git.normalize_agent_mode
-local inactive_like_status = workspace_git.inactive_like_status
+local normalize_agent_mode = workspace_status.normalize_agent_mode
+local inactive_like_status = workspace_status.inactive_like_status
 local prepend_command = workspace_git.prepend_command
 
 local function default_current_buffer()

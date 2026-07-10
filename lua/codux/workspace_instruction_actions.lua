@@ -2,9 +2,7 @@ local text_util = require("codux.text")
 
 local M = {}
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 function M.saved_workspace_instruction_request(runtime, entry)
   entry = type(entry) == "table" and entry or {}

@@ -3,9 +3,7 @@ local ui = require("codux.ui")
 
 local M = {}
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 function M.open(controller, name, default_objective, opts)
   opts = type(opts) == "table" and opts or {}

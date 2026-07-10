@@ -1,9 +1,10 @@
-local workspace_git = require("codux.workspace_git")
+local path_util = require("codux.path_util")
+local workspace_status = require("codux.workspace_status")
 local workspace_lifecycle = require("codux.workspace_lifecycle")
 
 local M = {}
 
-local inactive_like_status = workspace_git.inactive_like_status
+local inactive_like_status = workspace_status.inactive_like_status
 
 local function record_matches_entry(record, entry, safe_name, root)
   entry = type(entry) == "table" and entry or {}
@@ -124,8 +125,8 @@ local function reconcile_record(runtime, state_data, project, record, root, safe
     return current_entry, false, nil
   end
 
-  current_path = workspace_git.strip_trailing_slashes(current_path)
-  local old_worktree_path = workspace_git.strip_trailing_slashes(record.worktree_path or record.project_root or root)
+  current_path = path_util.strip_trailing_slashes(current_path)
+  local old_worktree_path = path_util.strip_trailing_slashes(record.worktree_path or record.project_root or root)
   local old_root = root
   if current_path == old_worktree_path and record.project_root == current_path and record.worktree_path == current_path then
     return current_entry, false, nil

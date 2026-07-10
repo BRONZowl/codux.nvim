@@ -1,16 +1,14 @@
 local mission_mod = require("codux.mission")
 local text_util = require("codux.text")
-local workspace_git = require("codux.workspace_git")
+local workspace_status = require("codux.workspace_status")
 local providers = require("codux.providers")
 
 local M = {}
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
-local normalize_agent_mode = workspace_git.normalize_agent_mode
-local inactive_like_status = workspace_git.inactive_like_status
+local normalize_agent_mode = workspace_status.normalize_agent_mode
+local inactive_like_status = workspace_status.inactive_like_status
 
 local function mission_role_specs(runtime, mission, base_root)
   local specs = {}

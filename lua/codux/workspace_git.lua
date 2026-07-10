@@ -1,87 +1,24 @@
-local text_util = require("codux.text")
+local path_util = require("codux.path_util")
+local workspace_status = require("codux.workspace_status")
 
 local M = {}
 
 local launch_socket_counter = 0
 
-local function trim(value)
-  return text_util.trim(value)
-end
+-- Path helpers live in path_util; re-export for existing callers.
+M.strip_trailing_slashes = path_util.strip_trailing_slashes
+M.path_join = path_util.path_join
+M.normalize_absolute_path = path_util.normalize_absolute_path
+M.normalize_relative_directory = path_util.normalize_relative_directory
+M.starts_with_path = path_util.starts_with_path
+M.relative_path_escapes_root = path_util.relative_path_escapes_root
+M.path_token = path_util.path_token
+M.short_path_token = path_util.short_path_token
 
-function M.strip_trailing_slashes(value)
-  value = tostring(value or "")
-  while #value > 1 and value:sub(-1) == "/" do
-    value = value:sub(1, -2)
-  end
-  return value
-end
-
-function M.path_join(...)
-  local parts = {}
-  for _, value in ipairs({ ... }) do
-    value = tostring(value or "")
-    if value ~= "" then
-      table.insert(parts, value)
-    end
-  end
-  return table.concat(parts, "/"):gsub("/+", "/")
-end
-
-function M.normalize_absolute_path(base, path)
-  path = tostring(path or "")
-  if path == "" then
-    return nil
-  end
-  if path:sub(1, 1) ~= "/" then
-    path = M.path_join(base, path)
-  end
-
-  local stack = {}
-  for part in path:gmatch("[^/]+") do
-    if part == ".." then
-      if #stack > 0 then
-        table.remove(stack)
-      end
-    elseif part ~= "." and part ~= "" then
-      table.insert(stack, part)
-    end
-  end
-
-  return "/" .. table.concat(stack, "/")
-end
-
-function M.normalize_relative_directory(value)
-  value = trim(value)
-  value = value:gsub("^%./+", "")
-  value = value:gsub("/+$", "")
-  return value
-end
-
-function M.starts_with_path(path, root)
-  path = M.strip_trailing_slashes(path)
-  root = M.strip_trailing_slashes(root)
-  return path == root or path:sub(1, #root + 1) == root .. "/"
-end
-
-function M.relative_path_escapes_root(value)
-  value = M.normalize_relative_directory(value)
-  return value == ".." or value:sub(1, 3) == "../" or value:find("/%.%./") ~= nil or value:sub(-3) == "/.."
-end
-
-function M.normalize_agent_mode(mode)
-  if mode == "execute" or mode == "plan" then
-    return mode
-  end
-
-  return nil
-end
-
--- Legacy alias.
-M.normalize_codex_mode = M.normalize_agent_mode
-
-function M.inactive_like_status(status)
-  return status == "inactive" or status == "missing"
-end
+-- Status/mode helpers live in workspace_status; re-export for existing callers.
+M.normalize_agent_mode = workspace_status.normalize_agent_mode
+M.normalize_codex_mode = workspace_status.normalize_codex_mode
+M.inactive_like_status = workspace_status.inactive_like_status
 
 function M.prepend_command(command, args)
   local result = { command }
@@ -89,19 +26,6 @@ function M.prepend_command(command, args)
     table.insert(result, arg)
   end
   return result
-end
-
-function M.path_token(value)
-  value = tostring(value or ""):gsub("[^%w_.-]+", "-"):gsub("-+", "-"):gsub("^-+", ""):gsub("-+$", "")
-  if value == "" then
-    return "workspace"
-  end
-  return value:sub(1, 96)
-end
-
-function M.short_path_token(value, max_length)
-  max_length = math.max(1, tonumber(max_length) or 32)
-  return M.path_token(value):sub(1, max_length)
 end
 
 function M.launch_socket_token()

@@ -19,9 +19,7 @@ local text_util = require("codux.text")
 local ui = require("codux.ui")
 local output_panel = require("codux.mission_output_panel")
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 local dashboard_command_items = mission_dashboard.command_items()
 

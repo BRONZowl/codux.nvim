@@ -110,9 +110,7 @@ local function copy_choice(choice, label_key)
   }
 end
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 function M.normalize_provider(value)
   if type(value) ~= "string" then

@@ -5,9 +5,7 @@ local ui = require("codux.ui")
 
 local M = {}
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 local function profile_label(choice)
   return choice.profile_label or (providers.provider_label(choice.agent_provider) .. " " .. providers.profile_label(choice.profile))

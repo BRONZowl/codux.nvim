@@ -58,9 +58,7 @@ M._v5 = app
 
 local notify = util.notify
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 compat_mod.install(app, {
   project_root = function()

@@ -1,6 +1,6 @@
 local mission_mod = require("codux.mission")
 local workspace_instruction_actions = require("codux.workspace_instruction_actions")
-local workspace_git = require("codux.workspace_git")
+local path_util = require("codux.path_util")
 local workspace_lifecycle = require("codux.workspace_lifecycle")
 
 local M = {}
@@ -87,7 +87,7 @@ local function tmux_window_ids_for_path(runtime, path)
 
   for line in tostring(output or ""):gmatch("[^\r\n]+") do
     local window_id, pane_path = line:match("^([^\t]+)\t(.+)$")
-    if window_id and pane_path and workspace_git.starts_with_path(pane_path, path) then
+    if window_id and pane_path and path_util.starts_with_path(pane_path, path) then
       add_unique(window_ids, seen, window_id)
     end
   end

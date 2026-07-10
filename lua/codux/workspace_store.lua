@@ -7,9 +7,7 @@ local workspace_store_instructions = require("codux.workspace_store_instructions
 local workspace_store_sessions = require("codux.workspace_store_sessions")
 local workspace_store_state = require("codux.workspace_store_state")
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 local function default_workspace_window_name(safe_name)
   return tostring(safe_name or "")

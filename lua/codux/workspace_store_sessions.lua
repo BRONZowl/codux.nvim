@@ -3,9 +3,7 @@ local workspace_store_state = require("codux.workspace_store_state")
 
 local M = {}
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 function M.codex_home()
   local value = vim.env.CODEX_HOME

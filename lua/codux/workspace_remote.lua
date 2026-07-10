@@ -3,9 +3,7 @@ local workspace_git = require("codux.workspace_git")
 
 local M = {}
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 local function tmux_name_token(value, max_length)
   max_length = math.max(1, tonumber(max_length) or 48)

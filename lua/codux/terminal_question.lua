@@ -2,9 +2,7 @@ local text_util = require("codux.text")
 
 local M = {}
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 local function send_key(controller, key)
   local send_ok, sent = pcall(vim.fn.chansend, controller.state.job_id, key)

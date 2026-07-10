@@ -1,11 +1,9 @@
 local text_util = require("codux.text")
-local workspace_git = require("codux.workspace_git")
+local path_util = require("codux.path_util")
 
 local M = {}
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 function M.relative_dir(runtime, root)
   local config = runtime:instruction_files_config()
@@ -16,19 +14,19 @@ function M.relative_dir(runtime, root)
     return nil
   end
 
-  local configured = workspace_git.normalize_relative_directory(config.directory)
+  local configured = path_util.normalize_relative_directory(config.directory)
   if configured == "" then
     return nil
   end
-  if workspace_git.relative_path_escapes_root(configured) then
+  if path_util.relative_path_escapes_root(configured) then
     return nil
   end
   if configured:match("^/") or configured:match("^~") then
     local directory = runtime:instruction_directory(root)
-    if type(directory) ~= "string" or directory == "" or not workspace_git.starts_with_path(directory, root) or directory == root then
+    if type(directory) ~= "string" or directory == "" or not path_util.starts_with_path(directory, root) or directory == root then
       return nil
     end
-    return workspace_git.normalize_relative_directory(directory:sub(#workspace_git.strip_trailing_slashes(root) + 2))
+    return path_util.normalize_relative_directory(directory:sub(#path_util.strip_trailing_slashes(root) + 2))
   end
 
   return configured

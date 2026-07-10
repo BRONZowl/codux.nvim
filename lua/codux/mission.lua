@@ -2,9 +2,7 @@ local M = {}
 
 local text_util = require("codux.text")
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 local function lines(value)
   value = tostring(value or "")

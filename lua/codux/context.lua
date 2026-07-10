@@ -10,9 +10,7 @@ local severity_names = {
   [vim.diagnostic.severity.HINT] = "HINT",
 }
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 local function call(dep, fallback, ...)
   if type(dep) == "function" then

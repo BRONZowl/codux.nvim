@@ -1,4 +1,4 @@
-local workspace_git = require("codux.workspace_git")
+local path_util = require("codux.path_util")
 local workspace_worktree = require("codux.workspace_worktree")
 
 local M = {}
@@ -15,7 +15,7 @@ local function worktree_directory(runtime, root)
 end
 
 local function child_path(parent, name)
-  return workspace_git.normalize_absolute_path(parent, name)
+  return path_util.normalize_absolute_path(parent, name)
 end
 
 local function directory_entries(path)
@@ -90,7 +90,7 @@ local function inside_worktree_directory(path, directory)
   return type(path) == "string"
     and type(directory) == "string"
     and directory ~= ""
-    and workspace_git.starts_with_path(path, directory)
+    and path_util.starts_with_path(path, directory)
 end
 
 local function git_worktree(runtime, path)

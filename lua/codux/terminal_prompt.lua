@@ -4,9 +4,7 @@ local ui = require("codux.ui")
 
 local M = {}
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 function M.reset_input(controller)
   controller.state.terminal_prompt_input = ""

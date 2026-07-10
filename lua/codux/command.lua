@@ -2,9 +2,7 @@ local M = {}
 
 local text_util = require("codux.text")
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 function M.display(command, opts)
   opts = type(opts) == "table" and opts or {}

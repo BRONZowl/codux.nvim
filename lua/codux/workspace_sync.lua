@@ -1,8 +1,8 @@
-local workspace_git = require("codux.workspace_git")
+local workspace_status = require("codux.workspace_status")
 
 local M = {}
 
-local inactive_like_status = workspace_git.inactive_like_status
+local inactive_like_status = workspace_status.inactive_like_status
 
 function M.sync_activity(runtime, agent_status)
   if agent_status ~= "working" and agent_status ~= "question" and agent_status ~= "idle" then

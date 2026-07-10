@@ -33,6 +33,9 @@ TEST_SPECS := \
 	tests/providers_spec.lua \
 	tests/settings_spec.lua \
 	tests/state_spec.lua \
+	tests/path_util_spec.lua \
+	tests/workspace_status_spec.lua \
+	tests/terminal_mode_spec.lua \
 	tests/grok_theme_spec.lua \
 	tests/prompt_actions_spec.lua \
 	tests/workspace_create_spec.lua \

@@ -1,18 +1,16 @@
 local providers = require("codux.providers")
 local text_util = require("codux.text")
-local workspace_git = require("codux.workspace_git")
+local workspace_status = require("codux.workspace_status")
 
 local M = {}
 
-local function trim(value)
-  return text_util.trim(value)
-end
+local trim = text_util.trim
 
 local function empty_dict()
   return vim.empty_dict and vim.empty_dict() or {}
 end
 
-local inactive_like_status = workspace_git.inactive_like_status
+local inactive_like_status = workspace_status.inactive_like_status
 
 function M.empty_state()
   return {
@@ -35,7 +33,7 @@ function M.normalize_session_id(value)
 end
 
 function M.normalize_agent_mode(value)
-  return workspace_git.normalize_agent_mode(value)
+  return workspace_status.normalize_agent_mode(value)
 end
 
 M.normalize_codex_mode = M.normalize_agent_mode
