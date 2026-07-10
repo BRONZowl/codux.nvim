@@ -249,7 +249,7 @@ function M:app_server_command()
       nil
   end
 
-  local executable = self.command_util.executable(config.codex_cmd)
+  local executable = self.command_util.executable(providers.command(config, "codex", "default"))
   if executable == nil or executable == "" then
     executable = "codex"
   end

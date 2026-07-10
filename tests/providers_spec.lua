@@ -22,6 +22,26 @@ assert_equal(providers.command(config, "grok", "default"), "grok --sandbox works
 assert_equal(providers.command(config, "grok", "danger"), "grok --sandbox off --always-approve")
 
 do
+  local nested_config = {
+    codex_cmd = "legacy-default",
+    workspace_auto_cmd = "legacy-auto",
+    danger_full_access_cmd = "legacy-danger",
+    providers = {
+      codex = {
+        default_cmd = "nested-default",
+        auto_cmd = "nested-auto",
+        danger_cmd = "nested-danger",
+      },
+    },
+  }
+
+  assert_equal(providers.command(nested_config, "codex", "default"), "nested-default")
+  assert_equal(providers.command(nested_config, "codex", "auto"), "nested-auto")
+  assert_equal(providers.command(nested_config, "codex", "danger"), "nested-danger")
+  assert_equal(nested_config.providers.codex.default_cmd, "nested-default")
+end
+
+do
   local provider_choices = providers.provider_choices()
   assert_equal(provider_choices[1].key, "g")
   assert_equal(provider_choices[1].agent_provider, "grok")

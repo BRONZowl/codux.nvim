@@ -1051,7 +1051,9 @@ end
 function M.setup(opts)
   stop_token_monitor_timer()
   remove_installed_mappings()
-  config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
+  opts = type(opts) == "table" and opts or {}
+  config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts)
+  config_defaults.apply_legacy_codex_aliases(config, opts)
 
   create_commands()
 

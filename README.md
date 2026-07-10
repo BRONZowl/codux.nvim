@@ -15,7 +15,6 @@ and mappings to open an agent, send context, manage workspaces, and launch missi
 
 - Neovim with terminal and floating window support
 - OpenAI Codex CLI available as `codex`, or Grok CLI available as `grok`
-- lazy.nvim or LazyVim
 
 Optional:
 
@@ -32,7 +31,7 @@ codex login --device-auth
 
 ## Install
 
-Add codux.nvim with lazy.nvim or LazyVim:
+This example uses lazy.nvim and works unchanged in LazyVim:
 
 ```lua
 {
@@ -40,6 +39,9 @@ Add codux.nvim with lazy.nvim or LazyVim:
   opts = {},
 }
 ```
+
+With another plugin manager, add codux.nvim to Neovim's `runtimepath` and call
+`require("codux").setup({})`.
 
 Install and authenticate the Codex CLI if `codex` is not already available:
 
@@ -49,9 +51,12 @@ codex login
 codex --version
 ```
 
-Install and authenticate Grok CLI if you want to use Grok-backed sessions:
+Install and authenticate Grok CLI if you want to use Grok-backed sessions
+([official setup](https://docs.x.ai/build/overview)):
 
 ```bash
+curl -fsSL https://x.ai/cli/install.sh | bash
+grok login
 grok version
 ```
 
@@ -134,7 +139,7 @@ workspace command is available directly.
 
 ## Configuration
 
-The default setup is:
+The key defaults are:
 
 ```lua
 require("codux").setup({
@@ -169,6 +174,11 @@ require("codux").setup({
   },
 })
 ```
+
+The nested `providers.codex` fields are preferred. For backward compatibility,
+the top-level `codex_cmd`, `workspace_auto_cmd`, and
+`danger_full_access_cmd` options remain supported. When both forms configure
+the same profile, the nested provider field takes precedence.
 
 Provider commands can be overridden through setup options or environment
 variables:
@@ -250,9 +260,9 @@ the work needs more focused lanes.
 
 Each agent gets a clean Git worktree workspace under the project-scoped
 `../codux-worktrees/<project>/<workspace>` directory, mission metadata in Codux
-workspace state, workspace-auto permissions, the chosen agent provider, and an
-initial plan-mode prompt. If Codux cannot confirm plan mode for a newly created
-mission agent, it rolls back the new agent workspace.
+workspace state, the chosen permission profile and agent provider, and an initial
+plan-mode prompt. If Codux cannot confirm plan mode for a newly created mission
+agent, it rolls back the new agent workspace.
 
 Each mission also carries a short focus packet. The packet is separate from each
 role's stable workspace instruction and captures the current intent, direction,

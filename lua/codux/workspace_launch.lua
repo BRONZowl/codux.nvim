@@ -1,3 +1,5 @@
+local providers = require("codux.providers")
+
 local M = {}
 
 local function fnameescape(value)
@@ -147,12 +149,24 @@ function M.nvim_command(runtime, workspace)
   workspace = type(workspace) == "table" and workspace or {}
   local config = runtime.get_config()
   local env = {
-    M.shell_env_assignment("CODEX_CMD", runtime.command_util.shell(config.codex_cmd)),
-    M.shell_env_assignment("CODEX_WORKSPACE_AUTO_CMD", runtime.command_util.shell(config.workspace_auto_cmd)),
-    M.shell_env_assignment("CODEX_DANGER_FULL_ACCESS_CMD", runtime.command_util.shell(config.danger_full_access_cmd)),
-    M.shell_env_assignment("GROK_CMD", runtime.command_util.shell(config.providers and config.providers.grok and config.providers.grok.default_cmd or "grok --sandbox workspace")),
-    M.shell_env_assignment("GROK_WORKSPACE_AUTO_CMD", runtime.command_util.shell(config.providers and config.providers.grok and config.providers.grok.auto_cmd or "grok --sandbox workspace --always-approve")),
-    M.shell_env_assignment("GROK_DANGER_FULL_ACCESS_CMD", runtime.command_util.shell(config.providers and config.providers.grok and config.providers.grok.danger_cmd or "grok --sandbox off --always-approve")),
+    M.shell_env_assignment("CODEX_CMD", runtime.command_util.shell(providers.command(config, "codex", "default"))),
+    M.shell_env_assignment(
+      "CODEX_WORKSPACE_AUTO_CMD",
+      runtime.command_util.shell(providers.command(config, "codex", "auto"))
+    ),
+    M.shell_env_assignment(
+      "CODEX_DANGER_FULL_ACCESS_CMD",
+      runtime.command_util.shell(providers.command(config, "codex", "danger"))
+    ),
+    M.shell_env_assignment("GROK_CMD", runtime.command_util.shell(providers.command(config, "grok", "default"))),
+    M.shell_env_assignment(
+      "GROK_WORKSPACE_AUTO_CMD",
+      runtime.command_util.shell(providers.command(config, "grok", "auto"))
+    ),
+    M.shell_env_assignment(
+      "GROK_DANGER_FULL_ACCESS_CMD",
+      runtime.command_util.shell(providers.command(config, "grok", "danger"))
+    ),
   }
   local nvim_target = "."
   if workspace.target_type ~= "directory" and type(workspace.target_path) == "string" and workspace.target_path ~= "" then

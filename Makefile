@@ -9,6 +9,7 @@ TEST_SPECS := \
 	tests/compat_spec.lua \
 	tests/confirmation_footer_spec.lua \
 	tests/commands_spec.lua \
+	tests/config_defaults_spec.lua \
 	tests/dashboard_search_spec.lua \
 	tests/filetypes_spec.lua \
 	tests/mission_spec.lua \
@@ -64,5 +65,5 @@ test:
 	for f in $(TEST_SPECS); do $(LUA) $$f || exit 1; done
 	for f in $(TEST_SPECS); do $(NVIM_HEADLESS) -c 'set rtp+=.' -c "lua dofile('$$f')" -c 'qa!' || exit 1; done
 	for f in lua/codux/*.lua tests/*.lua; do $(LUAJIT) -e "assert(loadfile('$$f'))" || exit 1; done
-	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua require("codux").setup({ token_monitor = false })' -c 'qa!'
+	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua local codux = require("codux"); codux.setup({ token_monitor = false, providers = { codex = { default_cmd = "codex-test" } } }); assert(require("codux.providers").command(codux.health_info().config, "codex", "default") == "codex-test")' -c 'qa!'
 	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua require("codux").setup({ token_monitor = false })' -c 'checkhealth codux' -c 'qa!'

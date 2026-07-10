@@ -3,10 +3,6 @@ local M = {}
 function M.defaults()
   return {
     default_agent_provider = vim.env.CODUX_AGENT_PROVIDER or "codex",
-    codex_cmd = vim.env.CODEX_CMD or 'codex -s workspace-write -a on-request -c approvals_reviewer="user"',
-    workspace_auto_cmd = vim.env.CODEX_WORKSPACE_AUTO_CMD
-      or 'codex -s workspace-write -a on-request -c approvals_reviewer="auto_review"',
-    danger_full_access_cmd = vim.env.CODEX_DANGER_FULL_ACCESS_CMD or "codex -s danger-full-access -a never",
     providers = {
       codex = {
         default_cmd = vim.env.CODEX_CMD or 'codex -s workspace-write -a on-request -c approvals_reviewer="user"',
@@ -73,6 +69,29 @@ function M.defaults()
     },
     target_providers = {},
   }
+end
+
+function M.apply_legacy_codex_aliases(config, opts)
+  config = type(config) == "table" and config or {}
+  opts = type(opts) == "table" and opts or {}
+  config.providers = type(config.providers) == "table" and config.providers or {}
+  config.providers.codex = type(config.providers.codex) == "table" and config.providers.codex or {}
+
+  local configured_providers = type(opts.providers) == "table" and opts.providers or {}
+  local configured_codex = type(configured_providers.codex) == "table" and configured_providers.codex or {}
+  local aliases = {
+    { legacy = "codex_cmd", current = "default_cmd" },
+    { legacy = "workspace_auto_cmd", current = "auto_cmd" },
+    { legacy = "danger_full_access_cmd", current = "danger_cmd" },
+  }
+
+  for _, alias in ipairs(aliases) do
+    if opts[alias.legacy] ~= nil and configured_codex[alias.current] == nil then
+      config.providers.codex[alias.current] = opts[alias.legacy]
+    end
+  end
+
+  return config
 end
 
 return M

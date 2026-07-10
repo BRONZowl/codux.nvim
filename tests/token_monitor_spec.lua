@@ -48,6 +48,21 @@ end
 
 do
   local monitor = monitor_with_config({
+    providers = {
+      codex = {
+        default_cmd = "nested-codex --profile terminal",
+      },
+    },
+  })
+  local command, executable, error_message = monitor:app_server_command()
+
+  assert_equal(error_message, nil, "nested provider config should be valid")
+  assert_equal(executable, "nested-codex", "nested provider config should derive the executable")
+  assert_table_equal(command, { "nested-codex", "app-server", "--stdio" }, "monitor should not inherit terminal flags")
+end
+
+do
+  local monitor = monitor_with_config({
     codex_cmd = "codex",
     token_monitor = {
       codex_cmd = "codex-token --profile usage",

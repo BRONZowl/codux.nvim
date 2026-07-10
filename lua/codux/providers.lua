@@ -213,13 +213,15 @@ end
 local function provider_config(config, provider)
   config = type(config) == "table" and config or {}
   local providers = type(config.providers) == "table" and config.providers or {}
-  local provider_config = type(providers[provider]) == "table" and providers[provider] or {}
+  local configured = type(providers[provider]) == "table" and providers[provider] or {}
   if provider == "codex" then
-    provider_config.default_cmd = config.codex_cmd or provider_config.default_cmd
-    provider_config.auto_cmd = config.workspace_auto_cmd or provider_config.auto_cmd
-    provider_config.danger_cmd = config.danger_full_access_cmd or provider_config.danger_cmd
+    return {
+      default_cmd = configured.default_cmd or config.codex_cmd,
+      auto_cmd = configured.auto_cmd or config.workspace_auto_cmd,
+      danger_cmd = configured.danger_cmd or config.danger_full_access_cmd,
+    }
   end
-  return provider_config
+  return configured
 end
 
 function M.command(config, provider, profile)

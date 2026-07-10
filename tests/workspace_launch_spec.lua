@@ -105,6 +105,52 @@ do
     },
     get_config = function()
       return {
+        providers = {
+          codex = {
+            default_cmd = "nested-codex",
+            auto_cmd = "nested-codex-auto",
+            danger_cmd = "nested-codex-danger",
+          },
+          grok = {
+            default_cmd = "nested-grok",
+            auto_cmd = "nested-grok-auto",
+            danger_cmd = "nested-grok-danger",
+          },
+        },
+      }
+    end,
+    nvim_cmd = function()
+      return "nvim"
+    end,
+    workspace_server_path = function()
+      return "/tmp/codux/review.sock"
+    end,
+  }
+
+  local command = workspace_launch.nvim_command(runtime, {
+    project_root = "/repo",
+    safe_name = "review",
+    target_path = "/repo",
+    target_type = "directory",
+  })
+
+  assert_contains(command, "CODEX_CMD='nested-codex'")
+  assert_contains(command, "CODEX_WORKSPACE_AUTO_CMD='nested-codex-auto'")
+  assert_contains(command, "CODEX_DANGER_FULL_ACCESS_CMD='nested-codex-danger'")
+  assert_contains(command, "GROK_CMD='nested-grok'")
+  assert_contains(command, "GROK_WORKSPACE_AUTO_CMD='nested-grok-auto'")
+  assert_contains(command, "GROK_DANGER_FULL_ACCESS_CMD='nested-grok-danger'")
+end
+
+do
+  local runtime = {
+    command_util = {
+      shell = function(value)
+        return value
+      end,
+    },
+    get_config = function()
+      return {
         codex_cmd = "codex",
         workspace_auto_cmd = "codex-auto",
         danger_full_access_cmd = "codex-danger",
