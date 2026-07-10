@@ -223,6 +223,327 @@ do
 end
 
 do
+  local stopped_job
+  local closed_preview
+  local entry = {
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    project_root = "/repo",
+  }
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_job = 77,
+      mission_dashboard_output_preview = { preview_session = "codux-preview-test" },
+    },
+    jobstop = function(job_id)
+      stopped_job = job_id
+      return true
+    end,
+    close_workspace_interactive_preview = function(preview)
+      closed_preview = preview
+      return true
+    end,
+  })
+  controller.state.mission_dashboard_output_entry = entry
+  controller.state.mission_dashboard_output_key = controller:output_entry_key(entry)
+  controller.state.mission_dashboard_output_blocked_key = controller.state.mission_dashboard_output_key
+
+  assert_true(controller:invalidate_output_preview_for_entry(entry))
+  assert_equal(stopped_job, 77)
+  assert_equal(closed_preview.preview_session, "codux-preview-test")
+  assert_nil(controller.state.mission_dashboard_output_entry)
+  assert_nil(controller.state.mission_dashboard_output_key)
+  assert_nil(controller.state.mission_dashboard_output_blocked_key)
+  assert_nil(controller.state.mission_dashboard_output_job)
+  assert_nil(controller.state.mission_dashboard_output_preview)
+end
+
+do
+  local stopped_job
+  local entry = {
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    project_root = "/repo",
+  }
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_output_job = 77,
+      mission_dashboard_output_preview = { preview_session = "codux-preview-test" },
+    },
+    jobstop = function(job_id)
+      stopped_job = job_id
+      return true
+    end,
+  })
+  controller.state.mission_dashboard_output_entry = entry
+  controller.state.mission_dashboard_output_key = controller:output_entry_key(entry)
+  controller.state.mission_dashboard_output_blocked_key = controller.state.mission_dashboard_output_key
+
+  assert_false(controller:invalidate_output_preview_for_entry({
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    project_root = "/repo",
+  }))
+  assert_nil(stopped_job)
+  assert_equal(controller.state.mission_dashboard_output_key, controller:output_entry_key(entry))
+  assert_equal(controller.state.mission_dashboard_output_job, 77)
+  assert_equal(controller.state.mission_dashboard_output_preview.preview_session, "codux-preview-test")
+end
+
+if type(vim.api) == "table" then
+  local old_defer_fn = vim.defer_fn
+  local scheduled = {}
+  vim.defer_fn = function(callback, delay)
+    table.insert(scheduled, { callback = callback, delay = delay })
+  end
+
+  local entry = {
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+    project_root = "/repo",
+  }
+  local controller, ctx = output_fixtures.controller({
+    state = {
+      mission_dashboard_items = {
+        [5] = { kind = "role", entry = entry },
+      },
+      mission_dashboard_selectable_rows = { 5 },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 5,
+    },
+    workspace_interactive_preview = function()
+      return output_fixtures.preview(), nil
+    end,
+    termopen = function()
+      return 77
+    end,
+  })
+  controller.state.mission_dashboard_output_key = controller:output_entry_key(entry)
+  controller.state.mission_dashboard_output_blocked_key = controller.state.mission_dashboard_output_key
+
+  assert_true(controller:retry_output_preview_for_entry(entry, { delays = { 25, 50 } }))
+  assert_equal(#scheduled, 1)
+  assert_equal(scheduled[1].delay, 25)
+  scheduled[1].callback()
+  assert_equal(controller.state.mission_dashboard_output_job, 77)
+  assert_nil(controller.state.mission_dashboard_output_blocked_key)
+  assert_equal(#scheduled, 1)
+
+  output_fixtures.delete_buffer(ctx.bufnr)
+  vim.defer_fn = old_defer_fn
+end
+
+if type(vim.api) == "table" then
+  local old_defer_fn = vim.defer_fn
+  local scheduled = {}
+  vim.defer_fn = function(callback, delay)
+    table.insert(scheduled, { callback = callback, delay = delay })
+  end
+
+  local entry = {
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+    project_root = "/repo",
+  }
+  local controller, ctx = output_fixtures.controller({
+    state = {
+      mission_dashboard_output_control = true,
+      mission_dashboard_items = {
+        [5] = { kind = "role", entry = entry },
+      },
+      mission_dashboard_selectable_rows = { 5 },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 5,
+    },
+  })
+  local rendered = false
+  function controller:render_output_panel()
+    rendered = true
+    return true
+  end
+
+  assert_true(controller:retry_output_preview_for_entry(entry, { delays = { 25 } }))
+  scheduled[1].callback()
+  assert_false(rendered)
+
+  output_fixtures.delete_buffer(ctx.bufnr)
+  vim.defer_fn = old_defer_fn
+end
+
+if type(vim.api) == "table" then
+  local old_defer_fn = vim.defer_fn
+  local scheduled = {}
+  vim.defer_fn = function(callback, delay)
+    table.insert(scheduled, { callback = callback, delay = delay })
+  end
+
+  local entry = {
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+    project_root = "/repo",
+  }
+  local controller, ctx = output_fixtures.controller({
+    state = {
+      mission_dashboard_items = {
+        [5] = { kind = "role", entry = entry },
+      },
+      mission_dashboard_selectable_rows = { 5 },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 5,
+    },
+    is_loaded_buf = function()
+      return false
+    end,
+  })
+  local rendered = false
+  function controller:render_output_panel()
+    rendered = true
+    return true
+  end
+
+  assert_true(controller:retry_output_preview_for_entry(entry, { delays = { 25 } }))
+  scheduled[1].callback()
+  assert_false(rendered)
+
+  output_fixtures.delete_buffer(ctx.bufnr)
+  vim.defer_fn = old_defer_fn
+end
+
+if type(vim.api) == "table" then
+  local old_defer_fn = vim.defer_fn
+  local scheduled = {}
+  vim.defer_fn = function(callback, delay)
+    table.insert(scheduled, { callback = callback, delay = delay })
+  end
+
+  local entry = {
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+    project_root = "/repo",
+  }
+  local controller, ctx = output_fixtures.controller({
+    state = {
+      mission_dashboard_items = {
+        [5] = { kind = "role", entry = entry },
+      },
+      mission_dashboard_selectable_rows = { 5 },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 5,
+      mission_dashboard_output_job = 77,
+    },
+  })
+  local rendered = false
+  function controller:output_preview_running()
+    return true
+  end
+  function controller:render_output_panel()
+    rendered = true
+    return true
+  end
+
+  assert_true(controller:retry_output_preview_for_entry(entry, { delays = { 25 } }))
+  scheduled[1].callback()
+  assert_false(rendered)
+
+  output_fixtures.delete_buffer(ctx.bufnr)
+  vim.defer_fn = old_defer_fn
+end
+
+if type(vim.api) == "table" then
+  local old_defer_fn = vim.defer_fn
+  local scheduled = {}
+  vim.defer_fn = function(callback, delay)
+    table.insert(scheduled, { callback = callback, delay = delay })
+  end
+
+  local builder = {
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+    project_root = "/repo",
+  }
+  local reviewer = {
+    safe_name = "alpha-reviewer",
+    mission_role = "Reviewer",
+    status = "idle",
+    project_root = "/repo",
+  }
+  local controller, ctx = output_fixtures.controller({
+    state = {
+      mission_dashboard_items = {
+        [5] = { kind = "role", entry = reviewer },
+      },
+      mission_dashboard_selectable_rows = { 5 },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 5,
+    },
+  })
+  local rendered = false
+  function controller:render_output_panel()
+    rendered = true
+    return true
+  end
+
+  assert_true(controller:retry_output_preview_for_entry(builder, { delays = { 25 } }))
+  scheduled[1].callback()
+  assert_false(rendered)
+
+  output_fixtures.delete_buffer(ctx.bufnr)
+  vim.defer_fn = old_defer_fn
+end
+
+if type(vim.api) == "table" then
+  local old_defer_fn = vim.defer_fn
+  local scheduled = {}
+  vim.defer_fn = function(callback, delay)
+    table.insert(scheduled, { callback = callback, delay = delay })
+  end
+
+  local entry = {
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    status = "idle",
+    project_root = "/repo",
+  }
+  local preview_calls = 0
+  local controller, ctx = output_fixtures.controller({
+    state = {
+      mission_dashboard_items = {
+        [5] = { kind = "role", entry = entry },
+      },
+      mission_dashboard_selectable_rows = { 5 },
+      mission_dashboard_search_confirmed = true,
+      mission_dashboard_selected_row = 5,
+    },
+    workspace_interactive_preview = function()
+      preview_calls = preview_calls + 1
+      return nil, "workspace agent session is not running"
+    end,
+  })
+  controller.state.mission_dashboard_output_key = controller:output_entry_key(entry)
+  controller.state.mission_dashboard_output_blocked_key = controller.state.mission_dashboard_output_key
+
+  assert_true(controller:retry_output_preview_for_entry(entry, { delays = { 25, 50 } }))
+  assert_equal(#scheduled, 1)
+  scheduled[1].callback()
+  assert_equal(preview_calls, 1)
+  assert_equal(#scheduled, 2)
+  assert_equal(scheduled[2].delay, 50)
+  scheduled[2].callback()
+  assert_equal(preview_calls, 2)
+  assert_equal(#scheduled, 2)
+  assert_equal(controller.state.mission_dashboard_output_blocked_key, controller:output_entry_key(entry))
+  assert_contains(table.concat(ctx.rendered_lines, "\n"), "workspace agent session is not running")
+
+  output_fixtures.delete_buffer(ctx.bufnr)
+  vim.defer_fn = old_defer_fn
+end
+
+do
   local closed_win
   local deleted_buf
   local stopped_job

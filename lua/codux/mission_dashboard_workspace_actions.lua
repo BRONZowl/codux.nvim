@@ -47,6 +47,9 @@ local function open_profile_picker(controller, entry)
         restart = true,
       })
       if ok then
+        if restarted and type(controller.invalidate_output_preview_for_entry) == "function" then
+          controller:invalidate_output_preview_for_entry(entry)
+        end
         controller.notify(
           "Switched Codux workspace "
             .. tostring(label)
@@ -55,6 +58,9 @@ local function open_profile_picker(controller, entry)
             .. (restarted and " and restarted it" or "")
         )
         controller:render_dashboard()
+        if restarted and type(controller.retry_output_preview_for_entry) == "function" then
+          controller:retry_output_preview_for_entry(entry)
+        end
         return true
       end
       controller.notify(error_message or "Failed to switch Codux workspace profile", vim.log.levels.ERROR)

@@ -4,6 +4,8 @@ local output_buffer = require("codux.mission_output_buffer")
 local output_preview = require("codux.mission_output_preview")
 local output_terminal = require("codux.mission_output_terminal")
 
+local output_preview_retry_delays_ms = { 500, 1000, 2000, 3000, 5000 }
+
 local function role_cache_key(entry)
   entry = type(entry) == "table" and entry or {}
   return table.concat({
@@ -76,6 +78,88 @@ function Output:clear_output_panel_state()
   self.state.mission_dashboard_output_control_mouse = nil
   self.state.mission_dashboard_output_terminal_controller = nil
   self.state.mission_dashboard_output_terminal_state = nil
+  self.state.mission_dashboard_output_retry_generation = nil
+  self.state.mission_dashboard_output_retry_key = nil
+end
+
+function Output:invalidate_output_preview_for_entry(entry)
+  local key = self:output_entry_key(entry)
+  if key == "" or key ~= self.state.mission_dashboard_output_key then
+    return false
+  end
+
+  self:close_output_preview()
+  self.state.mission_dashboard_output_entry = nil
+  self.state.mission_dashboard_output_key = nil
+  self.state.mission_dashboard_output_blocked_key = nil
+  return true
+end
+
+function Output:retry_output_preview_for_entry(entry, opts)
+  opts = type(opts) == "table" and opts or {}
+  local key = self:output_entry_key(entry)
+  if key == "" or type(vim.defer_fn) ~= "function" then
+    return false
+  end
+
+  local delays = type(opts.delays) == "table" and opts.delays or output_preview_retry_delays_ms
+  local generation = (tonumber(self.state.mission_dashboard_output_retry_generation) or 0) + 1
+  self.state.mission_dashboard_output_retry_generation = generation
+  self.state.mission_dashboard_output_retry_key = key
+
+  local function schedule(attempt)
+    local delay = tonumber(delays[attempt])
+    if not delay then
+      if self.state.mission_dashboard_output_retry_generation == generation then
+        self.state.mission_dashboard_output_retry_key = nil
+      end
+      return false
+    end
+
+    vim.defer_fn(function()
+      if self.state.mission_dashboard_output_retry_generation ~= generation then
+        return
+      end
+      if self.state.mission_dashboard_output_control then
+        return
+      end
+      if not self.is_loaded_buf(self.state.mission_dashboard_output_buf) then
+        return
+      end
+      if not self.is_valid_win(self.state.mission_dashboard_output_win) then
+        return
+      end
+      if self:output_preview_running() then
+        self.state.mission_dashboard_output_retry_key = nil
+        return
+      end
+
+      local selected_entry = self:selected_output_entry()
+      if self:output_entry_key(selected_entry) ~= key then
+        return
+      end
+
+      if self.state.mission_dashboard_output_blocked_key == key then
+        self.state.mission_dashboard_output_blocked_key = nil
+      end
+
+      self:render_output_panel(selected_entry)
+      if self.state.mission_dashboard_output_retry_generation ~= generation then
+        return
+      end
+      if self:output_preview_running() then
+        self.state.mission_dashboard_output_retry_key = nil
+        return
+      end
+      if self.state.mission_dashboard_output_blocked_key == key then
+        schedule(attempt + 1)
+      end
+    end, delay)
+
+    return true
+  end
+
+  return schedule(1)
 end
 
 function Output:render_output_status(entry, message)

@@ -623,6 +623,9 @@ end
 do
   local selected
   local rendered = false
+  local invalidated
+  local retried
+  local calls = {}
   local notifications = {}
   local entry = {
     name = "alpha-builder",
@@ -663,7 +666,18 @@ do
     end,
   })
   function controller:render_dashboard()
+    table.insert(calls, "render")
     rendered = true
+    return true
+  end
+  function controller:invalidate_output_preview_for_entry(workspace)
+    table.insert(calls, "invalidate")
+    invalidated = workspace
+    return true
+  end
+  function controller:retry_output_preview_for_entry(workspace)
+    table.insert(calls, "retry")
+    retried = workspace
     return true
   end
 
@@ -673,8 +687,56 @@ do
   assert_equal(selected.agent_provider, "grok")
   assert_equal(selected.permission_profile, "auto")
   assert_true(selected.restart)
+  assert_equal(invalidated.safe_name, "alpha-builder")
+  assert_equal(retried.safe_name, "alpha-builder")
+  assert_equal(table.concat(calls, ","), "invalidate,render,retry")
   assert_true(rendered)
   assert_contains(notifications[#notifications], "Grok Auto")
+end
+
+do
+  local invalidated = false
+  local retried = false
+  local entry = {
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    mission_role = "Builder",
+    project_root = "/repo",
+  }
+  local controller = mission_control_mod.new({
+    ui = {
+      create_scratch_buffer = function() end,
+      set_lines = function() end,
+      set_window_options = function() end,
+      close_window = function() end,
+      delete_buffer = function() end,
+    },
+    select_provider_profile = function(opts)
+      return opts.on_select({
+        agent_provider = "codex",
+        profile = "default",
+        profile_label = "Codex Default",
+      })
+    end,
+    switch_workspace_profile = function()
+      return true, nil, nil
+    end,
+  })
+  function controller:render_dashboard()
+    return true
+  end
+  function controller:invalidate_output_preview_for_entry()
+    invalidated = true
+    return true
+  end
+  function controller:retry_output_preview_for_entry()
+    retried = true
+    return true
+  end
+
+  assert_true(controller:switch_selected_workspace_profile(entry))
+  assert_false(invalidated)
+  assert_false(retried)
 end
 
 
