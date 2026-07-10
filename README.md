@@ -87,7 +87,9 @@ permission-profile picker for the global default provider:
 - `f` for full access
 
 Those profile choices set only the startup permission profile for the new
-session. Once an agent is running, `:Codux` and `<leader>zc` focus that session
+session. If the Codux popup is already open, `:Codux` and `<leader>zc` are a
+no-op until you hide it with `:CoduxClose` or `<C-q>`. When an agent is still
+running but the popup is closed, those commands reopen and focus that session
 instead of changing its provider or profile. Mission Control and workspace
 dashboard **Switch Profile** menus still use a two-step provider + profile
 picker so individual roles or workspaces can differ from the global default.

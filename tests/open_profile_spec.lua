@@ -329,6 +329,30 @@ if type(vim.api) == "table" then
   assert_equal(#default_open_menus, 1)
   assert_equal(default_open_menus[1].agent_provider, "grok")
   assert_equal(default_open_menus[1].initial_prompt, "hi")
+
+  -- Fail-safe: when the Codux popup is already open, open is a no-op.
+  local terminal_ctrl
+  local upvalue_index = 1
+  while true do
+    local name, value = debug.getupvalue(codux.open_with_keyed_profile_menu, upvalue_index)
+    if not name then
+      break
+    end
+    if name == "terminal" then
+      terminal_ctrl = value
+      break
+    end
+    upvalue_index = upvalue_index + 1
+  end
+  assert_equal(type(terminal_ctrl), "table")
+  local old_valid_win = terminal_ctrl.valid_win
+  local menu_calls_before = #default_open_menus
+  terminal_ctrl.valid_win = function()
+    return true
+  end
+  assert_false(codux.open_with_keyed_profile_menu({ initial_prompt = "blocked" }))
+  assert_equal(#default_open_menus, menu_calls_before)
+  terminal_ctrl.valid_win = old_valid_win
   codux._v5.select_keyed_provider_profile_open = old_select_keyed
 
   local opened_opts

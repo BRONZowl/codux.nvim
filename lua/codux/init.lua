@@ -630,6 +630,11 @@ end
 
 function M.open_with_keyed_profile_menu(opts)
   opts = type(opts) == "table" and opts or {}
+  if terminal:valid_win() then
+    notify("Codux is already open", vim.log.levels.INFO)
+    return false
+  end
+
   if not M._v5.should_select_permission_profile(state.job_id) then
     return terminal:open(opts)
   end
