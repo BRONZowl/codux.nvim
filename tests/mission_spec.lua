@@ -127,6 +127,21 @@ do
 end
 
 do
+  -- Manager always sorts first; remaining roles stay alphabetical.
+  local grouped = mission_mod.group_entries({
+    { name = "alpha-builder", mission_id = "mission:alpha", mission_name = "Alpha", mission_role = "Builder" },
+    { name = "alpha-manager", mission_id = "mission:alpha", mission_name = "Alpha", mission_role = "Manager" },
+    { name = "alpha-agent", mission_id = "mission:alpha", mission_name = "Alpha", mission_role = "Agent" },
+    { name = "alpha-architect", mission_id = "mission:alpha", mission_name = "Alpha", mission_role = "Architect" },
+  })
+  assert_equal(#grouped[1].roles, 4)
+  assert_equal(grouped[1].roles[1].mission_role, "Manager")
+  assert_equal(grouped[1].roles[2].mission_role, "Agent")
+  assert_equal(grouped[1].roles[3].mission_role, "Architect")
+  assert_equal(grouped[1].roles[4].mission_role, "Builder")
+end
+
+do
   local role = mission_mod.role_from_entry({
     mission_role = "Research Lead",
     resolved_instruction = "Role focus:\nTrack architecture risks.\n\nStay inside this workspace",

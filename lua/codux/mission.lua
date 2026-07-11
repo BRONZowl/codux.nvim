@@ -523,6 +523,11 @@ function M.group_entries(entries)
   end)
   for _, mission in ipairs(order) do
     table.sort(mission.roles, function(left, right)
+      local left_mgr = M.is_manager_role(left)
+      local right_mgr = M.is_manager_role(right)
+      if left_mgr ~= right_mgr then
+        return left_mgr
+      end
       return tostring(left.mission_role or left.name):lower() < tostring(right.mission_role or right.name):lower()
     end)
   end
