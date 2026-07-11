@@ -120,12 +120,12 @@ do
       return "execute"
     end,
     token_usage_label = function()
-      return "quota | tpm full 53.0M | rpm full 8300"
+      return "quota | tpm 100% left | rpm 100% left"
     end,
   })
   local title = controller:title()
   assert_equal(title[1][1], " codux ")
-  assert_contains(title[2][1], "tpm full 53.0M")
+  assert_contains(title[2][1], "tpm 100% left")
   assert_equal(title[2][1]:find("quota", 1, true), nil, "quota prefix should be stripped from title")
   local min_width = controller:chrome_min_width()
   assert_true(min_width >= controller:title_display_width(), "min width should cover full title")

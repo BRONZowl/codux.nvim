@@ -325,27 +325,28 @@ do
     ["x-ratelimit-limit-requests"] = "50",
     ["x-ratelimit-remaining-requests"] = "50",
   })
-  assert_equal(parsed.tpm_percent, 0)
-  assert_equal(parsed.rpm_percent, 0)
+  -- Full window remaining = 100% headroom (not 0% used).
+  assert_equal(parsed.tpm_percent, 100)
+  assert_equal(parsed.rpm_percent, 100)
 
   parsed = token_usage.parse_grok_headers(
     "HTTP/1.1 200 OK\nx-ratelimit-limit-tokens: 100\nx-ratelimit-remaining-tokens: 40\nx-ratelimit-limit-requests: 10\nx-ratelimit-remaining-requests: 7\n\n"
   )
-  assert_equal(parsed.tpm_percent, 60)
-  assert_equal(parsed.rpm_percent, 30)
+  assert_equal(parsed.tpm_percent, 40)
+  assert_equal(parsed.rpm_percent, 70)
 
   -- Live-shaped curl -D - dump: HTTP/2, trailing space on status, large limits, CRLF.
   parsed = token_usage.parse_grok_headers(
     "HTTP/2 200 \r\nx-ratelimit-limit-tokens: 53000000\r\nx-ratelimit-remaining-tokens: 53000000\r\nx-ratelimit-limit-requests: 8300\r\nx-ratelimit-remaining-requests: 8300\r\n\r\n"
   )
-  assert_equal(parsed.tpm_percent, 0)
-  assert_equal(parsed.rpm_percent, 0)
+  assert_equal(parsed.tpm_percent, 100)
+  assert_equal(parsed.rpm_percent, 100)
   assert_equal(parsed.usage_provider, "grok")
 
   parsed = token_usage.parse_grok_headers(
     "HTTP/2 200\r\nx-ratelimit-limit-tokens: 100\r\nx-ratelimit-remaining-tokens: 25\r\nx-ratelimit-limit-requests: 20\r\nx-ratelimit-remaining-requests: 10\r\n\r\n"
   )
-  assert_equal(parsed.tpm_percent, 75)
+  assert_equal(parsed.tpm_percent, 25)
   assert_equal(parsed.rpm_percent, 50)
 
   assert_nil(token_usage.parse_grok_headers({}))
@@ -357,48 +358,46 @@ do
   assert_equal(token_usage.format_count(8300), "8300")
   assert_equal(token_usage.format_count(12500), "12.5k")
 
-  -- Full window: honest "full" so light use is not mistaken for a frozen rem/lim pair.
+  -- Remaining headroom % of limit (full window = 100%).
   assert_equal(
     token_usage.label({
-      tpm_percent = 0,
-      rpm_percent = 0,
+      tpm_percent = 100,
+      rpm_percent = 100,
       tpm_limit = 53000000,
       tpm_remaining = 53000000,
       rpm_limit = 8300,
       rpm_remaining = 8300,
       usage_provider = "grok",
     }),
-    "quota | tpm full 53.0M | rpm full 8300"
+    "quota | tpm 100% left | rpm 100% left"
   )
-  -- Small used with 0% (large TPM ceilings): surface used so dips are visible.
   assert_equal(
     token_usage.label({
-      tpm_percent = 0,
-      rpm_percent = 0,
+      tpm_percent = 100,
+      rpm_percent = 100,
       tpm_limit = 53000000,
       tpm_remaining = 52999000,
       rpm_limit = 8300,
       rpm_remaining = 8295,
       usage_provider = "grok",
     }),
-    "quota | tpm used 1000/53.0M | rpm used 5/8300"
+    "quota | tpm 100% left | rpm 100% left"
   )
-  -- When percent is non-zero, show percent and remaining.
   assert_equal(
     token_usage.label({
-      tpm_percent = 12,
-      rpm_percent = 3,
+      tpm_percent = 88,
+      rpm_percent = 97,
       tpm_limit = 100,
       tpm_remaining = 88,
       rpm_limit = 100,
       rpm_remaining = 97,
       usage_provider = "grok",
     }),
-    "quota | tpm 12% · 88 left | rpm 3% · 97 left"
+    "quota | tpm 88% left | rpm 97% left"
   )
   assert_equal(
     token_usage.label({ last_error = "nope" }, { provider = "grok", show_error = true }),
-    "quota | tpm --% | rpm --% (unavailable)"
+    "quota | tpm --% left | rpm --% left (unavailable)"
   )
   -- Codex label format must stay byte-identical for the same inputs.
   assert_equal(
@@ -673,7 +672,7 @@ do
       "",
     })
     exit_cb(nil, 0)
-    assert_equal(state.tpm_percent, 75)
+    assert_equal(state.tpm_percent, 25)
     assert_equal(state.rpm_percent, 50)
     assert_equal(state.tpm_limit, 100)
     assert_equal(state.tpm_remaining, 25)
@@ -681,7 +680,7 @@ do
     assert_equal(state.rpm_remaining, 10)
     assert_equal(state.usage_provider, "grok")
     assert_nil(state.last_error)
-    assert_equal(state.by_provider.grok.tpm_percent, 75)
+    assert_equal(state.by_provider.grok.tpm_percent, 25)
     assert_equal(state.by_provider.grok.rpm_percent, 50)
     assert_equal(state.by_provider.grok.tpm_remaining, 25)
     assert_nil(state.by_provider.grok.last_error)
@@ -760,8 +759,8 @@ do
       "",
     })
     exit_cb(nil, 0)
-    assert_equal(state.tpm_percent, 75)
-    assert_equal(state.rpm_percent, 75)
+    assert_equal(state.tpm_percent, 25)
+    assert_equal(state.rpm_percent, 25)
     assert_equal(state.tpm_remaining, 50)
     assert_equal(state.usage_provider, "grok")
   end)
@@ -916,10 +915,15 @@ do
     five_hour_percent = 11,
     weekly_percent = 22,
   }
-  local monitor = monitor_with_config({ codex_cmd = "codex" }, { state = state })
+  local monitor = monitor_with_config({ codex_cmd = "codex" }, {
+    state = state,
+    get_agent_provider = function()
+      return "grok"
+    end,
+  })
   assert_equal(monitor:label_for_provider("codex"), "usage | 5hr 11% | wk 22%")
-  assert_equal(monitor:label_for_provider("grok"), "quota | tpm 33% · 67 left | rpm 44% · 56 left")
-  assert_equal(monitor:label(), "quota | tpm 33% · 67 left | rpm 44% · 56 left", "active snapshot follows usage_provider")
+  assert_equal(monitor:label_for_provider("grok"), "quota | tpm 33% left | rpm 44% left")
+  assert_equal(monitor:label(), "quota | tpm 33% left | rpm 44% left", "label follows active agent provider")
 end
 
 do
@@ -942,7 +946,7 @@ do
   assert_equal(state.by_provider.codex.five_hour_percent, 7)
   assert_equal(state.by_provider.grok.tpm_percent, 1)
   assert_equal(monitor:label_for_provider("codex"), "usage | 5hr 7% | wk 8%")
-  assert_equal(monitor:label_for_provider("grok"), "quota | tpm 1% · 99 left | rpm 2% · 49 left")
+  assert_equal(monitor:label_for_provider("grok"), "quota | tpm 1% left | rpm 2% left")
 end
 
 do

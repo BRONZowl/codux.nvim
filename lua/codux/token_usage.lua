@@ -65,14 +65,21 @@ local function parse_number(value)
   return tonumber(value)
 end
 
-local function used_percent(limit, remaining)
+--- Percent of the rate-limit window still available (remaining / limit).
+--- Clamps remaining into [0, limit] so slightly-over-limit header quirks still report 100%.
+local function remaining_percent(limit, remaining)
   limit = parse_number(limit)
   remaining = parse_number(remaining)
   if limit == nil or limit <= 0 or remaining == nil then
     return nil
   end
-  local used = ((limit - remaining) / limit) * 100
-  return M.normalize_percent(used)
+  if remaining < 0 then
+    remaining = 0
+  elseif remaining > limit then
+    remaining = limit
+  end
+  local available = (remaining / limit) * 100
+  return M.normalize_percent(available)
 end
 
 local function header_value(headers, name)
@@ -127,8 +134,7 @@ function M.format_count(value)
 end
 
 --- Parse xAI rate-limit headers from a header map or raw HTTP header text.
---- Note: xAI currently reports very large TPM ceilings (tens of millions). Small
---- real usage often still rounds to 0% used; absolute remaining is more useful.
+--- tpm_percent / rpm_percent are **remaining** headroom (remaining/limit), not used %.
 function M.parse_grok_headers(headers)
   local map = headers
   if type(headers) == "string" then
@@ -152,8 +158,8 @@ function M.parse_grok_headers(headers)
   local rpm_limit = parse_number(header_value(map, "x-ratelimit-limit-requests"))
   local rpm_remaining = parse_number(header_value(map, "x-ratelimit-remaining-requests"))
 
-  local tpm = used_percent(tpm_limit, tpm_remaining)
-  local rpm = used_percent(rpm_limit, rpm_remaining)
+  local tpm = remaining_percent(tpm_limit, tpm_remaining)
+  local rpm = remaining_percent(rpm_limit, rpm_remaining)
 
   local has_tpm = tpm ~= nil or (tpm_limit ~= nil and tpm_limit > 0 and tpm_remaining ~= nil)
   local has_rpm = rpm ~= nil or (rpm_limit ~= nil and rpm_limit > 0 and rpm_remaining ~= nil)
@@ -179,37 +185,6 @@ local function percent_label(value)
   return tostring(value) .. "%"
 end
 
-local function grok_bucket_label(name, percent, remaining, limit)
-  local rem_n = parse_number(remaining)
-  local lim_n = parse_number(limit)
-  local rem = M.format_count(remaining)
-  local lim = M.format_count(limit)
-
-  if rem_n ~= nil and lim_n ~= nil and lim_n > 0 then
-    local used = lim_n - rem_n
-    if used < 0 then
-      used = 0
-    end
-
-    -- Non-zero percent: show % used plus remaining headroom.
-    if type(percent) == "number" and percent > 0 then
-      return name .. " " .. tostring(percent) .. "% · " .. (rem or tostring(math.floor(rem_n + 0.5))) .. " left"
-    end
-
-    -- Full window (typical for huge xAI TPM ceilings / recovered RPM).
-    if used <= 0 or rem_n >= lim_n then
-      return name .. " full " .. (lim or tostring(math.floor(lim_n + 0.5)))
-    end
-
-    -- Small used amounts at 0%: surface used so dips remain visible even when
-    -- absolute remaining still rounds to the same millions string as the limit.
-    local used_label = M.format_count(used)
-    return name .. " used " .. (used_label or tostring(math.floor(used + 0.5))) .. "/" .. (lim or tostring(math.floor(lim_n + 0.5)))
-  end
-
-  return name .. " " .. percent_label(percent)
-end
-
 function M.label(usage, opts)
   opts = type(opts) == "table" and opts or {}
   usage = type(usage) == "table" and usage or {}
@@ -223,15 +198,24 @@ function M.label(usage, opts)
 
   local provider = opts.provider or usage.usage_provider
   if provider == "grok" then
-    local label = "quota | "
-      .. grok_bucket_label("tpm", usage.tpm_percent, usage.tpm_remaining, usage.tpm_limit)
-      .. " | "
-      .. grok_bucket_label("rpm", usage.rpm_percent, usage.rpm_remaining, usage.rpm_limit)
+    -- Prefer stored remaining-%; recompute from limit/remaining when needed.
+    local tpm = usage.tpm_percent
+    local rpm = usage.rpm_percent
+    if tpm == nil then
+      tpm = remaining_percent(usage.tpm_limit, usage.tpm_remaining)
+    end
+    if rpm == nil then
+      rpm = remaining_percent(usage.rpm_limit, usage.rpm_remaining)
+    end
+    -- "left" makes remaining headroom explicit (Codex 5hr/wk are % used instead).
+    local label = "quota | tpm "
+      .. percent_label(tpm)
+      .. " left | rpm "
+      .. percent_label(rpm)
+      .. " left"
     if
-      usage.tpm_percent == nil
-      and usage.rpm_percent == nil
-      and usage.tpm_remaining == nil
-      and usage.rpm_remaining == nil
+      tpm == nil
+      and rpm == nil
       and type(usage.last_error) == "string"
       and usage.last_error ~= ""
       and opts.show_error == true

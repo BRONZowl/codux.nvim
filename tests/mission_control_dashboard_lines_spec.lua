@@ -261,11 +261,11 @@ end
 do
   local mission_dashboard = require("codux.mission_dashboard")
   assert_true(mission_dashboard.is_token_usage_line("usage | 5hr 12% | wk 34%"))
-  assert_true(mission_dashboard.is_token_usage_line("quota | tpm full 53.0M | rpm full 8300"))
-  assert_true(mission_dashboard.is_token_usage_line("   quota | tpm used 5/8300 | rpm full 8300   "))
+  assert_true(mission_dashboard.is_token_usage_line("quota | tpm 100% left | rpm 100% left"))
+  assert_true(mission_dashboard.is_token_usage_line("   quota | tpm 88% left | rpm 97% left   "))
   assert_false(mission_dashboard.is_token_usage_line("1 mission | 1 role"))
   assert_equal(
-    mission_dashboard.min_height_for_lines({ "header", "quota | tpm full 53.0M | rpm full 8300" }),
+    mission_dashboard.min_height_for_lines({ "header", "quota | tpm 100% left | rpm 100% left" }),
     2,
     "grok quota line reserves height"
   )
@@ -274,7 +274,7 @@ end
 do
   local controller = mission_control_mod.new({
     token_usage_label = function()
-      return "quota | tpm full 53.0M | rpm full 8300"
+      return "quota | tpm 100% left | rpm 100% left"
     end,
     workspace_entries_for_project = function()
       return {
@@ -292,7 +292,7 @@ do
   })
 
   local lines = controller:dashboard_lines("/repo", { dashboard_width = 80 })
-  assert_contains(lines[2], "quota | tpm full 53.0M | rpm full 8300")
+  assert_contains(lines[2], "quota | tpm 100% left | rpm 100% left")
   assert_equal(controller:dashboard_min_height_for_lines(lines), 2, "grok quota line reserves height on dashboard")
 end
 

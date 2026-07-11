@@ -140,21 +140,34 @@ function M:label(opts)
     mode = self.get_mode()
   end
 
-  return token_usage.label(self.state, {
+  local label_opts = {
     enabled = self:enabled(),
     running = running,
     mode = mode,
     show_when_not_running = opts.show_when_not_running,
     show_error = opts.show_error,
-    provider = self.state.usage_provider,
-  })
+  }
+
+  -- Prefer the *active* agent provider's cached metrics so switching Grok/Codex
+  -- does not keep showing the other provider's last snapshot.
+  local agent_provider = providers.normalize_provider(
+    type(self.get_agent_provider) == "function" and self.get_agent_provider() or nil
+  )
+  if agent_provider then
+    return self:label_for_provider(agent_provider, label_opts)
+  end
+
+  label_opts.provider = self.state.usage_provider
+  return token_usage.label(self.state, label_opts)
 end
 
 --- Label usage for a specific agent provider using the per-provider cache.
 function M:label_for_provider(provider, opts)
   opts = type(opts) == "table" and opts or {}
   local cached, normalized = self:provider_cache(provider)
-  return token_usage.label({
+  -- Fall back to root snapshot fields when cache is empty (tests / mid-refresh).
+  local root = self.state
+  local usage = {
     five_hour_percent = cached.five_hour_percent,
     weekly_percent = cached.weekly_percent,
     tpm_percent = cached.tpm_percent,
@@ -165,7 +178,39 @@ function M:label_for_provider(provider, opts)
     rpm_remaining = cached.rpm_remaining,
     last_error = cached.last_error,
     usage_provider = normalized,
-  }, {
+  }
+  if normalized == "codex" then
+    if usage.five_hour_percent == nil then
+      usage.five_hour_percent = root.five_hour_percent
+    end
+    if usage.weekly_percent == nil then
+      usage.weekly_percent = root.weekly_percent
+    end
+  elseif normalized == "grok" then
+    if usage.tpm_percent == nil then
+      usage.tpm_percent = root.tpm_percent
+    end
+    if usage.rpm_percent == nil then
+      usage.rpm_percent = root.rpm_percent
+    end
+    if usage.tpm_limit == nil then
+      usage.tpm_limit = root.tpm_limit
+    end
+    if usage.tpm_remaining == nil then
+      usage.tpm_remaining = root.tpm_remaining
+    end
+    if usage.rpm_limit == nil then
+      usage.rpm_limit = root.rpm_limit
+    end
+    if usage.rpm_remaining == nil then
+      usage.rpm_remaining = root.rpm_remaining
+    end
+  end
+  if usage.last_error == nil then
+    usage.last_error = root.last_error
+  end
+
+  return token_usage.label(usage, {
     enabled = self:enabled(),
     running = opts.running,
     mode = opts.mode,
@@ -426,10 +471,39 @@ function M.resolve_grok_api_key(opts)
     return nil, "Grok credentials file is invalid"
   end
 
+  -- Common shapes: flat { key = "..." }, nested provider map values, or api_key aliases.
+  if type(decoded.key) == "string" and decoded.key ~= "" then
+    return decoded.key
+  end
+  if type(decoded.api_key) == "string" and decoded.api_key ~= "" then
+    return decoded.api_key
+  end
+  if type(decoded.access_token) == "string" and decoded.access_token ~= "" then
+    return decoded.access_token
+  end
+
+  local fallback = nil
   for _, entry in pairs(decoded) do
-    if type(entry) == "table" and type(entry.key) == "string" and entry.key ~= "" then
-      return entry.key
+    if type(entry) == "table" then
+      local key = entry.key or entry.api_key or entry.access_token
+      if type(key) == "string" and key ~= "" then
+        -- Prefer entries that still look unexpired when expires_at is present.
+        local expires_at = entry.expires_at
+        if type(expires_at) == "string" and expires_at ~= "" then
+          -- RFC3339 prefix compare is enough for "not obviously expired".
+          local now = os.date("!%Y-%m-%dT%H:%M:%S")
+          if expires_at >= now then
+            return key
+          end
+          fallback = fallback or key
+        else
+          return key
+        end
+      end
     end
+  end
+  if fallback then
+    return fallback
   end
 
   return nil, "Grok credentials not found"

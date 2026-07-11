@@ -379,16 +379,15 @@ With which-key, the `<leader>z` header shows live Codux status and usage, for ex
 
 ```text
 codux | 5hr 3% | wk 5%
-codux | quota | tpm full 53.0M | rpm full 8300
-codux | quota | tpm used 1.2k/53.0M | rpm used 5/8300
+codux | tpm 100% left | rpm 100% left
 ```
 
 | Provider | How it works | Default refresh |
 | --- | --- | --- |
-| **Codex** | Short-lived `codex app-server` reads account rate limits (`5hr` / `wk` % used) | 60s |
-| **Grok** | Cheap `max_tokens=1` probe to xAI API; **rate-limit headroom** from `x-ratelimit-*` headers (not total tokens billed) | 15s |
+| **Codex** | Short-lived `codex app-server` reads account rate limits (`5hr` / `wk` **% used**) | 60s |
+| **Grok** | Cheap `max_tokens=1` probe to xAI API; TPM/RPM **% remaining** of the rate-limit window from `x-ratelimit-*` headers | 15s |
 
-**Grok labels:** `full <limit>` when nothing is consumed in-window; `used <n>/<limit>` for small dips; percent + remaining when used % > 0. Auth: `token_monitor.grok.api_key` → `XAI_API_KEY` / `GROK_API_KEY` → `~/.grok/auth.json`. Disable with `token_monitor.grok = false` without affecting Codex.
+**Grok labels:** `tpm N% left | rpm M% left` = headroom remaining (full window ≈ `100% left`; exhausted ≈ `0% left`). Auth: `token_monitor.grok.api_key` → `XAI_API_KEY` / `GROK_API_KEY` → `~/.grok/auth.json`. Disable with `token_monitor.grok = false` without affecting Codex.
 
 Mission Control refreshes usage without a main-session terminal; the line follows the **selected role’s provider**. Metrics are cached per provider.
 
@@ -446,8 +445,8 @@ Each workspace is a dedicated tmux window with isolated Git worktree and agent s
 **Full access feels scary — how do profiles work?**  
 Profiles map to CLI sandbox/approval settings (default / auto / full). Prefer default or auto for day-to-day work. Use full-access / danger commands only in trusted repos.
 
-**Why does Grok token usage often show “full” or 0%?**  
-Grok monitoring reports **current-window rate-limit headroom**, not lifetime spend. xAI TPM ceilings are large, so light use often still shows full remaining.
+**What do Grok TPM/RPM percentages mean?**  
+Grok shows **remaining headroom** for the current rate-limit window (`remaining/limit`), so a fresh window is about `100%`. Codex `5hr`/`wk` percentages are **% used** of those windows.
 
 ---
 
