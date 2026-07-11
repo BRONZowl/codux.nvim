@@ -246,7 +246,6 @@ end
 function M.mission_action_items()
   return {
     { key = "s", action = "start_mission", label = "Start Mission" },
-    { key = "g", action = "start_manager", label = "Start Manager" },
     { key = "p", action = "process_dispatch", label = "Process Dispatch" },
     { key = "e", action = "edit_objective", label = "Edit Objective" },
     { key = "f", action = "edit_focus", label = "Edit Focus" },

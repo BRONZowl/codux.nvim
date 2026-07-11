@@ -142,21 +142,21 @@ do
   end
 
   assert_equal(by_key.s, "start_mission")
-  assert_equal(by_key.g, "start_manager")
   assert_equal(by_key.p, "process_dispatch")
   assert_equal(by_key.e, "edit_objective")
   assert_equal(by_key.f, "edit_focus")
   assert_equal(by_key.x, "close_mission")
   assert_equal(by_key.d, "delete_mission")
+  assert_nil(by_key.g)
   assert_nil(by_key.a)
   assert_nil(by_key.v)
   assert_nil(by_key.n)
   assert_nil(by_key.r)
   assert_contains(workspace_ui.mission_action_line(actions[1], 40), "Start Mission")
   assert_equal(labels_by_key.s, "Start Mission")
-  assert_equal(labels_by_key.g, "Start Manager")
   assert_equal(labels_by_key.p, "Process Dispatch")
   assert_equal(labels_by_key.x, "Close Mission")
+  assert_nil(labels_by_key.g)
   assert_nil(labels_by_key.n)
 end
 
