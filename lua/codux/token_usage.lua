@@ -180,15 +180,33 @@ local function percent_label(value)
 end
 
 local function grok_bucket_label(name, percent, remaining, limit)
+  local rem_n = parse_number(remaining)
+  local lim_n = parse_number(limit)
   local rem = M.format_count(remaining)
   local lim = M.format_count(limit)
-  if rem and lim then
-    -- Prefer absolute remaining/limit: large xAI quotas stay at 0% until heavy load.
-    if type(percent) == "number" and percent > 0 then
-      return name .. " " .. tostring(percent) .. "% · " .. rem .. " left"
+
+  if rem_n ~= nil and lim_n ~= nil and lim_n > 0 then
+    local used = lim_n - rem_n
+    if used < 0 then
+      used = 0
     end
-    return name .. " " .. rem .. "/" .. lim
+
+    -- Non-zero percent: show % used plus remaining headroom.
+    if type(percent) == "number" and percent > 0 then
+      return name .. " " .. tostring(percent) .. "% · " .. (rem or tostring(math.floor(rem_n + 0.5))) .. " left"
+    end
+
+    -- Full window (typical for huge xAI TPM ceilings / recovered RPM).
+    if used <= 0 or rem_n >= lim_n then
+      return name .. " full " .. (lim or tostring(math.floor(lim_n + 0.5)))
+    end
+
+    -- Small used amounts at 0%: surface used so dips remain visible even when
+    -- absolute remaining still rounds to the same millions string as the limit.
+    local used_label = M.format_count(used)
+    return name .. " used " .. (used_label or tostring(math.floor(used + 0.5))) .. "/" .. (lim or tostring(math.floor(lim_n + 0.5)))
   end
+
   return name .. " " .. percent_label(percent)
 end
 

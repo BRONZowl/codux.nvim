@@ -287,8 +287,8 @@ local function refresh_mission_token_usage(force, refresh_opts)
   return token_monitor_setup.refresh_mission_token_usage(force, refresh_opts)
 end
 
-local function token_usage_refresh_ms()
-  return token_monitor_setup.token_usage_refresh_ms()
+local function token_usage_refresh_ms(provider)
+  return token_monitor_setup.token_usage_refresh_ms(provider)
 end
 
 local function token_usage_provider_refreshed_at(provider)
@@ -738,6 +738,10 @@ function M.start_mission(name, opts)
   return workspace_runtime:start_mission(name, opts)
 end
 
+function M.process_mission_dispatch(opts)
+  return workspace_runtime:process_mission_dispatch(opts)
+end
+
 function M.update_mission_objective(name, objective, opts)
   local ok, error_message = workspace_runtime:update_mission_objective(name, objective, opts)
   if not ok and error_message then
@@ -1039,6 +1043,10 @@ function M.health_info()
       weekly_percent = state.token_usage.weekly_percent,
       tpm_percent = state.token_usage.tpm_percent,
       rpm_percent = state.token_usage.rpm_percent,
+      tpm_limit = state.token_usage.tpm_limit,
+      tpm_remaining = state.token_usage.tpm_remaining,
+      rpm_limit = state.token_usage.rpm_limit,
+      rpm_remaining = state.token_usage.rpm_remaining,
       usage_provider = state.token_usage.usage_provider,
       in_flight = state.token_usage.in_flight,
       in_flight_provider = state.token_usage.in_flight_provider,

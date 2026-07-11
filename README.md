@@ -184,6 +184,7 @@ require("codux").setup({
     -- codex_cmd = "codex",
     grok = {
       enabled = true,
+      refresh_ms = 15000, -- faster poll; RPM headroom recovers within seconds
       base_url = "https://api.x.ai/v1",
       model = "grok-4.5",
       -- api_key = nil, -- or set XAI_API_KEY / GROK_API_KEY
@@ -292,16 +293,25 @@ objective. Run `:CoduxMissionCreate`, enter the mission name, choose Codex or
 Grok, choose default, auto, or full profile, enter the objective, review the
 preview, and launch.
 
-New missions start with one default agent:
+Every new mission always creates a **Manager** role, plus a default worker:
 
-- Agent: creates the requested outcome accurately, keeps context focused,
+- **Manager**: owns the objective and focus packet, plans work, and coordinates
+  worker roles. Selecting the **mission row** in Mission Control previews and
+  controls this Manager session (same Output panel and `<C-o>` as a role row).
+- **Agent**: creates the requested outcome accurately, keeps context focused,
   validates cheaply, and asks only high-impact questions.
 
-This default is only the starting point. A mission can have as many agents as
-you want: create additional role workspaces from the mission dashboard whenever
-the work needs more focused lanes.
+Add more workers anytime from the mission dashboard (create role workspace).
+Custom role lists still get a Manager injected when one is missing.
 
-Each agent gets a clean Git worktree workspace under the project-scoped
+The Manager can request sibling start/prompt/create by writing JSON dispatch
+files under `.agents/codux/missions/<mission>/dispatch/pending/`. Codux
+processes pending files while Mission Control is open (dashboard monitor) or
+when you run `:CoduxMissionProcessDispatch`. Successful files move to `done/`;
+failures go to `failed/`. Supported ops: `start`, `prompt`, `start_and_prompt`,
+`create_role`, `update_focus`.
+
+Each role gets a clean Git worktree workspace under the project-scoped
 `../codux-worktrees/<project>/<workspace>` directory, mission metadata in Codux
 workspace state, the chosen permission profile and agent provider, and an initial
 plan-mode prompt. If Codux cannot confirm plan mode for a newly created mission
@@ -315,14 +325,14 @@ workspace instruction into a transcript.
 
 `:CoduxMissions`, `:CoduxMissionDashboard`, and `<leader>zM` open the mission
 dashboard. It shows mission and role rows with status, mode, profile, age, and
-target, plus a live `Output:` panel for the highlighted role. Mission rows do
-not control output directly; active role rows preview that role workspace's
-agent session. When an active role preview is shown, the dashboard gives more
-space to the output panel while keeping the selected row visible. The preview
-uses the role's Codux terminal controls, so output control behaves like the
-default `<leader>zc` Codux window while staying inside the dashboard layout.
-Profile labels include the provider, and switching the profile of a highlighted
-active role refreshes the output preview after the restarted session is ready.
+target, plus a live `Output:` panel. Highlight a **mission** row to drive the
+**Manager** console; highlight a **role** row to preview that worker's session.
+When an active preview is shown, the dashboard gives more space to the output
+panel while keeping the selected row visible. The preview uses the role's Codux
+terminal controls, so output control behaves like the default `<leader>zc` Codux
+window while staying inside the dashboard layout. Profile labels include the
+provider, and switching the profile of a highlighted active role refreshes the
+output preview after the restarted session is ready.
 
 Dashboard controls:
 
@@ -341,11 +351,13 @@ While controlling role output, type directly into the agent session. `<C-o>`
 returns to the mission dashboard and `<C-q>` closes Mission Control. `Esc`
 continues to belong to the agent inside the output session.
 
-Mission menu actions include start/reopen mission, view objective, edit
-objective, edit focus, close mission, delete mission, and create a mission. Role
-workspace menus include start workspace, prompt or answer when available,
-interrupt, switch mode, switch provider/profile, rename role, edit instructions,
-close workspace, delete workspace, and create workspace.
+Mission menu actions include start/reopen mission, **Start Manager**, **Process
+Dispatch** (pending Manager handoff files), view/edit objective, edit focus,
+**Add Manager** (legacy missions), close mission, delete mission, and create a
+mission. Role workspace menus include start workspace, **Prompt Role**, switch
+provider/profile, rename role, edit instructions, close workspace, delete
+workspace, and create workspace. Recent dispatch results appear as a
+`dispatch | N ok | M failed` status line on the dashboard when handoffs run.
 
 Close and delete are separate operations. Closing a mission only closes role
 windows and preserves worktrees, branches, instructions, saved state, and mission
@@ -360,15 +372,17 @@ The `<leader>z` which-key header shows Codux status and token usage, for example
 
 ```text
 codux | 5hr 3% | wk 5%
-codux | quota | tpm 53.0M/53.0M | rpm 8300/8300
+codux | quota | tpm full 53.0M | rpm full 8300
+codux | quota | tpm used 1.2k/53.0M | rpm used 5/8300
 ```
 
-Token monitoring refreshes in the background while a session is running
-(`refresh_ms`, default 60s). Mission Control also refreshes usage without an
-active main-session terminal. The usage line follows the **selected mission
-role’s agent provider** (Codex vs Grok). Metrics are cached per provider so
-switching selection updates the label format immediately and each provider is
-throttled independently.
+Token monitoring refreshes in the background while a session is running.
+Codex uses `refresh_ms` (default 60s). Grok uses `token_monitor.grok.refresh_ms`
+(default 15s) because request rate-limit headroom can recover within seconds.
+Mission Control also refreshes usage without an active main-session terminal.
+The usage line follows the **selected mission role’s agent provider** (Codex vs
+Grok). Metrics are cached per provider so switching selection updates the label
+format immediately and each provider is throttled independently.
 
 **Codex** usage is unchanged: each check starts a short-lived `codex app-server`
 process and reads account rate limits (`timeout_ms`, default 5s), shown as
@@ -378,11 +392,12 @@ process and reads account rate limits (`timeout_ms`, default 5s), shown as
 `x-ratelimit-*` headers. That is **rate-limit headroom for the current window**,
 not total tokens billed for your chat. xAI tier TPM ceilings are very large
 (often tens of millions), so light use often still reports full remaining and
-integer **0% used**. Codux therefore prefers absolute remaining/limit in the
-label (`tpm 53.0M/53.0M`) and only switches to percent when used % is above
-zero. Auth is resolved from `token_monitor.grok.api_key`, then `XAI_API_KEY` /
-`GROK_API_KEY`, then `~/.grok/auth.json` (same OAuth key as `grok login`). The
-probe incurs a small API cost per refresh; disable with
+integer **0% used**. Labels therefore show `full <limit>` when nothing is
+consumed in the window, `used <n>/<limit>` for small dips that would still
+round to the same millions string, and percent + remaining only when used % is
+above zero. Auth is resolved from `token_monitor.grok.api_key`, then
+`XAI_API_KEY` / `GROK_API_KEY`, then `~/.grok/auth.json` (same OAuth key as
+`grok login`). The probe incurs a small API cost per refresh; disable with
 `token_monitor.grok = false` without affecting Codex monitoring.
 
 If usage is unavailable (CLI missing, timeout, API error, no credentials),

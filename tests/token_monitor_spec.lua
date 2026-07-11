@@ -16,6 +16,12 @@ local function monitor_with_config(config, opts)
       enabled = true,
       refresh_ms = 60000,
       timeout_ms = 5000,
+      grok = {
+        enabled = true,
+        refresh_ms = 15000,
+        base_url = "https://api.x.ai/v1",
+        model = "grok-4.5",
+      },
     },
     state = opts.state or {},
     get_config = function()
@@ -351,7 +357,7 @@ do
   assert_equal(token_usage.format_count(8300), "8300")
   assert_equal(token_usage.format_count(12500), "12.5k")
 
-  -- Absolute remaining/limit when percent is 0 (typical for large xAI quotas).
+  -- Full window: honest "full" so light use is not mistaken for a frozen rem/lim pair.
   assert_equal(
     token_usage.label({
       tpm_percent = 0,
@@ -362,7 +368,20 @@ do
       rpm_remaining = 8300,
       usage_provider = "grok",
     }),
-    "quota | tpm 53.0M/53.0M | rpm 8300/8300"
+    "quota | tpm full 53.0M | rpm full 8300"
+  )
+  -- Small used with 0% (large TPM ceilings): surface used so dips are visible.
+  assert_equal(
+    token_usage.label({
+      tpm_percent = 0,
+      rpm_percent = 0,
+      tpm_limit = 53000000,
+      tpm_remaining = 52999000,
+      rpm_limit = 8300,
+      rpm_remaining = 8295,
+      usage_provider = "grok",
+    }),
+    "quota | tpm used 1000/53.0M | rpm used 5/8300"
   )
   -- When percent is non-zero, show percent and remaining.
   assert_equal(
@@ -388,6 +407,44 @@ do
   )
 end
 
+do
+  local monitor = monitor_with_config({
+    token_monitor = {
+      enabled = true,
+      refresh_ms = 60000,
+      grok = { enabled = true, refresh_ms = 15000 },
+    },
+  }, {
+    get_agent_provider = function()
+      return "codex"
+    end,
+  })
+  assert_equal(monitor:refresh_ms(), 60000, "codex uses top-level refresh_ms")
+  assert_equal(monitor:refresh_ms("codex"), 60000)
+  assert_equal(monitor:refresh_ms("grok"), 15000, "grok uses grok.refresh_ms")
+
+  local grok_default = monitor_with_config({
+    token_monitor = {
+      enabled = true,
+      refresh_ms = 60000,
+      grok = { enabled = true },
+    },
+  }, {
+    get_agent_provider = function()
+      return "grok"
+    end,
+  })
+  assert_equal(grok_default:refresh_ms(), 15000, "default grok interval when provider is grok")
+
+  local grok_override = monitor_with_config({
+    token_monitor = {
+      enabled = true,
+      refresh_ms = 60000,
+      grok = { enabled = true, refresh_ms = 8000 },
+    },
+  })
+  assert_equal(grok_override:refresh_ms("grok"), 8000)
+end
 do
   local state = {
     five_hour_percent = 5,
@@ -746,12 +803,17 @@ end
 do
   local now_ms = 1000
   local refresh_calls = {}
+  local refresh_ms_args = {}
   local controller = {
     state = {},
     token_usage_now_ms = function()
       return now_ms
     end,
-    token_usage_refresh_ms = function()
+    token_usage_refresh_ms = function(provider)
+      table.insert(refresh_ms_args, provider)
+      if provider == "grok" then
+        return 15000
+      end
       return 60000
     end,
     selected_item = function()
@@ -767,9 +829,11 @@ do
   assert_equal(#refresh_calls, 1)
   assert_equal(refresh_calls[1].force, true)
   assert_equal(refresh_calls[1].opts.agent_provider, "codex")
+  assert_equal(refresh_ms_args[1], "codex", "throttle should request refresh_ms for selected provider")
 
   assert_true(dashboard_render.refresh_dashboard_token_usage(controller, true, { agent_provider = "grok" }))
   assert_equal(refresh_calls[2].opts.agent_provider, "grok", "explicit override should win")
+  assert_equal(refresh_ms_args[2], "grok")
 end
 
 do

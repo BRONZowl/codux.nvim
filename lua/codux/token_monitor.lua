@@ -60,13 +60,33 @@ function M:enabled()
   return self:config().enabled ~= false
 end
 
-function M:refresh_ms()
-  local value = tonumber(self:config().refresh_ms)
-  if value == nil or value < 10000 then
-    return self.defaults.refresh_ms
+function M:refresh_ms(provider)
+  local monitor = self:config()
+  local base = tonumber(monitor.refresh_ms)
+  if base == nil or base < 10000 then
+    base = tonumber(self.defaults.refresh_ms) or 60000
   end
 
-  return value
+  provider = providers.normalize_provider(provider)
+  if provider == nil and type(self.get_agent_provider) == "function" then
+    provider = providers.normalize_provider(self.get_agent_provider())
+  end
+  provider = provider or "codex"
+
+  if provider == "grok" then
+    local grok = self:grok_config()
+    local grok_ms = tonumber(type(grok) == "table" and grok.refresh_ms or nil)
+    if grok_ms ~= nil and grok_ms >= 5000 then
+      return grok_ms
+    end
+    local default_grok = type(self.defaults.grok) == "table" and tonumber(self.defaults.grok.refresh_ms) or nil
+    if default_grok ~= nil and default_grok >= 5000 then
+      return default_grok
+    end
+    return 15000
+  end
+
+  return base
 end
 
 function M:timeout_ms()

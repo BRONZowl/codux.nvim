@@ -324,11 +324,14 @@ end
 function M.refresh_dashboard_token_usage(controller, force, opts)
   opts = type(opts) == "table" and opts or {}
   local now = tonumber(controller.token_usage_now_ms()) or (os.time() * 1000)
-  local refresh_ms = tonumber(controller.token_usage_refresh_ms()) or 60000
-  refresh_ms = math.max(10000, refresh_ms)
 
   local agent_provider = opts.agent_provider or M.dashboard_token_agent_provider(controller)
   agent_provider = providers.normalize_provider(agent_provider) or "codex"
+
+  local refresh_ms = tonumber(controller.token_usage_refresh_ms(agent_provider)) or 60000
+  -- Grok allows a faster poll (default 15s); Codex stays at the 10s floor.
+  local min_ms = agent_provider == "grok" and 5000 or 10000
+  refresh_ms = math.max(min_ms, refresh_ms)
 
   local previous = providers.normalize_provider(controller.state.mission_dashboard_token_usage_provider)
   if not force and previous and previous ~= agent_provider then

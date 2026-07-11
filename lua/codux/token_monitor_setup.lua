@@ -55,8 +55,8 @@ function M.new(opts)
         agent_provider = refresh_opts.agent_provider,
       })
     end,
-    token_usage_refresh_ms = function()
-      return monitor:refresh_ms()
+    token_usage_refresh_ms = function(provider)
+      return monitor:refresh_ms(provider)
     end,
     start = function()
       return monitor:start()

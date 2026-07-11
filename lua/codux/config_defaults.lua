@@ -36,6 +36,8 @@ function M.defaults()
       timeout_ms = 5000,
       grok = {
         enabled = true,
+        -- Faster than Codex: RPM headroom recovers within seconds on many tiers.
+        refresh_ms = 15000,
         base_url = "https://api.x.ai/v1",
         model = "grok-4.5",
         auth_file = nil,
