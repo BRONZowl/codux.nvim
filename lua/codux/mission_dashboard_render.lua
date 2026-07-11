@@ -339,7 +339,7 @@ function M.refresh_dashboard_token_usage(controller, force, opts)
     return false
   end
 
-  local refresh_ms = tonumber(controller.token_usage_refresh_ms(agent_provider)) or 60000
+  local refresh_ms = tonumber(controller.token_usage_refresh_ms()) or 60000
   refresh_ms = math.max(10000, refresh_ms)
 
   local last = nil

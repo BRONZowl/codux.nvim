@@ -240,8 +240,8 @@ function M:title()
   local usage = self.token_usage_label()
   local title = { { " codux ", self:mode_status_hl() } }
   if usage ~= "" then
-    -- Drop repeated prefixes so the window title stays compact next to "codux".
-    local compact_usage = usage:gsub("^usage%s*|%s*", ""):gsub("^quota%s*|%s*", "")
+    -- Drop the repeated "usage |" prefix so the title stays compact next to "codux".
+    local compact_usage = usage:gsub("^usage%s*|%s*", "")
     table.insert(title, { "| " .. compact_usage .. " ", "CoduxWhichKeyUsage" })
   end
 
@@ -266,7 +266,7 @@ function M:title_display_width()
   return #text
 end
 
---- Ensure the which-key popup is wide enough to show "codux" plus usage/quota.
+--- Ensure the which-key popup is wide enough to show "codux" plus usage.
 function M:chrome_min_width()
   -- Border + small padding so the title is not clipped against the frame.
   local min_width = self:title_display_width() + 4
@@ -301,7 +301,7 @@ function M:with_chrome(callback)
   end
 
   -- which-key sizes the popup from mapping columns; raise min width so the
-  -- longer Grok quota title still keeps "codux" visible.
+  -- usage title keeps "codux" visible.
   local min_width = self:chrome_min_width()
   if type(win_config.width) == "table" then
     local width = {}

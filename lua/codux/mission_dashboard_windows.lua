@@ -328,6 +328,10 @@ function M.open_dashboard(controller, root)
   })
   controller.state.mission_dashboard.win = win
   controller:refresh_dashboard_token_usage(true)
+  -- Lines were built before items/selection existed, so usage may have used the
+  -- default provider. Re-render now that selection is set (Grok-only crews must
+  -- not keep a stale Codex usage line until the monitor timer fires).
+  controller:render_dashboard({ skip_token_refresh = true })
   controller.state.mission_dashboard.resize_augroup = vim.api.nvim_create_augroup(
     "codux-mission-dashboard-" .. tostring(bufnr),
     { clear = true }

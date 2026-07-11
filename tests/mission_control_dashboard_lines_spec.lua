@@ -265,6 +265,79 @@ do
   assert_false(mission_dashboard.is_token_usage_line("1 mission | 1 role"))
 end
 
+-- Grok-selected Mission Control must omit the usage line; Codex selection keeps it.
+do
+  local controller = mission_control_mod.new({
+    default_agent_provider = function()
+      return "codex"
+    end,
+    token_usage_label = function(provider)
+      if provider == "grok" then
+        return ""
+      end
+      return "usage | 5hr 12% | wk 34%"
+    end,
+    workspace_entries_for_project = function()
+      return {
+        {
+          name = "alpha-agent",
+          safe_name = "alpha-agent",
+          mission_id = "mission:alpha",
+          mission_name = "Alpha",
+          mission_role = "Agent",
+          agent_provider = "grok",
+          status = "idle",
+        },
+      }, nil
+    end,
+  })
+
+  local lines, items, rows = controller:dashboard_lines("/repo", { dashboard_width = 80 })
+  -- First paint can fall back to default provider before items exist; seed selection.
+  controller.state.mission_dashboard.items = items
+  controller.state.mission_dashboard.selectable_rows = rows
+  controller.state.mission_dashboard.selected_row = rows[#rows]
+  lines = controller:dashboard_lines("/repo", { dashboard_width = 80 })
+  local text = table.concat(lines, "\n")
+  assert_equal(text:find("usage | ", 1, true), nil, "Grok role selection must hide usage line")
+  assert_equal(controller:dashboard_min_height_for_lines(lines), 1)
+end
+
+do
+  local controller = mission_control_mod.new({
+    default_agent_provider = function()
+      return "grok"
+    end,
+    token_usage_label = function(provider)
+      if provider == "grok" then
+        return ""
+      end
+      return "usage | 5hr 12% | wk 34%"
+    end,
+    workspace_entries_for_project = function()
+      return {
+        {
+          name = "alpha-agent",
+          safe_name = "alpha-agent",
+          mission_id = "mission:alpha",
+          mission_name = "Alpha",
+          mission_role = "Agent",
+          agent_provider = "codex",
+          status = "idle",
+        },
+      }, nil
+    end,
+  })
+
+  local lines, items, rows = controller:dashboard_lines("/repo", { dashboard_width = 80 })
+  controller.state.mission_dashboard.items = items
+  controller.state.mission_dashboard.selectable_rows = rows
+  controller.state.mission_dashboard.selected_row = rows[#rows]
+  lines = controller:dashboard_lines("/repo", { dashboard_width = 80 })
+  assert_contains(table.concat(lines, "\n"), "usage | 5hr 12% | wk 34%")
+  assert_equal(controller:dashboard_min_height_for_lines(lines), 2)
+end
+
 do
   local controller = mission_control_mod.new({
     token_usage_label = function()

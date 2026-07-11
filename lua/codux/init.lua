@@ -287,8 +287,8 @@ local function refresh_mission_token_usage(force, refresh_opts)
   return token_monitor_setup.refresh_mission_token_usage(force, refresh_opts)
 end
 
-local function token_usage_refresh_ms(provider)
-  return token_monitor_setup.token_usage_refresh_ms(provider)
+local function token_usage_refresh_ms()
+  return token_monitor_setup.token_usage_refresh_ms()
 end
 
 local function token_usage_provider_refreshed_at(provider)
