@@ -139,6 +139,10 @@ function M:label_for_provider(provider, opts)
     weekly_percent = cached.weekly_percent,
     tpm_percent = cached.tpm_percent,
     rpm_percent = cached.rpm_percent,
+    tpm_limit = cached.tpm_limit,
+    tpm_remaining = cached.tpm_remaining,
+    rpm_limit = cached.rpm_limit,
+    rpm_remaining = cached.rpm_remaining,
     last_error = cached.last_error,
     usage_provider = normalized,
   }, {
@@ -170,6 +174,10 @@ function M:clear_usage()
   self.state.weekly_percent = nil
   self.state.tpm_percent = nil
   self.state.rpm_percent = nil
+  self.state.tpm_limit = nil
+  self.state.tpm_remaining = nil
+  self.state.rpm_limit = nil
+  self.state.rpm_remaining = nil
   self.state.usage_provider = nil
   self.state.last_error = nil
   self.state.in_flight_provider = nil
@@ -208,13 +216,27 @@ function M:complete_request(job_id, usage, error_message, stop_job)
   self.state.initialized = false
 
   if type(usage) == "table" then
-    if usage.usage_provider == "grok" or usage.tpm_percent ~= nil or usage.rpm_percent ~= nil then
+    if
+      usage.usage_provider == "grok"
+      or usage.tpm_percent ~= nil
+      or usage.rpm_percent ~= nil
+      or usage.tpm_remaining ~= nil
+      or usage.rpm_remaining ~= nil
+    then
       self.state.tpm_percent = usage.tpm_percent
       self.state.rpm_percent = usage.rpm_percent
+      self.state.tpm_limit = usage.tpm_limit
+      self.state.tpm_remaining = usage.tpm_remaining
+      self.state.rpm_limit = usage.rpm_limit
+      self.state.rpm_remaining = usage.rpm_remaining
       self.state.usage_provider = "grok"
       self:write_provider_cache("grok", {
         tpm_percent = usage.tpm_percent,
         rpm_percent = usage.rpm_percent,
+        tpm_limit = usage.tpm_limit,
+        tpm_remaining = usage.tpm_remaining,
+        rpm_limit = usage.rpm_limit,
+        rpm_remaining = usage.rpm_remaining,
         last_error = nil,
       })
     else
@@ -398,11 +420,19 @@ function M:refresh_grok(force)
   if grok.enabled == false then
     self.state.tpm_percent = nil
     self.state.rpm_percent = nil
+    self.state.tpm_limit = nil
+    self.state.tpm_remaining = nil
+    self.state.rpm_limit = nil
+    self.state.rpm_remaining = nil
     self.state.usage_provider = "grok"
     self.state.last_error = nil
     self:write_provider_cache("grok", {
       tpm_percent = nil,
       rpm_percent = nil,
+      tpm_limit = nil,
+      tpm_remaining = nil,
+      rpm_limit = nil,
+      rpm_remaining = nil,
       last_error = nil,
     })
     self.on_update()
@@ -426,10 +456,18 @@ function M:refresh_grok(force)
     self.state.usage_provider = "grok"
     self.state.tpm_percent = nil
     self.state.rpm_percent = nil
+    self.state.tpm_limit = nil
+    self.state.tpm_remaining = nil
+    self.state.rpm_limit = nil
+    self.state.rpm_remaining = nil
     self.state.last_error = auth_error or "Grok credentials not found"
     self:write_provider_cache("grok", {
       tpm_percent = nil,
       rpm_percent = nil,
+      tpm_limit = nil,
+      tpm_remaining = nil,
+      rpm_limit = nil,
+      rpm_remaining = nil,
       last_error = self.state.last_error,
     })
     self.on_update()

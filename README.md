@@ -359,7 +359,7 @@ The `<leader>z` which-key header shows Codux status and token usage, for example
 
 ```text
 codux | 5hr 3% | wk 5%
-codux | tpm 2% | rpm 0%
+codux | quota | tpm 53.0M/53.0M | rpm 8300/8300
 ```
 
 Token monitoring refreshes in the background while a session is running
@@ -374,11 +374,15 @@ process and reads account rate limits (`timeout_ms`, default 5s), shown as
 `5hr` / `wk` percent used.
 
 **Grok** usage uses a cheap `max_tokens=1` probe against the xAI API and reads
-`x-ratelimit-*` headers, shown as `tpm` / `rpm` percent used. Auth is resolved
-from `token_monitor.grok.api_key`, then `XAI_API_KEY` / `GROK_API_KEY`, then
-`~/.grok/auth.json` (same OAuth key as `grok login`). This probe incurs a small
-API cost per refresh; disable with `token_monitor.grok = false` without
-affecting Codex monitoring.
+`x-ratelimit-*` headers. That is **rate-limit headroom for the current window**,
+not total tokens billed for your chat. xAI tier TPM ceilings are very large
+(often tens of millions), so light use often still reports full remaining and
+integer **0% used**. Codux therefore prefers absolute remaining/limit in the
+label (`tpm 53.0M/53.0M`) and only switches to percent when used % is above
+zero. Auth is resolved from `token_monitor.grok.api_key`, then `XAI_API_KEY` /
+`GROK_API_KEY`, then `~/.grok/auth.json` (same OAuth key as `grok login`). The
+probe incurs a small API cost per refresh; disable with
+`token_monitor.grok = false` without affecting Codex monitoring.
 
 If usage is unavailable (CLI missing, timeout, API error, no credentials),
 Codux shows `--%` placeholders; Mission Control may append `(unavailable)`.

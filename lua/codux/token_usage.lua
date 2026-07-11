@@ -58,15 +58,16 @@ function M.parse_response(response)
   return usage
 end
 
+local function parse_number(value)
+  if type(value) == "string" then
+    value = value:match("^%s*(.-)%s*$")
+  end
+  return tonumber(value)
+end
+
 local function used_percent(limit, remaining)
-  if type(limit) == "string" then
-    limit = limit:match("^%s*(.-)%s*$")
-  end
-  if type(remaining) == "string" then
-    remaining = remaining:match("^%s*(.-)%s*$")
-  end
-  limit = tonumber(limit)
-  remaining = tonumber(remaining)
+  limit = parse_number(limit)
+  remaining = parse_number(remaining)
   if limit == nil or limit <= 0 or remaining == nil then
     return nil
   end
@@ -106,7 +107,28 @@ local function parse_header_line(line)
   return name, value
 end
 
+--- Compact absolute counts for rate-limit headroom (e.g. 53000000 -> "53.0M").
+function M.format_count(value)
+  value = parse_number(value)
+  if value == nil then
+    return nil
+  end
+  if value >= 1000000 then
+    local millions = value / 1000000
+    if millions >= 100 then
+      return string.format("%.0fM", millions)
+    end
+    return string.format("%.1fM", millions)
+  end
+  if value >= 10000 then
+    return string.format("%.1fk", value / 1000)
+  end
+  return tostring(math.floor(value + 0.5))
+end
+
 --- Parse xAI rate-limit headers from a header map or raw HTTP header text.
+--- Note: xAI currently reports very large TPM ceilings (tens of millions). Small
+--- real usage often still rounds to 0% used; absolute remaining is more useful.
 function M.parse_grok_headers(headers)
   local map = headers
   if type(headers) == "string" then
@@ -125,22 +147,27 @@ function M.parse_grok_headers(headers)
     return nil
   end
 
-  local tpm = used_percent(
-    header_value(map, "x-ratelimit-limit-tokens"),
-    header_value(map, "x-ratelimit-remaining-tokens")
-  )
-  local rpm = used_percent(
-    header_value(map, "x-ratelimit-limit-requests"),
-    header_value(map, "x-ratelimit-remaining-requests")
-  )
+  local tpm_limit = parse_number(header_value(map, "x-ratelimit-limit-tokens"))
+  local tpm_remaining = parse_number(header_value(map, "x-ratelimit-remaining-tokens"))
+  local rpm_limit = parse_number(header_value(map, "x-ratelimit-limit-requests"))
+  local rpm_remaining = parse_number(header_value(map, "x-ratelimit-remaining-requests"))
 
-  if tpm == nil and rpm == nil then
+  local tpm = used_percent(tpm_limit, tpm_remaining)
+  local rpm = used_percent(rpm_limit, rpm_remaining)
+
+  local has_tpm = tpm ~= nil or (tpm_limit ~= nil and tpm_limit > 0 and tpm_remaining ~= nil)
+  local has_rpm = rpm ~= nil or (rpm_limit ~= nil and rpm_limit > 0 and rpm_remaining ~= nil)
+  if not has_tpm and not has_rpm then
     return nil
   end
 
   return {
     tpm_percent = tpm,
     rpm_percent = rpm,
+    tpm_limit = tpm_limit,
+    tpm_remaining = tpm_remaining,
+    rpm_limit = rpm_limit,
+    rpm_remaining = rpm_remaining,
     usage_provider = "grok",
   }
 end
@@ -150,6 +177,19 @@ local function percent_label(value)
     return "--%"
   end
   return tostring(value) .. "%"
+end
+
+local function grok_bucket_label(name, percent, remaining, limit)
+  local rem = M.format_count(remaining)
+  local lim = M.format_count(limit)
+  if rem and lim then
+    -- Prefer absolute remaining/limit: large xAI quotas stay at 0% until heavy load.
+    if type(percent) == "number" and percent > 0 then
+      return name .. " " .. tostring(percent) .. "% · " .. rem .. " left"
+    end
+    return name .. " " .. rem .. "/" .. lim
+  end
+  return name .. " " .. percent_label(percent)
 end
 
 function M.label(usage, opts)
@@ -165,13 +205,15 @@ function M.label(usage, opts)
 
   local provider = opts.provider or usage.usage_provider
   if provider == "grok" then
-    local label = "usage | tpm "
-      .. percent_label(usage.tpm_percent)
-      .. " | rpm "
-      .. percent_label(usage.rpm_percent)
+    local label = "quota | "
+      .. grok_bucket_label("tpm", usage.tpm_percent, usage.tpm_remaining, usage.tpm_limit)
+      .. " | "
+      .. grok_bucket_label("rpm", usage.rpm_percent, usage.rpm_remaining, usage.rpm_limit)
     if
       usage.tpm_percent == nil
       and usage.rpm_percent == nil
+      and usage.tpm_remaining == nil
+      and usage.rpm_remaining == nil
       and type(usage.last_error) == "string"
       and usage.last_error ~= ""
       and opts.show_error == true

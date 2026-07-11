@@ -347,13 +347,39 @@ do
 end
 
 do
+  assert_equal(token_usage.format_count(53000000), "53.0M")
+  assert_equal(token_usage.format_count(8300), "8300")
+  assert_equal(token_usage.format_count(12500), "12.5k")
+
+  -- Absolute remaining/limit when percent is 0 (typical for large xAI quotas).
   assert_equal(
-    token_usage.label({ tpm_percent = 12, rpm_percent = 3, usage_provider = "grok" }),
-    "usage | tpm 12% | rpm 3%"
+    token_usage.label({
+      tpm_percent = 0,
+      rpm_percent = 0,
+      tpm_limit = 53000000,
+      tpm_remaining = 53000000,
+      rpm_limit = 8300,
+      rpm_remaining = 8300,
+      usage_provider = "grok",
+    }),
+    "quota | tpm 53.0M/53.0M | rpm 8300/8300"
+  )
+  -- When percent is non-zero, show percent and remaining.
+  assert_equal(
+    token_usage.label({
+      tpm_percent = 12,
+      rpm_percent = 3,
+      tpm_limit = 100,
+      tpm_remaining = 88,
+      rpm_limit = 100,
+      rpm_remaining = 97,
+      usage_provider = "grok",
+    }),
+    "quota | tpm 12% · 88 left | rpm 3% · 97 left"
   )
   assert_equal(
     token_usage.label({ last_error = "nope" }, { provider = "grok", show_error = true }),
-    "usage | tpm --% | rpm --% (unavailable)"
+    "quota | tpm --% | rpm --% (unavailable)"
   )
   -- Codex label format must stay byte-identical for the same inputs.
   assert_equal(
@@ -592,10 +618,15 @@ do
     exit_cb(nil, 0)
     assert_equal(state.tpm_percent, 75)
     assert_equal(state.rpm_percent, 50)
+    assert_equal(state.tpm_limit, 100)
+    assert_equal(state.tpm_remaining, 25)
+    assert_equal(state.rpm_limit, 20)
+    assert_equal(state.rpm_remaining, 10)
     assert_equal(state.usage_provider, "grok")
     assert_nil(state.last_error)
     assert_equal(state.by_provider.grok.tpm_percent, 75)
     assert_equal(state.by_provider.grok.rpm_percent, 50)
+    assert_equal(state.by_provider.grok.tpm_remaining, 25)
     assert_nil(state.by_provider.grok.last_error)
     assert_true(type(state.by_provider.grok.refreshed_at) == "number")
     assert_equal(state.five_hour_percent, 11, "Grok success must not clear Codex snapshot")
@@ -674,6 +705,7 @@ do
     exit_cb(nil, 0)
     assert_equal(state.tpm_percent, 75)
     assert_equal(state.rpm_percent, 75)
+    assert_equal(state.tpm_remaining, 50)
     assert_equal(state.usage_provider, "grok")
   end)
   vim.uv = old_uv
@@ -799,18 +831,30 @@ do
   local state = {
     by_provider = {
       codex = { five_hour_percent = 11, weekly_percent = 22, last_error = nil },
-      grok = { tpm_percent = 33, rpm_percent = 44, last_error = nil },
+      grok = {
+        tpm_percent = 33,
+        rpm_percent = 44,
+        tpm_limit = 100,
+        tpm_remaining = 67,
+        rpm_limit = 100,
+        rpm_remaining = 56,
+        last_error = nil,
+      },
     },
     usage_provider = "grok",
     tpm_percent = 33,
     rpm_percent = 44,
+    tpm_limit = 100,
+    tpm_remaining = 67,
+    rpm_limit = 100,
+    rpm_remaining = 56,
     five_hour_percent = 11,
     weekly_percent = 22,
   }
   local monitor = monitor_with_config({ codex_cmd = "codex" }, { state = state })
   assert_equal(monitor:label_for_provider("codex"), "usage | 5hr 11% | wk 22%")
-  assert_equal(monitor:label_for_provider("grok"), "usage | tpm 33% | rpm 44%")
-  assert_equal(monitor:label(), "usage | tpm 33% | rpm 44%", "active snapshot follows usage_provider")
+  assert_equal(monitor:label_for_provider("grok"), "quota | tpm 33% · 67 left | rpm 44% · 56 left")
+  assert_equal(monitor:label(), "quota | tpm 33% · 67 left | rpm 44% · 56 left", "active snapshot follows usage_provider")
 end
 
 do
@@ -824,12 +868,16 @@ do
   monitor:write_provider_cache("grok", {
     tpm_percent = 1,
     rpm_percent = 2,
+    tpm_limit = 100,
+    tpm_remaining = 99,
+    rpm_limit = 50,
+    rpm_remaining = 49,
     last_error = nil,
   })
   assert_equal(state.by_provider.codex.five_hour_percent, 7)
   assert_equal(state.by_provider.grok.tpm_percent, 1)
   assert_equal(monitor:label_for_provider("codex"), "usage | 5hr 7% | wk 8%")
-  assert_equal(monitor:label_for_provider("grok"), "usage | tpm 1% | rpm 2%")
+  assert_equal(monitor:label_for_provider("grok"), "quota | tpm 1% · 99 left | rpm 2% · 49 left")
 end
 
 do
