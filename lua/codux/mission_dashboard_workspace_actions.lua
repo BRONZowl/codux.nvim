@@ -123,7 +123,16 @@ function M.run_workspace_action(controller, action, target)
       return false
     end
     controller:close_action_palette()
-    return controller.close_saved_workspace_window(workspace)
+    local root = workspace.project_root or controller.state.mission_dashboard_project_root or controller.project_root()
+    local ok = controller.close_saved_workspace_window(workspace)
+    -- Tear down stale output attach and refresh status immediately (do not wait on monitor tick).
+    if ok and type(controller.invalidate_output_preview_for_entry) == "function" then
+      controller:invalidate_output_preview_for_entry(workspace)
+    end
+    if type(controller.refresh_loaded_dashboard) == "function" then
+      controller:refresh_loaded_dashboard(root)
+    end
+    return ok
   end
   if action == "delete_workspace" then
     workspace = workspace or controller:selected_role_workspace_or_notify()

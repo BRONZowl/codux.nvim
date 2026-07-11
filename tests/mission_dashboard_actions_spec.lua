@@ -483,7 +483,11 @@ end
 
 do
   local calls = {}
-  local entry = { name = "alpha-builder", safe_name = "alpha-builder" }
+  local entry = {
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    project_root = "/repo",
+  }
   local old_confirm = vim.fn.confirm
   vim.fn.confirm = function(message, choices, default)
     table.insert(calls, "confirm:" .. tostring(message) .. ":" .. tostring(choices) .. ":" .. tostring(default))
@@ -494,6 +498,7 @@ do
   local controller = mission_control_mod.new({
     state = {
       mission_dashboard_action_workspace = entry,
+      mission_dashboard_project_root = "/repo",
     },
     ui = {
       close_window = function() end,
@@ -516,14 +521,31 @@ do
   function controller:close_dashboard()
     dashboard_closed = true
   end
+  function controller:close_action_palette()
+    table.insert(calls, "close_palette")
+    return true
+  end
+  function controller:invalidate_output_preview_for_entry(workspace)
+    table.insert(calls, "invalidate:" .. tostring(workspace.name))
+    return true
+  end
+  function controller:refresh_loaded_dashboard(root)
+    table.insert(calls, "refresh:" .. tostring(root))
+    return true
+  end
 
   assert_true(controller:run_action("edit_instructions", entry))
   assert_true(controller:run_action("close_workspace", entry))
   assert_true(controller:run_action("delete_workspace", entry))
-  assert_equal(calls[1], "edit:alpha-builder")
-  assert_equal(calls[2], "close:alpha-builder")
-  assert_contains(calls[3], "confirm:Delete Codux workspace alpha-builder?")
-  assert_equal(calls[4], "delete:alpha-builder")
+  assert_equal(calls[1], "close_palette")
+  assert_equal(calls[2], "edit:alpha-builder")
+  assert_equal(calls[3], "close_palette")
+  assert_equal(calls[4], "close:alpha-builder")
+  assert_equal(calls[5], "invalidate:alpha-builder")
+  assert_equal(calls[6], "refresh:/repo")
+  assert_equal(calls[7], "close_palette")
+  assert_contains(calls[8], "confirm:Delete Codux workspace alpha-builder?")
+  assert_equal(calls[9], "delete:alpha-builder")
   assert_false(dashboard_closed)
   vim.fn.confirm = old_confirm
 end
