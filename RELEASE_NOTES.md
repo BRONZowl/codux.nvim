@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Removed Grok TPM/RPM monitoring because reading xAI rate-limit headers required recurring inference requests that consumed request and token quota.
+- Kept Codex usage monitoring after auditing its app-server protocol: it calls only `account/rateLimits/read` and does not create a model turn or consume tokens.
+
 ## v1.0.2
 
 Mission Manager dispatch and documentation refresh.

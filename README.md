@@ -35,7 +35,7 @@
 - **Permission profiles** — Start with **default**, **auto**, or **full access**; new sessions default to **plan mode** for safer iteration.
 - **Codux workspaces** — tmux-backed windows with isolated Git worktrees, instruction files, and saved state per stream of work.
 - **Mission Control** — Launch multi-role crews around a shared objective, with a live dashboard, Manager coordination, and focus packets.
-- **Token & status monitoring** — Live usage in the which-key header; Codex rate windows and Grok TPM/RPM headroom.
+- **Token & status monitoring** — Live Codex rate windows in the which-key header without inference requests.
 - **Doctor & health** — `:checkhealth codux` and `:CoduxDoctor` for CLI, tmux, and workspace diagnostics.
 
 ---
@@ -243,14 +243,6 @@ require("codux").setup({
     enabled = true,
     refresh_ms = 60000,
     timeout_ms = 5000,
-    grok = {
-      enabled = true,
-      refresh_ms = 15000, -- RPM headroom recovers quickly
-      base_url = "https://api.x.ai/v1",
-      model = "grok-4.5",
-      -- api_key = nil, -- or XAI_API_KEY / GROK_API_KEY
-      -- auth_file = nil, -- default ~/.grok/auth.json (CLI OAuth)
-    },
   },
   workspaces = {
     enabled = true,
@@ -380,17 +372,19 @@ With which-key, the `<leader>z` header shows live Codux status and usage, for ex
 
 ```text
 codux | 5hr 3% | wk 5%
-codux | tpm 100% left | rpm 100% left
 ```
 
-| Provider | How it works | Default refresh |
-| --- | --- | --- |
-| **Codex** | Short-lived `codex app-server` reads account rate limits (`5hr` / `wk` **% used**) | 60s |
-| **Grok** | Cheap `max_tokens=1` probe to xAI API; TPM/RPM **% remaining** of the rate-limit window from `x-ratelimit-*` headers | 15s |
+Codux starts a short-lived `codex app-server` every 60 seconds and calls only
+`account/rateLimits/read` to read the five-hour and weekly account windows. This
+metadata request does not create a thread, turn, prompt, completion, or model
+inference, so it does not consume Codex tokens.
 
-**Grok labels:** `tpm N% left | rpm M% left` = headroom remaining (full window ≈ `100% left`; exhausted ≈ `0% left`). Auth: `token_monitor.grok.api_key` → `XAI_API_KEY` / `GROK_API_KEY` → `~/.grok/auth.json`. Disable with `token_monitor.grok = false` without affecting Codex.
+Grok usage is intentionally not monitored because xAI exposes the relevant
+rate-limit headers on inference responses; polling them would consume the API
+quota being measured. Grok sessions never start a Codux usage-monitor request.
 
-Mission Control refreshes usage without a main-session terminal; the line follows the **selected role’s provider**. Metrics are cached per provider.
+Mission Control can refresh Codex usage without a main-session terminal. The
+usage line is hidden when a Grok role is selected.
 
 If usage is unavailable, Codux shows `--%` (Mission Control may append `(unavailable)`). Inspect:
 
@@ -432,7 +426,9 @@ Runs plain Lua specs, headless Neovim specs (`--headless -u NONE -i NONE --cmd '
 No. `:CoduxClose` / `<C-q>` only hides the floating window. The session keeps running until `:CoduxExit`.
 
 **Is Grok a second-class citizen?**  
-No. Grok is a first-class provider: open commands, permission profiles, workspaces, Mission Control, theme preference, and token monitoring all support Grok alongside Codex.
+No. Grok is a first-class provider for open commands, permission profiles,
+workspaces, Mission Control, and theme preference. Usage polling is deliberately
+Codex-only because Grok monitoring would require inference requests.
 
 **Why do new sessions start in plan mode?**  
 Plan mode is the safer default for review-first workflows. Toggle with `:CoduxTogglePlan` / `<leader>zp` in the agent terminal, or set `default_initial_mode = "execute"` if you prefer the older startup behavior.
@@ -445,9 +441,6 @@ Each workspace is a dedicated tmux window with isolated Git worktree and agent s
 
 **Full access feels scary — how do profiles work?**  
 Profiles map to CLI sandbox/approval settings (default / auto / full). Prefer default or auto for day-to-day work. Use full-access / danger commands only in trusted repos.
-
-**What do Grok TPM/RPM percentages mean?**  
-Grok shows **remaining headroom** for the current rate-limit window (`remaining/limit`), so a fresh window is about `100%`. Codex `5hr`/`wk` percentages are **% used** of those windows.
 
 ---
 

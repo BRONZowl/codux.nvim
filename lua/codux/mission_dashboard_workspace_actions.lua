@@ -55,11 +55,15 @@ local function open_profile_picker(controller, entry)
             .. profile_label(choice)
             .. (restarted and " and restarted it" or "")
         )
-        -- Refresh usage for the newly selected agent profile, bypassing throttle.
-        if type(controller.refresh_dashboard_token_usage) == "function" then
+        local refreshed_usage = false
+        if
+          providers.token_usage_supported(choice.agent_provider)
+          and type(controller.refresh_dashboard_token_usage) == "function"
+        then
           controller:refresh_dashboard_token_usage(true, { agent_provider = choice.agent_provider })
+          refreshed_usage = true
         end
-        controller:render_dashboard({ skip_token_refresh = true })
+        controller:render_dashboard({ skip_token_refresh = refreshed_usage })
         if restarted and type(controller.retry_output_preview_for_entry) == "function" then
           controller:retry_output_preview_for_entry(entry)
         end

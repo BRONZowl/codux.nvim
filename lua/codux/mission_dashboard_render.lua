@@ -334,31 +334,22 @@ function M.refresh_dashboard_token_usage(controller, force, opts)
   local dashboard = controller.state.mission_dashboard
 
   local agent_provider = opts.agent_provider or M.dashboard_token_agent_provider(controller)
-  agent_provider = providers.normalize_provider(agent_provider) or "codex"
-
-  local refresh_ms = tonumber(controller.token_usage_refresh_ms(agent_provider)) or 60000
-  -- Grok allows a faster poll (default 15s); Codex stays at the 10s floor.
-  local min_ms = agent_provider == "grok" and 5000 or 10000
-  refresh_ms = math.max(min_ms, refresh_ms)
-
-  local previous = providers.normalize_provider(dashboard.token_usage_provider)
-  if not force and previous and previous ~= agent_provider then
-    force = true
+  agent_provider = providers.normalize_provider(agent_provider)
+  if not providers.token_usage_supported(agent_provider) then
+    return false
   end
 
-  -- Throttle per agent provider so Codex and Grok can each refresh on their own cadence.
+  local refresh_ms = tonumber(controller.token_usage_refresh_ms(agent_provider)) or 60000
+  refresh_ms = math.max(10000, refresh_ms)
+
   local last = nil
   if type(controller.token_usage_provider_refreshed_at) == "function" then
     last = tonumber(controller.token_usage_provider_refreshed_at(agent_provider))
   end
   if last == nil then
-    local by_provider = type(dashboard.token_usage_refreshed_at_by_provider) == "table"
-        and dashboard.token_usage_refreshed_at_by_provider
-      or {}
-    last = tonumber(by_provider[agent_provider])
+    last = tonumber(dashboard.token_usage_refreshed_at)
   end
   if not force and last and now - last < refresh_ms then
-    dashboard.token_usage_provider = agent_provider
     return false
   end
 
@@ -370,12 +361,7 @@ function M.refresh_dashboard_token_usage(controller, force, opts)
   })
   if started or reason ~= "in_flight" then
     dashboard.token_usage_refreshed_at = now
-    if type(dashboard.token_usage_refreshed_at_by_provider) ~= "table" then
-      dashboard.token_usage_refreshed_at_by_provider = {}
-    end
-    dashboard.token_usage_refreshed_at_by_provider[agent_provider] = now
   end
-  dashboard.token_usage_provider = agent_provider
   return started
 end
 

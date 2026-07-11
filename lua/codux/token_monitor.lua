@@ -25,14 +25,6 @@ function M.new(opts)
     json_encode = type(opts.json_encode) == "function" and opts.json_encode or json.encode,
     json_decode = type(opts.json_decode) == "function" and opts.json_decode or json.decode,
     on_update = type(opts.on_update) == "function" and opts.on_update or util.noop,
-    read_file = type(opts.read_file) == "function" and opts.read_file or function(path)
-      local ok, lines = pcall(vim.fn.readfile, path)
-      if not ok or type(lines) ~= "table" then
-        return nil
-      end
-      return table.concat(lines, "\n")
-    end,
-    env = type(opts.env) == "table" and opts.env or vim.env,
   }
 
   return setmetatable(monitor, M)
@@ -60,32 +52,12 @@ function M:enabled()
   return self:config().enabled ~= false
 end
 
-function M:refresh_ms(provider)
+function M:refresh_ms()
   local monitor = self:config()
   local base = tonumber(monitor.refresh_ms)
   if base == nil or base < 10000 then
     base = tonumber(self.defaults.refresh_ms) or 60000
   end
-
-  provider = providers.normalize_provider(provider)
-  if provider == nil and type(self.get_agent_provider) == "function" then
-    provider = providers.normalize_provider(self.get_agent_provider())
-  end
-  provider = provider or "codex"
-
-  if provider == "grok" then
-    local grok = self:grok_config()
-    local grok_ms = tonumber(type(grok) == "table" and grok.refresh_ms or nil)
-    if grok_ms ~= nil and grok_ms >= 5000 then
-      return grok_ms
-    end
-    local default_grok = type(self.defaults.grok) == "table" and tonumber(self.defaults.grok.refresh_ms) or nil
-    if default_grok ~= nil and default_grok >= 5000 then
-      return default_grok
-    end
-    return 15000
-  end
-
   return base
 end
 
@@ -96,37 +68,6 @@ function M:timeout_ms()
   end
 
   return value
-end
-
-function M:grok_config()
-  local monitor = self:config()
-  if monitor.grok == false then
-    return { enabled = false }
-  end
-  if type(monitor.grok) ~= "table" then
-    local defaults = type(self.defaults) == "table" and self.defaults.grok or {}
-    return type(defaults) == "table" and defaults or { enabled = true }
-  end
-  return monitor.grok
-end
-
-function M:ensure_by_provider()
-  if type(self.state.by_provider) ~= "table" then
-    self.state.by_provider = { codex = {}, grok = {} }
-  end
-  if type(self.state.by_provider.codex) ~= "table" then
-    self.state.by_provider.codex = {}
-  end
-  if type(self.state.by_provider.grok) ~= "table" then
-    self.state.by_provider.grok = {}
-  end
-  return self.state.by_provider
-end
-
-function M:provider_cache(provider)
-  provider = providers.normalize_provider(provider) or "codex"
-  local caches = self:ensure_by_provider()
-  return caches[provider] or caches.codex, provider
 end
 
 function M:label(opts)
@@ -148,81 +89,34 @@ function M:label(opts)
     show_error = opts.show_error,
   }
 
-  -- Prefer the *active* agent provider's cached metrics so switching Grok/Codex
-  -- does not keep showing the other provider's last snapshot.
   local agent_provider = providers.normalize_provider(
     type(self.get_agent_provider) == "function" and self.get_agent_provider() or nil
   )
-  if agent_provider then
-    return self:label_for_provider(agent_provider, label_opts)
+  if agent_provider and not providers.token_usage_supported(agent_provider) then
+    return ""
   end
-
-  label_opts.provider = self.state.usage_provider
   return token_usage.label(self.state, label_opts)
 end
 
---- Label usage for a specific agent provider using the per-provider cache.
 function M:label_for_provider(provider, opts)
   opts = type(opts) == "table" and opts or {}
-  local cached, normalized = self:provider_cache(provider)
-  -- Fall back to root snapshot fields when cache is empty (tests / mid-refresh).
-  local root = self.state
-  local usage = {
-    five_hour_percent = cached.five_hour_percent,
-    weekly_percent = cached.weekly_percent,
-    tpm_percent = cached.tpm_percent,
-    rpm_percent = cached.rpm_percent,
-    tpm_limit = cached.tpm_limit,
-    tpm_remaining = cached.tpm_remaining,
-    rpm_limit = cached.rpm_limit,
-    rpm_remaining = cached.rpm_remaining,
-    last_error = cached.last_error,
-    usage_provider = normalized,
-  }
-  if normalized == "codex" then
-    if usage.five_hour_percent == nil then
-      usage.five_hour_percent = root.five_hour_percent
-    end
-    if usage.weekly_percent == nil then
-      usage.weekly_percent = root.weekly_percent
-    end
-  elseif normalized == "grok" then
-    if usage.tpm_percent == nil then
-      usage.tpm_percent = root.tpm_percent
-    end
-    if usage.rpm_percent == nil then
-      usage.rpm_percent = root.rpm_percent
-    end
-    if usage.tpm_limit == nil then
-      usage.tpm_limit = root.tpm_limit
-    end
-    if usage.tpm_remaining == nil then
-      usage.tpm_remaining = root.tpm_remaining
-    end
-    if usage.rpm_limit == nil then
-      usage.rpm_limit = root.rpm_limit
-    end
-    if usage.rpm_remaining == nil then
-      usage.rpm_remaining = root.rpm_remaining
-    end
+  if not providers.token_usage_supported(provider) then
+    return ""
   end
-  if usage.last_error == nil then
-    usage.last_error = root.last_error
-  end
-
-  return token_usage.label(usage, {
+  return token_usage.label(self.state, {
     enabled = self:enabled(),
     running = opts.running,
     mode = opts.mode,
     show_when_not_running = opts.show_when_not_running,
     show_error = opts.show_error,
-    provider = normalized,
   })
 end
 
 function M:provider_refreshed_at(provider)
-  local cached = self:provider_cache(provider)
-  return tonumber(cached.refreshed_at)
+  if not providers.token_usage_supported(provider) then
+    return nil
+  end
+  return tonumber(self.state.refreshed_at)
 end
 
 function M:stop_timeout_timer()
@@ -237,31 +131,15 @@ end
 function M:clear_usage()
   self.state.five_hour_percent = nil
   self.state.weekly_percent = nil
-  self.state.tpm_percent = nil
-  self.state.rpm_percent = nil
-  self.state.tpm_limit = nil
-  self.state.tpm_remaining = nil
-  self.state.rpm_limit = nil
-  self.state.rpm_remaining = nil
-  self.state.usage_provider = nil
   self.state.last_error = nil
-  self.state.in_flight_provider = nil
 end
 
 local function now_ms()
   return util.now_ms()
 end
 
-function M:write_provider_cache(provider, fields)
-  local cached, normalized = self:provider_cache(provider)
-  fields = type(fields) == "table" and fields or {}
-  for key, value in pairs(fields) do
-    cached[key] = value
-  end
-  if fields.refreshed_at == nil then
-    cached.refreshed_at = now_ms()
-  end
-  return normalized
+function M:mark_refreshed()
+  self.state.refreshed_at = now_ms()
 end
 
 function M:complete_request(job_id, usage, error_message, stop_job)
@@ -269,58 +147,20 @@ function M:complete_request(job_id, usage, error_message, stop_job)
     return
   end
 
-  local flight_provider = providers.normalize_provider(self.state.in_flight_provider)
-    or providers.normalize_provider(self.state.usage_provider)
-    or "codex"
-
   self:stop_timeout_timer()
   self.state.job_id = nil
   self.state.in_flight = false
-  self.state.in_flight_provider = nil
   self.state.stdout = ""
   self.state.initialized = false
 
   if type(usage) == "table" then
-    if
-      usage.usage_provider == "grok"
-      or usage.tpm_percent ~= nil
-      or usage.rpm_percent ~= nil
-      or usage.tpm_remaining ~= nil
-      or usage.rpm_remaining ~= nil
-    then
-      self.state.tpm_percent = usage.tpm_percent
-      self.state.rpm_percent = usage.rpm_percent
-      self.state.tpm_limit = usage.tpm_limit
-      self.state.tpm_remaining = usage.tpm_remaining
-      self.state.rpm_limit = usage.rpm_limit
-      self.state.rpm_remaining = usage.rpm_remaining
-      self.state.usage_provider = "grok"
-      self:write_provider_cache("grok", {
-        tpm_percent = usage.tpm_percent,
-        rpm_percent = usage.rpm_percent,
-        tpm_limit = usage.tpm_limit,
-        tpm_remaining = usage.tpm_remaining,
-        rpm_limit = usage.rpm_limit,
-        rpm_remaining = usage.rpm_remaining,
-        last_error = nil,
-      })
-    else
-      self.state.five_hour_percent = usage.five_hour_percent
-      self.state.weekly_percent = usage.weekly_percent
-      self.state.usage_provider = "codex"
-      self:write_provider_cache("codex", {
-        five_hour_percent = usage.five_hour_percent,
-        weekly_percent = usage.weekly_percent,
-        last_error = nil,
-      })
-    end
+    self.state.five_hour_percent = usage.five_hour_percent
+    self.state.weekly_percent = usage.weekly_percent
     self.state.last_error = nil
   elseif type(error_message) == "string" and error_message ~= "" then
     self.state.last_error = error_message
-    self:write_provider_cache(flight_provider, {
-      last_error = error_message,
-    })
   end
+  self:mark_refreshed()
 
   if stop_job then
     pcall(vim.fn.jobstop, job_id)
@@ -434,245 +274,7 @@ function M:app_server_command()
   return { executable, "app-server", "--stdio" }, executable, nil
 end
 
-function M.resolve_grok_api_key(opts)
-  opts = type(opts) == "table" and opts or {}
-  local grok = type(opts.grok) == "table" and opts.grok or {}
-  if type(grok.api_key) == "string" and grok.api_key ~= "" then
-    return grok.api_key
-  end
-
-  local env = type(opts.env) == "table" and opts.env or {}
-  if type(env.XAI_API_KEY) == "string" and env.XAI_API_KEY ~= "" then
-    return env.XAI_API_KEY
-  end
-  if type(env.GROK_API_KEY) == "string" and env.GROK_API_KEY ~= "" then
-    return env.GROK_API_KEY
-  end
-
-  local auth_file = grok.auth_file
-  if type(auth_file) ~= "string" or auth_file == "" then
-    local home = type(env.HOME) == "string" and env.HOME or (vim.env and vim.env.HOME) or ""
-    if home ~= "" then
-      auth_file = home .. "/.grok/auth.json"
-    end
-  end
-  if type(auth_file) ~= "string" or auth_file == "" then
-    return nil, "Grok credentials not found"
-  end
-
-  local read_file = type(opts.read_file) == "function" and opts.read_file
-  local content = read_file and read_file(auth_file) or nil
-  if type(content) ~= "string" or content == "" then
-    return nil, "Grok credentials not found"
-  end
-
-  local decoded = (opts.json_decode or json.decode)(content)
-  if type(decoded) ~= "table" then
-    return nil, "Grok credentials file is invalid"
-  end
-
-  -- Common shapes: flat { key = "..." }, nested provider map values, or api_key aliases.
-  if type(decoded.key) == "string" and decoded.key ~= "" then
-    return decoded.key
-  end
-  if type(decoded.api_key) == "string" and decoded.api_key ~= "" then
-    return decoded.api_key
-  end
-  if type(decoded.access_token) == "string" and decoded.access_token ~= "" then
-    return decoded.access_token
-  end
-
-  local fallback = nil
-  for _, entry in pairs(decoded) do
-    if type(entry) == "table" then
-      local key = entry.key or entry.api_key or entry.access_token
-      if type(key) == "string" and key ~= "" then
-        -- Prefer entries that still look unexpired when expires_at is present.
-        local expires_at = entry.expires_at
-        if type(expires_at) == "string" and expires_at ~= "" then
-          -- RFC3339 prefix compare is enough for "not obviously expired".
-          local now = os.date("!%Y-%m-%dT%H:%M:%S")
-          if expires_at >= now then
-            return key
-          end
-          fallback = fallback or key
-        else
-          return key
-        end
-      end
-    end
-  end
-  if fallback then
-    return fallback
-  end
-
-  return nil, "Grok credentials not found"
-end
-
-function M:refresh_grok(force)
-  local grok = self:grok_config()
-  if grok.enabled == false then
-    self.state.tpm_percent = nil
-    self.state.rpm_percent = nil
-    self.state.tpm_limit = nil
-    self.state.tpm_remaining = nil
-    self.state.rpm_limit = nil
-    self.state.rpm_remaining = nil
-    self.state.usage_provider = "grok"
-    self.state.last_error = nil
-    self:write_provider_cache("grok", {
-      tpm_percent = nil,
-      rpm_percent = nil,
-      tpm_limit = nil,
-      tpm_remaining = nil,
-      rpm_limit = nil,
-      rpm_remaining = nil,
-      last_error = nil,
-    })
-    self.on_update()
-    return false
-  end
-
-  if self.state.in_flight then
-    if not force then
-      return false, "in_flight"
-    end
-    self:complete_request(self.state.job_id, nil, "Grok token usage request was replaced", true)
-  end
-
-  local api_key, auth_error = M.resolve_grok_api_key({
-    grok = grok,
-    env = self.env,
-    read_file = self.read_file,
-    json_decode = self.json_decode,
-  })
-  if not api_key then
-    self.state.usage_provider = "grok"
-    self.state.tpm_percent = nil
-    self.state.rpm_percent = nil
-    self.state.tpm_limit = nil
-    self.state.tpm_remaining = nil
-    self.state.rpm_limit = nil
-    self.state.rpm_remaining = nil
-    self.state.last_error = auth_error or "Grok credentials not found"
-    self:write_provider_cache("grok", {
-      tpm_percent = nil,
-      rpm_percent = nil,
-      tpm_limit = nil,
-      tpm_remaining = nil,
-      rpm_limit = nil,
-      rpm_remaining = nil,
-      last_error = self.state.last_error,
-    })
-    self.on_update()
-    return false
-  end
-
-  if vim.fn.executable("curl") ~= 1 then
-    self.state.usage_provider = "grok"
-    self.state.last_error = "curl not found on PATH (required for Grok token usage)"
-    self:write_provider_cache("grok", {
-      last_error = self.state.last_error,
-    })
-    self.on_update()
-    return false
-  end
-
-  local base_url = type(grok.base_url) == "string" and grok.base_url ~= "" and grok.base_url or "https://api.x.ai/v1"
-  base_url = base_url:gsub("/+$", "")
-  local model = type(grok.model) == "string" and grok.model ~= "" and grok.model or "grok-4.5"
-  local payload = self.json_encode({
-    model = model,
-    messages = { { role = "user", content = "." } },
-    max_tokens = 1,
-  })
-
-  local command = {
-    "curl",
-    "-sS",
-    "-D",
-    "-",
-    "-o",
-    "/dev/null",
-    "-X",
-    "POST",
-    base_url .. "/chat/completions",
-    "-H",
-    "Authorization: Bearer " .. api_key,
-    "-H",
-    "Content-Type: application/json",
-    "-H",
-    "Accept: application/json",
-    "-H",
-    "User-Agent: codux.nvim",
-    "--data-binary",
-    payload,
-  }
-
-  self.state.in_flight = true
-  self.state.in_flight_provider = "grok"
-  self.state.stdout = ""
-  self.state.initialized = false
-  self.state.last_error = nil
-  self.state.usage_provider = "grok"
-
-  local job_id
-  -- Accumulate stdout synchronously so a scheduled on_exit never races an empty buffer.
-  -- Only complete_request / UI work is deferred via schedule_wrap.
-  job_id = vim.fn.jobstart(command, {
-    stdout_buffered = true,
-    stderr_buffered = true,
-    on_stdout = function(_, data)
-      if self.state.job_id ~= job_id or type(data) ~= "table" then
-        return
-      end
-      self.state.stdout = (self.state.stdout or "") .. table.concat(data, "\n")
-    end,
-    on_exit = vim.schedule_wrap(function(_, code)
-      if self.state.job_id ~= job_id then
-        return
-      end
-      local raw = self.state.stdout or ""
-      local usage = token_usage.parse_grok_headers(raw)
-      if usage then
-        self:complete_request(job_id, usage, nil, false)
-        return
-      end
-      local message = "Grok token usage response was unavailable"
-      if code ~= 0 then
-        message = "Grok token usage request exited with code " .. tostring(code)
-      elseif raw:find("401", 1, true) or raw:lower():find("unauthenticated", 1, true) then
-        message = "Grok token usage authentication failed"
-      end
-      self:complete_request(job_id, nil, message, false)
-    end),
-  })
-
-  if type(job_id) ~= "number" or job_id <= 0 then
-    self.state.job_id = nil
-    self.state.in_flight = false
-    self.state.in_flight_provider = nil
-    self.state.last_error = "Failed to start Grok token usage probe"
-    self:write_provider_cache("grok", { last_error = self.state.last_error })
-    self.on_update()
-    return false
-  end
-
-  self.state.job_id = job_id
-
-  local loop = vim.uv or vim.loop
-  local timer = loop and loop.new_timer()
-  if timer then
-    self.state.timeout_timer = timer
-    timer:start(self:timeout_ms(), 0, vim.schedule_wrap(function()
-      self:complete_request(job_id, nil, "Grok token usage request timed out", true)
-    end))
-  end
-
-  return true
-end
-
---- Codex path: preserved behavior (app-server rate limits).
+--- Read Codex account metadata without creating a thread, turn, prompt, or model request.
 function M:refresh_codex(force)
   if self.state.in_flight then
     if not force then
@@ -684,26 +286,22 @@ function M:refresh_codex(force)
   local command, executable, command_error = self:app_server_command()
   if command_error then
     self.state.last_error = command_error
-    self.state.usage_provider = "codex"
-    self:write_provider_cache("codex", { last_error = command_error })
+    self:mark_refreshed()
     self.on_update()
     return false
   end
 
   if vim.fn.executable(executable) ~= 1 then
     self.state.last_error = "Codex CLI not found on PATH"
-    self.state.usage_provider = "codex"
-    self:write_provider_cache("codex", { last_error = self.state.last_error })
+    self:mark_refreshed()
     self.on_update()
     return false
   end
 
   self.state.in_flight = true
-  self.state.in_flight_provider = "codex"
   self.state.stdout = ""
   self.state.initialized = false
   self.state.last_error = nil
-  self.state.usage_provider = "codex"
 
   local job_id
   job_id = vim.fn.jobstart(command, {
@@ -722,9 +320,8 @@ function M:refresh_codex(force)
   if type(job_id) ~= "number" or job_id <= 0 then
     self.state.job_id = nil
     self.state.in_flight = false
-    self.state.in_flight_provider = nil
     self.state.last_error = "Failed to start Codex app-server"
-    self:write_provider_cache("codex", { last_error = self.state.last_error })
+    self:mark_refreshed()
     self.on_update()
     return false
   end
@@ -772,24 +369,22 @@ function M:refresh(force, opts)
   if agent_provider == nil then
     agent_provider = self.get_agent_provider()
   end
-  agent_provider = providers.normalize_provider(agent_provider) or "codex"
+  agent_provider = providers.normalize_provider(agent_provider)
 
   if not providers.token_usage_supported(agent_provider) then
-    self:clear_usage()
-    self.state.last_error = nil
-    self.on_update()
     return false
-  end
-
-  if agent_provider == "grok" then
-    return self:refresh_grok(force)
   end
 
   return self:refresh_codex(force)
 end
 
 function M:start()
+  local provider = providers.normalize_provider(self.get_agent_provider())
   if not self:enabled() or not self.is_running() then
+    return
+  end
+  if not providers.token_usage_supported(provider) then
+    self:stop()
     return
   end
 

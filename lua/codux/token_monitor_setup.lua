@@ -14,7 +14,6 @@ function M.new(opts)
     get_agent_provider = opts.get_agent_provider,
     command_util = opts.command_util,
     json_encode = json.encode,
-    json_decode = json.decode,
     on_update = opts.on_update,
   })
 

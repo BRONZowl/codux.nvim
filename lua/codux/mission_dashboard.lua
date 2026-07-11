@@ -223,10 +223,9 @@ function M.dispatch_status_line(controller, dashboard_width)
   return M.center_display_line(controller.workspace_ui, label, dashboard_width)
 end
 
---- Codex labels use "usage |", Grok labels use "quota |" (may be centered with padding).
 function M.is_token_usage_line(line)
   line = tostring(line or ""):match("^%s*(.-)%s*$") or ""
-  return line:find("usage | ", 1, true) ~= nil or line:find("quota | ", 1, true) ~= nil
+  return line:find("usage | ", 1, true) ~= nil
 end
 
 function M.min_height_for_lines(lines)

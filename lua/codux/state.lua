@@ -112,9 +112,7 @@ local MISSION_DASHBOARD_FIELDS = {
   "branch_cache",
   "dirty_cache",
   "last_dispatch",
-  "token_usage_provider",
   "token_usage_refreshed_at",
-  "token_usage_refreshed_at_by_provider",
 }
 
 --- Resolve a UI field key for nested mission/workspace state.
@@ -196,21 +194,14 @@ function M.initial()
     token_usage = {
       five_hour_percent = nil,
       weekly_percent = nil,
-      tpm_percent = nil,
-      rpm_percent = nil,
-      usage_provider = nil,
       last_error = nil,
       in_flight = false,
-      in_flight_provider = nil,
       job_id = nil,
       stdout = "",
       initialized = false,
       timeout_timer = nil,
       refresh_timer = nil,
-      by_provider = {
-        codex = {},
-        grok = {},
-      },
+      refreshed_at = nil,
     },
     terminal_attached_buf = nil,
     terminal_prompt_input = "",
