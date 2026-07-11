@@ -512,7 +512,7 @@ function M.create_mission(runtime, mission_or_name, objective, opts)
     end)
   end
 
-  if runtime.state.workspace_manager_project_root then
+  if runtime.state.workspace_manager.project_root then
     runtime.render_workspace_manager()
   end
   runtime.notify("Launched Codux mission " .. tostring(mission.name) .. " with " .. tostring(#created) .. " roles")

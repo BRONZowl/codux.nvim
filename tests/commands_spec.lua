@@ -87,7 +87,7 @@ commands.create(codux, {
     open_objective_editor = function(_, name)
       table.insert(calls, "mission_editor:" .. tostring(name))
     end,
-  },
+  }
 })
 
 assert_true(type(created.Codux.callback) == "function")

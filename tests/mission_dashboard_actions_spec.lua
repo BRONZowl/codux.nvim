@@ -20,15 +20,16 @@ do
   local notifications, notify = notifications_fixture()
   local controller = dashboard_controller({
     state = {
-      mission_dashboard_items = {
+      mission_dashboard = {
+        items = {
         [4] = { kind = "mission", mission = { name = "Alpha" } },
         [5] = { kind = "mission", mission = { name = "Alpha" } },
         [7] = { kind = "role", mission = { name = "Alpha" }, entry = { name = "alpha-builder" } },
       },
-      mission_dashboard_selectable_rows = { 4, 7 },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 4,
-    },
+        selectable_rows = { 4, 7 },
+        search_confirmed = true,
+        selected_row = 4,
+      }},
     notify = notify,
   })
   function controller:open_action_palette_for(target, kind)
@@ -41,12 +42,12 @@ do
   assert_equal(opened_kind, "mission")
   assert_equal(opened_target.name, "Alpha")
 
-  controller.state.mission_dashboard_selected_row = 7
+  controller.state.mission_dashboard.selected_row = 7
   assert_true(controller:open_action_palette())
   assert_equal(opened_kind, "workspace")
   assert_equal(opened_target.name, "alpha-builder")
 
-  controller.state.mission_dashboard_selected_row = 5
+  controller.state.mission_dashboard.selected_row = 5
   assert_false(controller:open_action_palette())
   assert_equal(notifications[#notifications], "No Codux mission or workspace selected")
 end
@@ -194,7 +195,8 @@ do
   local context
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_action_workspace = {
+      mission_dashboard = {
+        action_workspace = {
         name = "alpha-builder",
         safe_name = "alpha-builder",
         mission_id = "mission:alpha",
@@ -202,7 +204,7 @@ do
         mission_objective = "Build it",
         permission_profile = "danger",
       },
-    },
+      }},
     create_workspace_prompt = function(opts)
       context = opts
       return true
@@ -226,11 +228,12 @@ do
   local prompted = false
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_action_workspace = {
+      mission_dashboard = {
+        action_workspace = {
         name = "plain",
         safe_name = "plain",
       },
-    },
+      }},
     notify = notify,
     create_workspace_prompt = function()
       prompted = true
@@ -254,8 +257,9 @@ do
   local remaining_entries = {}
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        project_root = "/repo",
+      }},
     workspace_entries_for_project = function(root)
       assert_equal(root, "/repo")
       return remaining_entries
@@ -297,8 +301,9 @@ do
   local events = {}
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        project_root = "/repo",
+      }},
     workspace_entries_for_project = function(root)
       assert_equal(root, "/repo")
       return {}
@@ -331,8 +336,9 @@ do
   local confirmed = false
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        project_root = "/repo",
+      }},
     workspace_entries_for_project = function()
       error("dashboard should not update when delete is canceled or fails")
     end,
@@ -367,8 +373,9 @@ do
   local events = {}
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_buf = 22,
-    },
+      mission_dashboard = {
+        buf = 22,
+      }},
     is_loaded_buf = function(bufnr)
       return bufnr == 22
     end,
@@ -441,11 +448,12 @@ end
 do
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_action_win = 30,
-      mission_dashboard_action_buf = 31,
-      mission_dashboard_action_items = workspace_ui.mission_action_items(),
-      mission_dashboard_action_mission = { name = "Alpha" },
-    },
+      mission_dashboard = {
+        action_win = 30,
+        action_buf = 31,
+        action_items = workspace_ui.mission_action_items(),
+        action_mission = { name = "Alpha" },
+      }},
     is_valid_win = function(win)
       return win == 30
     end,
@@ -463,12 +471,13 @@ do
   local entry = { name = "alpha-builder", safe_name = "alpha-builder" }
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_action_win = 30,
-      mission_dashboard_action_buf = 31,
-      mission_dashboard_action_items = workspace_ui.role_workspace_action_items(entry),
-      mission_dashboard_action_workspace = entry,
-      mission_dashboard_action_kind = "workspace",
-    },
+      mission_dashboard = {
+        action_win = 30,
+        action_buf = 31,
+        action_items = workspace_ui.role_workspace_action_items(entry),
+        action_workspace = entry,
+        action_kind = "workspace",
+      }},
     is_valid_win = function(win)
       return win == 30
     end,
@@ -498,9 +507,10 @@ do
   end
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_action_workspace = entry,
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        action_workspace = entry,
+        project_root = "/repo",
+      }},
     ui = {
       close_window = function() end,
       delete_buffer = function() end,
@@ -560,9 +570,10 @@ do
   }
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_action_workspace = entry,
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        action_workspace = entry,
+        project_root = "/repo",
+      }},
     start_saved_workspace = function(workspace)
       table.insert(calls, "start:" .. tostring(workspace.name))
       return true
@@ -648,8 +659,9 @@ do
   local refreshed_root
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        project_root = "/repo",
+      }},
     start_mission = function(name, root, opts)
       table.insert(events, "start")
       captured = { name = name, root = root, opts = opts }
@@ -680,8 +692,9 @@ do
   local refreshed_root
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        project_root = "/repo",
+      }},
     start_mission = function()
       table.insert(events, "start")
       return false
@@ -706,8 +719,9 @@ do
   local events = {}
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        project_root = "/repo",
+      }},
     is_loaded_buf = function()
       table.insert(events, "loaded")
       return false
@@ -738,8 +752,9 @@ do
   end
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        project_root = "/repo",
+      }},
     update_mission_objective = function(_, _, root)
       saved_root = root
       return true
@@ -776,8 +791,9 @@ do
   end
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        project_root = "/repo",
+      }},
     update_mission_focus_packet = function(_, focus_packet, root)
       saved_focus = focus_packet
       saved_root = root
@@ -819,7 +835,9 @@ do
     },
   }
   local controller = mission_control_mod.new({
-    state = { mission_dashboard_project_root = "/repo" },
+    state = { mission_dashboard = {
+   project_root = "/repo",
+ }},
     notify = function(message)
       table.insert(notifications, message)
     end,
@@ -853,7 +871,9 @@ do
   local calls = {}
   local notifications = {}
   local controller = mission_control_mod.new({
-    state = { mission_dashboard_project_root = "/repo" },
+    state = { mission_dashboard = {
+   project_root = "/repo",
+ }},
     notify = function(message)
       table.insert(notifications, message)
     end,
@@ -872,7 +892,7 @@ do
   assert_true(controller:run_action("process_dispatch", { name = "Alpha", mission_id = "mission:alpha" }))
   assert_equal(calls[1], "close_palette")
   assert_equal(calls[2], "process:/repo")
-  assert_equal(controller.state.mission_dashboard_last_dispatch.succeeded, 2)
+  assert_equal(controller.state.mission_dashboard.last_dispatch.succeeded, 2)
   assert_contains(table.concat(notifications, "\n"), "Dispatched 2")
 end
 
@@ -880,7 +900,9 @@ do
   local calls = {}
   local entry = { name = "alpha-agent", safe_name = "alpha-agent", status = "idle" }
   local controller = mission_control_mod.new({
-    state = { mission_dashboard_action_workspace = entry },
+    state = { mission_dashboard = {
+   action_workspace = entry,
+ }},
   })
   function controller:close_action_palette()
     table.insert(calls, "close_palette")
@@ -902,13 +924,14 @@ do
   local mission_dashboard = require("codux.mission_dashboard")
   local controller = {
     state = {
-      mission_dashboard_last_dispatch = {
+      mission_dashboard = {
+        last_dispatch = {
         processed = 3,
         succeeded = 2,
         failed = 1,
         mission = "Alpha",
       },
-    },
+      }},
     workspace_ui = workspace_ui,
   }
   local line = mission_dashboard.dispatch_status_line(controller, 80)

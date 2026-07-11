@@ -65,7 +65,7 @@ function M.persist_meta(runtime, workspace, meta)
     runtime.state.workspace.agent_session_path = record.agent_session_path
     runtime.state.workspace.agent_session_captured_at = record.agent_session_captured_at
   end
-  if runtime.state.workspace_manager_project_root == root then
+  if runtime.state.workspace_manager.project_root == root then
     runtime.render_workspace_manager()
   end
 

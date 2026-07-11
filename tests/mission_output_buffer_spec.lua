@@ -25,10 +25,11 @@ if type(vim.api) == "table" then
   local controller = mission_control_mod.new({
     namespace = vim.api.nvim_create_namespace("codux.mission_output.winfixbuf.test"),
     state = {
-      mission_dashboard_output_buf = old_buf,
-      mission_dashboard_output_win = win,
-      mission_dashboard_output_buf_kind = "status",
-    },
+      mission_dashboard = {
+        output_buf = old_buf,
+        output_win = win,
+        output_buf_kind = "status",
+      }},
     workspace_interactive_preview = function()
       return {
         command = { "env", "-u", "TMUX", "tmux", "attach-session", "-f", "read-only", "-t", "codux-preview-test" },
@@ -48,15 +49,15 @@ if type(vim.api) == "table" then
     mission_role = "Reviewer",
     status = "idle",
   }))
-  assert_equal(controller.state.mission_dashboard_output_job, 77)
-  assert_equal(vim.api.nvim_win_get_buf(win), controller.state.mission_dashboard_output_buf)
-  assert_equal(visible_buf_at_termopen, controller.state.mission_dashboard_output_buf)
+  assert_equal(controller.state.mission_dashboard.output_job, 77)
+  assert_equal(vim.api.nvim_win_get_buf(win), controller.state.mission_dashboard.output_buf)
+  assert_equal(visible_buf_at_termopen, controller.state.mission_dashboard.output_buf)
   assert_false(winfixbuf_at_termopen)
   assert_false(vim.api.nvim_get_option_value("winfixbuf", { win = win }))
-  assert_true(vim.api.nvim_win_is_valid(controller.state.mission_dashboard_output_win))
+  assert_true(vim.api.nvim_win_is_valid(controller.state.mission_dashboard.output_win))
   assert_false(vim.api.nvim_buf_is_valid(old_buf))
-  assert_nil(controller.state.mission_dashboard_output_replacing_buf)
-  local output_buf = controller.state.mission_dashboard_output_buf
+  assert_nil(controller.state.mission_dashboard.output_replacing_buf)
+  local output_buf = controller.state.mission_dashboard.output_buf
   vim.api.nvim_win_close(win, true)
   if vim.api.nvim_buf_is_valid(output_buf) then
     vim.api.nvim_buf_delete(output_buf, { force = true })
@@ -79,10 +80,11 @@ if type(vim.api) == "table" then
 
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_output_buf = output_buf,
-      mission_dashboard_output_win = win,
-      mission_dashboard_output_job = 77,
-    },
+      mission_dashboard = {
+        output_buf = output_buf,
+        output_win = win,
+        output_job = 77,
+      }},
   })
 
   assert_true(controller:focus_output_panel())
@@ -106,17 +108,18 @@ if type(vim.api) == "table" then
   local closed_preview
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_output_buf = output_buf,
-      mission_dashboard_output_win = 13,
-      mission_dashboard_output_entry = { safe_name = "alpha-builder" },
-      mission_dashboard_output_key = "key",
-      mission_dashboard_output_blocked_key = "blocked",
-      mission_dashboard_output_job = 77,
-      mission_dashboard_output_preview = { preview_session = "codux-preview-test" },
-      mission_dashboard_output_buf_kind = "terminal",
-      mission_dashboard_output_control = true,
-      mission_dashboard_output_control_key = "control",
-    },
+      mission_dashboard = {
+        output_buf = output_buf,
+        output_win = 13,
+        output_entry = { safe_name = "alpha-builder" },
+        output_key = "key",
+        output_blocked_key = "blocked",
+        output_job = 77,
+        output_preview = { preview_session = "codux-preview-test" },
+        output_buf_kind = "terminal",
+        output_control = true,
+        output_control_key = "control",
+      }},
     jobstop = function(job_id)
       stopped_job = job_id
       return true
@@ -131,16 +134,16 @@ if type(vim.api) == "table" then
   vim.api.nvim_buf_delete(output_buf, { force = true })
   assert_equal(stopped_job, 77)
   assert_equal(closed_preview.preview_session, "codux-preview-test")
-  assert_nil(controller.state.mission_dashboard_output_buf)
-  assert_nil(controller.state.mission_dashboard_output_win)
-  assert_nil(controller.state.mission_dashboard_output_entry)
-  assert_nil(controller.state.mission_dashboard_output_key)
-  assert_nil(controller.state.mission_dashboard_output_blocked_key)
-  assert_nil(controller.state.mission_dashboard_output_job)
-  assert_nil(controller.state.mission_dashboard_output_preview)
-  assert_nil(controller.state.mission_dashboard_output_buf_kind)
-  assert_false(controller.state.mission_dashboard_output_control)
-  assert_nil(controller.state.mission_dashboard_output_control_key)
+  assert_nil(controller.state.mission_dashboard.output_buf)
+  assert_nil(controller.state.mission_dashboard.output_win)
+  assert_nil(controller.state.mission_dashboard.output_entry)
+  assert_nil(controller.state.mission_dashboard.output_key)
+  assert_nil(controller.state.mission_dashboard.output_blocked_key)
+  assert_nil(controller.state.mission_dashboard.output_job)
+  assert_nil(controller.state.mission_dashboard.output_preview)
+  assert_nil(controller.state.mission_dashboard.output_buf_kind)
+  assert_false(controller.state.mission_dashboard.output_control)
+  assert_nil(controller.state.mission_dashboard.output_control_key)
 end
 
 if type(vim.api) == "table" then
@@ -149,10 +152,11 @@ if type(vim.api) == "table" then
   local controller = mission_control_mod.new({
     namespace = vim.api.nvim_create_namespace("codux.mission_output.swap_failure.test"),
     state = {
-      mission_dashboard_output_buf = old_buf,
-      mission_dashboard_output_win = 13,
-      mission_dashboard_output_buf_kind = "status",
-    },
+      mission_dashboard = {
+        output_buf = old_buf,
+        output_win = 13,
+        output_buf_kind = "status",
+      }},
     ui = {
       create_scratch_buffer = function(options)
         local bufnr = vim.api.nvim_create_buf(false, true)
@@ -183,9 +187,9 @@ if type(vim.api) == "table" then
   end
 
   assert_false(controller:replace_output_buffer("terminal"))
-  assert_equal(controller.state.mission_dashboard_output_buf, old_buf)
-  assert_equal(controller.state.mission_dashboard_output_buf_kind, "status")
-  assert_nil(controller.state.mission_dashboard_output_replacing_buf)
+  assert_equal(controller.state.mission_dashboard.output_buf, old_buf)
+  assert_equal(controller.state.mission_dashboard.output_buf_kind, "status")
+  assert_nil(controller.state.mission_dashboard.output_replacing_buf)
   assert_equal(#deleted, 1)
   assert_true(deleted[1] ~= old_buf)
   assert_true(vim.api.nvim_buf_is_valid(old_buf))
@@ -202,10 +206,11 @@ if type(vim.api) == "table" then
   local controller = mission_control_mod.new({
     namespace = vim.api.nvim_create_namespace("codux.mission_output.replace_terminal.test"),
     state = {
-      mission_dashboard_output_buf = terminal_buf,
-      mission_dashboard_output_win = 13,
-      mission_dashboard_output_buf_kind = "terminal",
-    },
+      mission_dashboard = {
+        output_buf = terminal_buf,
+        output_win = 13,
+        output_buf_kind = "terminal",
+      }},
     is_valid_win = function()
       return false
     end,
@@ -216,12 +221,12 @@ if type(vim.api) == "table" then
     mission_role = "Reviewer",
     status = "inactive",
   }))
-  assert_true(controller.state.mission_dashboard_output_buf ~= terminal_buf)
-  assert_equal(vim.api.nvim_get_option_value("buftype", { buf = controller.state.mission_dashboard_output_buf }), "nofile")
-  local lines = vim.api.nvim_buf_get_lines(controller.state.mission_dashboard_output_buf, 0, -1, false)
+  assert_true(controller.state.mission_dashboard.output_buf ~= terminal_buf)
+  assert_equal(vim.api.nvim_get_option_value("buftype", { buf = controller.state.mission_dashboard.output_buf }), "nofile")
+  local lines = vim.api.nvim_buf_get_lines(controller.state.mission_dashboard.output_buf, 0, -1, false)
   assert_equal(table.concat(lines, "\n"), "Output: workspace inactive")
   assert_false(vim.api.nvim_buf_is_valid(terminal_buf))
-  vim.api.nvim_buf_delete(controller.state.mission_dashboard_output_buf, { force = true })
+  vim.api.nvim_buf_delete(controller.state.mission_dashboard.output_buf, { force = true })
 end
 
 

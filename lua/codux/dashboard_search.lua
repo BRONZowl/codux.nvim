@@ -1,11 +1,14 @@
 local M = {}
 M.__index = M
 
+local state_mod = require("codux.state")
 local ui = require("codux.ui")
 local util = require("codux.util")
 
 local api_function = util.api_function
 local value_from = util.value_from
+local state_get = state_mod.get
+local state_set = state_mod.set
 
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
@@ -82,15 +85,15 @@ function M.new(opts)
 end
 
 function M:win()
-  return self.state[self.win_key]
+  return state_get(self.state, self.win_key)
 end
 
 function M:buf()
-  return self.state[self.buf_key]
+  return state_get(self.state, self.buf_key)
 end
 
 function M:query()
-  return tostring(self.state[self.query_key] or "")
+  return tostring(state_get(self.state, self.query_key) or "")
 end
 
 function M:render()
@@ -112,10 +115,10 @@ function M:render()
 end
 
 function M:update_query(query)
-  self.state[self.query_key] = tostring(query or "")
-  self.state[self.selected_key] = nil
-  self.state[self.focus_match_key] = true
-  self.state[self.confirmed_key] = false
+  state_set(self.state, self.query_key, tostring(query or ""))
+  state_set(self.state, self.selected_key, nil)
+  state_set(self.state, self.focus_match_key, true)
+  state_set(self.state, self.confirmed_key, false)
   self.render_owner()
   self:render()
   return true
@@ -160,15 +163,15 @@ function M:toggle_list_focus()
 end
 
 function M:select_best_match()
-  local best_match = self.state[self.best_match_key]
+  local best_match = state_get(self.state, self.best_match_key)
   if not best_match then
     self.notify(self.select_error, vim.log.levels.WARN)
     return false
   end
 
-  self.state[self.confirmed_key] = true
-  self.state[self.selected_key] = best_match
-  self.state[self.focus_match_key] = false
+  state_set(self.state, self.confirmed_key, true)
+  state_set(self.state, self.selected_key, best_match)
+  state_set(self.state, self.focus_match_key, false)
   self.render_owner()
 
   local main_win = self.main_win()
@@ -180,8 +183,8 @@ end
 
 function M:clear_open_state(bufnr)
   if self:buf() == bufnr then
-    self.state[self.buf_key] = nil
-    self.state[self.win_key] = nil
+    state_set(self.state, self.buf_key, nil)
+    state_set(self.state, self.win_key, nil)
   end
 end
 
@@ -261,8 +264,8 @@ function M:open(opts)
     return false
   end
 
-  self.state[self.buf_key] = bufnr
-  self.state[self.win_key] = win
+  state_set(self.state, self.buf_key, bufnr)
+  state_set(self.state, self.win_key, win)
   self.ui.set_window_options(win, {
     number = false,
     relativenumber = false,

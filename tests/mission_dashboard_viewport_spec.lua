@@ -11,8 +11,9 @@ do
   local revealed = {}
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        win = 10,
+        items = {
         [4] = { kind = "mission", mission = { name = "Alpha" } },
         [7] = {
           kind = "role",
@@ -24,14 +25,14 @@ do
           },
         },
       },
-      mission_dashboard_selected_row = 7,
-      mission_dashboard_output_entry = {
+        selected_row = 7,
+        output_entry = {
         safe_name = "alpha-builder",
         project_root = "/repo",
         mission_role = "Builder",
         status = "active",
       },
-    },
+      }},
     is_valid_win = function(win)
       return win == 10
     end,
@@ -47,21 +48,22 @@ do
   assert_true(controller:reveal_output_preview_row())
   assert_equal(revealed[1].win, 10)
   assert_equal(revealed[1].row, 7)
-  assert_equal(controller.state.mission_dashboard_selected_row, 7)
+  assert_equal(controller.state.mission_dashboard.selected_row, 7)
 end
 
 do
   local reveal_calls = 0
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        win = 10,
+        items = {
         [7] = { kind = "role", entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" } },
         [8] = { kind = "role", entry = { safe_name = "alpha-reviewer", project_root = "/repo", status = "active" } },
       },
-      mission_dashboard_selected_row = 7,
-      mission_dashboard_output_entry = { safe_name = "alpha-reviewer", project_root = "/repo", status = "active" },
-    },
+        selected_row = 7,
+        output_entry = { safe_name = "alpha-reviewer", project_root = "/repo", status = "active" },
+      }},
     is_valid_win = function(win)
       return win == 10
     end,
@@ -77,7 +79,7 @@ do
   assert_false(controller:reveal_output_preview_row())
   assert_equal(reveal_calls, 0)
 
-  controller.state.mission_dashboard_output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" }
+  controller.state.mission_dashboard.output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" }
   function controller:output_preview_running()
     return false
   end
@@ -101,13 +103,14 @@ do
 
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        win = 10,
+        items = {
         [7] = { kind = "role", entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" } },
       },
-      mission_dashboard_selected_row = 7,
-      mission_dashboard_output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
-    },
+        selected_row = 7,
+        output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
+      }},
     is_valid_win = function(win)
       return win == 10
     end,
@@ -125,7 +128,7 @@ do
   assert_true(controller:restore_output_preview_anchor(anchor))
   assert_equal(executed.win, 10)
   assert_contains(executed.command, "'topline': 5")
-  assert_equal(controller.state.mission_dashboard_selected_row, 7)
+  assert_equal(controller.state.mission_dashboard.selected_row, 7)
 
   vim.fn.getwininfo = old_getwininfo
   vim.fn.win_execute = old_win_execute
@@ -146,13 +149,14 @@ do
 
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        win = 10,
+        items = {
         [7] = { kind = "role", entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" } },
       },
-      mission_dashboard_selected_row = 7,
-      mission_dashboard_output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
-    },
+        selected_row = 7,
+        output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
+      }},
     is_valid_win = function(win)
       return win == 10
     end,
@@ -187,14 +191,15 @@ do
 
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        win = 10,
+        items = {
         [7] = { kind = "role", entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" } },
         [8] = { kind = "role", entry = { safe_name = "alpha-reviewer", project_root = "/repo", status = "active" } },
       },
-      mission_dashboard_selected_row = 7,
-      mission_dashboard_output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
-    },
+        selected_row = 7,
+        output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
+      }},
     is_valid_win = function(win)
       return win == 10
     end,
@@ -215,12 +220,12 @@ do
   function controller:output_preview_running()
     return true
   end
-  controller.state.mission_dashboard_output_entry = { safe_name = "alpha-reviewer", project_root = "/repo", status = "active" }
+  controller.state.mission_dashboard.output_entry = { safe_name = "alpha-reviewer", project_root = "/repo", status = "active" }
   assert_false(controller:restore_output_preview_anchor(anchor))
   assert_equal(execute_calls, 0)
 
-  controller.state.mission_dashboard_output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" }
-  controller.state.mission_dashboard_selected_row = 8
+  controller.state.mission_dashboard.output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" }
+  controller.state.mission_dashboard.selected_row = 8
   assert_false(controller:restore_output_preview_anchor(anchor))
   assert_equal(execute_calls, 0)
 
@@ -236,13 +241,14 @@ do
 
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        win = 10,
+        items = {
         [7] = { kind = "role", entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" } },
       },
-      mission_dashboard_selected_row = 7,
-      mission_dashboard_output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
-    },
+        selected_row = 7,
+        output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
+      }},
     is_valid_win = function(win)
       return win == 10
     end,
@@ -280,17 +286,18 @@ do
   }
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_buf = 90,
-      mission_dashboard_win = 10,
-      mission_dashboard_command_bar_win = 11,
-      mission_dashboard_output_win = 12,
-      mission_dashboard_output_buf = 13,
-      mission_dashboard_items = items,
-      mission_dashboard_selectable_rows = { 7, 8 },
-      mission_dashboard_selected_row = 7,
-      mission_dashboard_output_entry = items[7].entry,
-      mission_dashboard_output_key = nil,
-    },
+      mission_dashboard = {
+        buf = 90,
+        win = 10,
+        command_bar_win = 11,
+        output_win = 12,
+        output_buf = 13,
+        items = items,
+        selectable_rows = { 7, 8 },
+        selected_row = 7,
+        output_entry = items[7].entry,
+        output_key = nil,
+      }},
     is_loaded_buf = function(bufnr)
       return bufnr == 90 or bufnr == 13
     end,
@@ -325,18 +332,18 @@ do
     return true
   end
   function controller:render_output_panel(entry)
-    self.state.mission_dashboard_output_entry = entry
-    self.state.mission_dashboard_output_key = self:output_entry_key(entry)
+    self.state.mission_dashboard.output_entry = entry
+    self.state.mission_dashboard.output_key = self:output_entry_key(entry)
     return true
   end
   function controller:output_preview_running()
     return true
   end
 
-  controller.state.mission_dashboard_output_key = controller:output_entry_key(items[7].entry)
+  controller.state.mission_dashboard.output_key = controller:output_entry_key(items[7].entry)
   assert_true(controller:move_mission_selection(1))
-  assert_equal(controller.state.mission_dashboard_selected_row, 8)
-  assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-reviewer")
+  assert_equal(controller.state.mission_dashboard.selected_row, 8)
+  assert_equal(controller.state.mission_dashboard.output_entry.safe_name, "alpha-reviewer")
   assert_equal(executed.win, 10)
   assert_contains(executed.command, "'topline': 6")
 
@@ -352,13 +359,14 @@ do
 
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        win = 10,
+        items = {
         [7] = { kind = "role", entry = { safe_name = "alpha-builder", project_root = "/repo", status = "inactive" } },
       },
-      mission_dashboard_selected_row = 7,
-      mission_dashboard_output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "inactive" },
-    },
+        selected_row = 7,
+        output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "inactive" },
+      }},
     is_valid_win = function(win)
       return win == 10
     end,
@@ -369,7 +377,7 @@ do
 
   assert_nil(controller:capture_stationary_output_preview_anchor())
 
-  controller.state.mission_dashboard_items[7] = { kind = "mission", mission = { name = "Alpha" } }
+  controller.state.mission_dashboard.items[7] = { kind = "mission", mission = { name = "Alpha" } }
   assert_nil(controller:capture_stationary_output_preview_anchor())
 
   vim.fn.getwininfo = old_getwininfo
@@ -392,15 +400,16 @@ do
   local revealed
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_buf = 90,
-      mission_dashboard_win = 91,
-      mission_dashboard_command_bar_win = 92,
-      mission_dashboard_output_win = 93,
-      mission_dashboard_items = items,
-      mission_dashboard_selectable_rows = { 4, 7 },
-      mission_dashboard_selected_row = 7,
-      mission_dashboard_output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
-    },
+      mission_dashboard = {
+        buf = 90,
+        win = 91,
+        command_bar_win = 92,
+        output_win = 93,
+        items = items,
+        selectable_rows = { 4, 7 },
+        selected_row = 7,
+        output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
+      }},
     is_loaded_buf = function(bufnr)
       return bufnr == 90
     end,
@@ -451,7 +460,7 @@ do
   assert_true(controller:render_dashboard())
   assert_equal(revealed.win, 91)
   assert_equal(revealed.row, 7)
-  assert_equal(controller.state.mission_dashboard_selected_row, 7)
+  assert_equal(controller.state.mission_dashboard.selected_row, 7)
 end
 
 do
@@ -466,14 +475,15 @@ do
   local revealed
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_buf = 90,
-      mission_dashboard_win = 91,
-      mission_dashboard_command_bar_win = 92,
-      mission_dashboard_output_win = 93,
-      mission_dashboard_items = items,
-      mission_dashboard_selectable_rows = { 4, 7 },
-      mission_dashboard_selected_row = 4,
-    },
+      mission_dashboard = {
+        buf = 90,
+        win = 91,
+        command_bar_win = 92,
+        output_win = 93,
+        items = items,
+        selectable_rows = { 4, 7 },
+        selected_row = 4,
+      }},
     is_loaded_buf = function(bufnr)
       return bufnr == 90
     end,
@@ -512,7 +522,7 @@ do
     return true
   end
   function controller:render_output_panel(entry)
-    self.state.mission_dashboard_output_entry = entry
+    self.state.mission_dashboard.output_entry = entry
     return true
   end
   function controller:output_preview_running()
@@ -520,8 +530,8 @@ do
   end
 
   assert_true(controller:move_mission_selection(1))
-  assert_equal(controller.state.mission_dashboard_selected_row, 7)
-  assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-builder")
+  assert_equal(controller.state.mission_dashboard.selected_row, 7)
+  assert_equal(controller.state.mission_dashboard.output_entry.safe_name, "alpha-builder")
   assert_equal(revealed.win, 91)
   assert_equal(revealed.row, 7)
 end
@@ -533,15 +543,16 @@ do
   }
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_buf = 90,
-      mission_dashboard_win = 91,
-      mission_dashboard_command_bar_win = 92,
-      mission_dashboard_output_win = 93,
-      mission_dashboard_items = items,
-      mission_dashboard_selectable_rows = { 3 },
-      mission_dashboard_selected_row = 3,
-      mission_dashboard_output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
-    },
+      mission_dashboard = {
+        buf = 90,
+        win = 91,
+        command_bar_win = 92,
+        output_win = 93,
+        items = items,
+        selectable_rows = { 3 },
+        selected_row = 3,
+        output_entry = { safe_name = "alpha-builder", project_root = "/repo", status = "active" },
+      }},
     is_loaded_buf = function(bufnr)
       return bufnr == 90
     end,

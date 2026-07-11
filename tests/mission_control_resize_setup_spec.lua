@@ -44,10 +44,11 @@ if type(vim.api) == "table" then
     local calls = {}
     local resize_controller = mission_control_mod.new({
       state = {
-        mission_dashboard_win = 91,
-        mission_dashboard_command_bar_win = 92,
-        mission_dashboard_output_win = 93,
-      },
+        mission_dashboard = {
+          win = 91,
+          command_bar_win = 92,
+          output_win = 93,
+        }},
       is_valid_win = function(win)
         return win == 91 or win == 92 or win == 93
       end,
@@ -122,11 +123,12 @@ if type(vim.api) == "table" then
     local calls = {}
     local resize_controller = mission_control_mod.new({
       state = {
-        mission_dashboard_win = 91,
-        mission_dashboard_command_bar_win = 92,
-        mission_dashboard_output_win = 93,
-        mission_dashboard_search_win = 94,
-      },
+        mission_dashboard = {
+          win = 91,
+          command_bar_win = 92,
+          output_win = 93,
+          search_win = 94,
+        }},
       is_valid_win = function(win)
         return win == 91 or win == 92 or win == 93 or win == 94
       end,
@@ -186,15 +188,16 @@ if type(vim.api) == "table" then
     }
     local controller = mission_control_mod.new({
       state = {
-        mission_dashboard_buf = 90,
-        mission_dashboard_win = 91,
-        mission_dashboard_command_bar_win = 92,
-        mission_dashboard_output_win = 93,
-        mission_dashboard_items = items,
-        mission_dashboard_selectable_rows = { 4, 7 },
-        mission_dashboard_search_confirmed = true,
-        mission_dashboard_selected_row = 4,
-      },
+        mission_dashboard = {
+          buf = 90,
+          win = 91,
+          command_bar_win = 92,
+          output_win = 93,
+          items = items,
+          selectable_rows = { 4, 7 },
+          search_confirmed = true,
+          selected_row = 4,
+        }},
       is_loaded_buf = function(bufnr)
         return bufnr == 90
       end,
@@ -242,7 +245,7 @@ if type(vim.api) == "table" then
     local compact_dashboard_height = configs[91].height
     assert_equal(configs[93].height, 1)
     assert_true(controller:move_mission_selection(1))
-    assert_equal(controller.state.mission_dashboard_selected_row, 7)
+    assert_equal(controller.state.mission_dashboard.selected_row, 7)
     assert_true(configs[91].height < compact_dashboard_height)
     assert_true(configs[93].height > 1)
   end
@@ -259,15 +262,16 @@ if type(vim.api) == "table" then
     }
     local controller = mission_control_mod.new({
       state = {
-        mission_dashboard_buf = 90,
-        mission_dashboard_win = 91,
-        mission_dashboard_command_bar_win = 92,
-        mission_dashboard_output_win = 93,
-        mission_dashboard_items = items,
-        mission_dashboard_selectable_rows = { 4, 6 },
-        mission_dashboard_search_confirmed = true,
-        mission_dashboard_selected_row = 6,
-      },
+        mission_dashboard = {
+          buf = 90,
+          win = 91,
+          command_bar_win = 92,
+          output_win = 93,
+          items = items,
+          selectable_rows = { 4, 6 },
+          search_confirmed = true,
+          selected_row = 6,
+        }},
       is_loaded_buf = function(bufnr)
         return bufnr == 90
       end,
@@ -326,15 +330,16 @@ if type(vim.api) == "table" then
     }
     local controller = mission_control_mod.new({
       state = {
-        mission_dashboard_buf = 90,
-        mission_dashboard_win = 91,
-        mission_dashboard_command_bar_win = 92,
-        mission_dashboard_output_win = 93,
-        mission_dashboard_items = items,
-        mission_dashboard_selectable_rows = { 3 },
-        mission_dashboard_search_confirmed = true,
-        mission_dashboard_selected_row = 3,
-      },
+        mission_dashboard = {
+          buf = 90,
+          win = 91,
+          command_bar_win = 92,
+          output_win = 93,
+          items = items,
+          selectable_rows = { 3 },
+          search_confirmed = true,
+          selected_row = 3,
+        }},
       is_loaded_buf = function(bufnr)
         return bufnr == 90
       end,

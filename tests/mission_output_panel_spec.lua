@@ -17,18 +17,19 @@ if type(vim.api) == "table" then
     bufnr = bufnr,
     namespace = vim.api.nvim_create_namespace("codux.mission_output.test"),
     state = {
-      mission_dashboard_buf = 10,
-      mission_dashboard_win = 11,
-      mission_dashboard_output_buf = bufnr,
-      mission_dashboard_output_win = 13,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        buf = 10,
+        win = 11,
+        output_buf = bufnr,
+        output_win = 13,
+        items = {
         [3] = { kind = "mission", mission = { roles = { { safe_name = "alpha-builder", mission_role = "Builder" } } } },
         [5] = { kind = "role", entry = { safe_name = "alpha-reviewer", mission_role = "Reviewer", status = "idle" } },
       },
-      mission_dashboard_selectable_rows = { 3, 5 },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 5,
-    },
+        selectable_rows = { 3, 5 },
+        search_confirmed = true,
+        selected_row = 5,
+      }},
     is_loaded_buf = function(bufnr)
       return bufnr == 10 or vim.api.nvim_buf_is_loaded(bufnr)
     end,
@@ -63,8 +64,8 @@ if type(vim.api) == "table" then
   assert_equal(command_text:find(" -r ", 1, true), nil)
   assert_equal(command_text:find("ignore-size", 1, true), nil)
   assert_false(modified_at_termopen)
-  assert_equal(controller.state.mission_dashboard_output_job, 77)
-  assert_equal(vim.api.nvim_get_option_value("filetype", { buf = controller.state.mission_dashboard_output_buf }), "codux")
+  assert_equal(controller.state.mission_dashboard.output_job, 77)
+  assert_equal(vim.api.nvim_get_option_value("filetype", { buf = controller.state.mission_dashboard.output_buf }), "codux")
   assert_contains(table.concat(ctx.rendered_lines, "\n"), "Output: Reviewer")
   assert_equal(table.concat(ctx.rendered_lines, "\n"):find("Ctrl-o workspace", 1, true), nil)
   assert_equal(table.concat(ctx.rendered_lines, "\n"):find("Ctrl-q", 1, true), nil)
@@ -75,7 +76,8 @@ do
   -- Mission row resolves to Manager role for output preview/control.
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_items = {
+      mission_dashboard = {
+        items = {
         [2] = {
           kind = "mission",
           mission = {
@@ -99,16 +101,16 @@ do
           entry = { safe_name = "alpha-agent", mission_role = "Agent", status = "idle" },
         },
       },
-      mission_dashboard_selected_row = 2,
-      mission_dashboard_selectable_rows = { 2, 4 },
-      mission_dashboard_search_confirmed = true,
-    },
+        selected_row = 2,
+        selectable_rows = { 2, 4 },
+        search_confirmed = true,
+      }},
   })
   local entry = controller:selected_output_entry()
   assert_equal(entry.safe_name, "alpha-manager")
   assert_equal(entry.mission_role, "Manager")
 
-  controller.state.mission_dashboard_selected_row = 4
+  controller.state.mission_dashboard.selected_row = 4
   entry = controller:selected_output_entry()
   assert_equal(entry.safe_name, "alpha-agent")
 end
@@ -116,7 +118,8 @@ end
 do
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_items = {
+      mission_dashboard = {
+        items = {
         [2] = {
           kind = "mission",
           mission = {
@@ -126,10 +129,10 @@ do
           },
         },
       },
-      mission_dashboard_selected_row = 2,
-      mission_dashboard_selectable_rows = { 2 },
-      mission_dashboard_search_confirmed = true,
-    },
+        selected_row = 2,
+        selectable_rows = { 2 },
+        search_confirmed = true,
+      }},
   })
   assert_nil(controller:selected_output_entry(), "legacy mission without Manager has no console entry")
   local lines = controller:output_panel_lines(nil)
@@ -156,11 +159,12 @@ if type(vim.api) == "table" then
   local controller, ctx = output_fixtures.controller({
     bufnr = bufnr,
     state = {
-      mission_dashboard_buf = 10,
-      mission_dashboard_win = 11,
-      mission_dashboard_output_buf = bufnr,
-      mission_dashboard_output_win = 13,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        buf = 10,
+        win = 11,
+        output_buf = bufnr,
+        output_win = 13,
+        items = {
         [2] = {
           kind = "mission",
           mission = { name = "Alpha", roles = { manager, agent } },
@@ -168,10 +172,10 @@ if type(vim.api) == "table" then
         [4] = { kind = "role", entry = manager, mission = { roles = { manager, agent } } },
         [5] = { kind = "role", entry = agent, mission = { roles = { manager, agent } } },
       },
-      mission_dashboard_selectable_rows = { 2, 4, 5 },
-      mission_dashboard_selected_row = 2,
-      mission_dashboard_search_confirmed = true,
-    },
+        selectable_rows = { 2, 4, 5 },
+        selected_row = 2,
+        search_confirmed = true,
+      }},
     workspace_interactive_preview = function(entry)
       table.insert(preview_calls, entry.safe_name)
       return output_fixtures.preview(), nil
@@ -185,19 +189,19 @@ if type(vim.api) == "table" then
   assert_equal(controller:dashboard_preview_mode(controller:selected_item()), "compact")
   assert_true(controller:render_output_panel())
   assert_equal(#preview_calls, 0, "mission compact must not attach interactive preview")
-  assert_nil(controller.state.mission_dashboard_output_job)
-  assert_nil(controller.state.mission_dashboard_output_key)
+  assert_nil(controller.state.mission_dashboard.output_job)
+  assert_nil(controller.state.mission_dashboard.output_key)
   assert_contains(table.concat(ctx.rendered_lines or {}, "\n"), "Output: Manager")
   assert_contains(table.concat(ctx.rendered_lines or {}, "\n"), "select role row to expand preview")
 
   -- First highlight of Manager role: full attach (no residual compact job).
-  controller.state.mission_dashboard_selected_row = 4
+  controller.state.mission_dashboard.selected_row = 4
   assert_equal(controller:dashboard_preview_mode(controller:selected_item()), "workspace")
   assert_true(controller:render_output_panel())
   assert_equal(#preview_calls, 1)
   assert_equal(preview_calls[1], "alpha-manager")
-  assert_equal(controller.state.mission_dashboard_output_job, 55)
-  assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-manager")
+  assert_equal(controller.state.mission_dashboard.output_job, 55)
+  assert_equal(controller.state.mission_dashboard.output_entry.safe_name, "alpha-manager")
 
   output_fixtures.delete_buffer(bufnr)
 end
@@ -209,14 +213,15 @@ do
   local exited = false
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_output_entry = {
+      mission_dashboard = {
+        output_entry = {
         name = "Builder",
         safe_name = "alpha-builder",
         project_root = "/repo",
         mission_role = "Builder",
         status = "idle",
       },
-    },
+      }},
     set_buffer_keymap = function(_, mode, lhs, rhs, desc)
       local modes = type(mode) == "table" and table.concat(mode, ",") or mode
       if modes:find("n", 1, true) or modes:find("t", 1, true) then
@@ -237,7 +242,7 @@ do
   end
   function controller:exit_output_control()
     exited = true
-    self.state.mission_dashboard_output_control = false
+    self.state.mission_dashboard.output_control = false
     return true
   end
 
@@ -257,7 +262,7 @@ do
   assert_true(closed)
   assert_true(bound["<C-o>"].rhs())
   assert_true(focused)
-  controller.state.mission_dashboard_output_control = true
+  controller.state.mission_dashboard.output_control = true
   assert_true(bound["<C-o>"].rhs())
   assert_true(exited)
 end
@@ -269,7 +274,7 @@ if type(vim.api) == "table" then
   })
 
   assert_true(controller:prepare_output_terminal_buffer())
-  assert_equal(vim.api.nvim_get_option_value("filetype", { buf = controller.state.mission_dashboard_output_buf }), "codux")
+  assert_equal(vim.api.nvim_get_option_value("filetype", { buf = controller.state.mission_dashboard.output_buf }), "codux")
   assert_true(has_mapping("<CR>", "Submit Codux Prompt"))
   assert_true(has_mapping("<C-c>", "Interrupt Agent"))
   assert_true(has_mapping("<S-Tab>", "Switch Agent Mode"))
@@ -277,7 +282,7 @@ if type(vim.api) == "table" then
   assert_true(has_mapping("<ScrollWheelDown>", "Scroll Codux Output"))
   assert_true(has_mapping("<ScrollWheelUp>", "Scroll Codux Output"))
   assert_false(has_mapping("q", "Close Codux Missions"))
-  output_fixtures.delete_buffer(controller.state.mission_dashboard_output_buf)
+  output_fixtures.delete_buffer(controller.state.mission_dashboard.output_buf)
   output_fixtures.delete_buffer(ctx.bufnr)
 end
 
@@ -305,8 +310,9 @@ if type(vim.api) == "table" then
   }, function()
     local controller, ctx = output_fixtures.controller({
       state = {
-        mission_dashboard_output_job = 77,
-      },
+        mission_dashboard = {
+          output_job = 77,
+        }},
       set_buffer_keymap = set_buffer_keymap,
     })
 
@@ -321,7 +327,7 @@ if type(vim.api) == "table" then
     assert_true(submit())
     assert_equal(sent_job, 77)
     assert_equal(sent_sequence, "\r")
-    output_fixtures.delete_buffer(controller.state.mission_dashboard_output_buf)
+    output_fixtures.delete_buffer(controller.state.mission_dashboard.output_buf)
     output_fixtures.delete_buffer(ctx.bufnr)
   end)
 end
@@ -360,10 +366,11 @@ if type(vim.api) == "table" then
   }, function()
     local controller, ctx = output_fixtures.controller({
       state = {
-        mission_dashboard_output_control = true,
-        mission_dashboard_output_job = 77,
-        mission_dashboard_output_win = 13,
-      },
+        mission_dashboard = {
+          output_control = true,
+          output_job = 77,
+          output_win = 13,
+        }},
     })
 
     assert_true(controller:send_output_terminal_mouse(65))
@@ -378,9 +385,10 @@ do
   local closed_preview
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_output_job = 77,
-      mission_dashboard_output_preview = { preview_session = "codux-preview-test" },
-    },
+      mission_dashboard = {
+        output_job = 77,
+        output_preview = { preview_session = "codux-preview-test" },
+      }},
     jobstop = function(job_id)
       stopped_job = job_id
       return true
@@ -394,8 +402,8 @@ do
   controller:close_output_preview()
   assert_equal(stopped_job, 77)
   assert_equal(closed_preview.preview_session, "codux-preview-test")
-  assert_nil(controller.state.mission_dashboard_output_job)
-  assert_nil(controller.state.mission_dashboard_output_preview)
+  assert_nil(controller.state.mission_dashboard.output_job)
+  assert_nil(controller.state.mission_dashboard.output_preview)
 end
 
 do
@@ -408,9 +416,10 @@ do
   }
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_output_job = 77,
-      mission_dashboard_output_preview = { preview_session = "codux-preview-test" },
-    },
+      mission_dashboard = {
+        output_job = 77,
+        output_preview = { preview_session = "codux-preview-test" },
+      }},
     jobstop = function(job_id)
       stopped_job = job_id
       return true
@@ -420,18 +429,18 @@ do
       return true
     end,
   })
-  controller.state.mission_dashboard_output_entry = entry
-  controller.state.mission_dashboard_output_key = controller:output_entry_key(entry)
-  controller.state.mission_dashboard_output_blocked_key = controller.state.mission_dashboard_output_key
+  controller.state.mission_dashboard.output_entry = entry
+  controller.state.mission_dashboard.output_key = controller:output_entry_key(entry)
+  controller.state.mission_dashboard.output_blocked_key = controller.state.mission_dashboard.output_key
 
   assert_true(controller:invalidate_output_preview_for_entry(entry))
   assert_equal(stopped_job, 77)
   assert_equal(closed_preview.preview_session, "codux-preview-test")
-  assert_nil(controller.state.mission_dashboard_output_entry)
-  assert_nil(controller.state.mission_dashboard_output_key)
-  assert_nil(controller.state.mission_dashboard_output_blocked_key)
-  assert_nil(controller.state.mission_dashboard_output_job)
-  assert_nil(controller.state.mission_dashboard_output_preview)
+  assert_nil(controller.state.mission_dashboard.output_entry)
+  assert_nil(controller.state.mission_dashboard.output_key)
+  assert_nil(controller.state.mission_dashboard.output_blocked_key)
+  assert_nil(controller.state.mission_dashboard.output_job)
+  assert_nil(controller.state.mission_dashboard.output_preview)
 end
 
 do
@@ -443,17 +452,18 @@ do
   }
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_output_job = 77,
-      mission_dashboard_output_preview = { preview_session = "codux-preview-test" },
-    },
+      mission_dashboard = {
+        output_job = 77,
+        output_preview = { preview_session = "codux-preview-test" },
+      }},
     jobstop = function(job_id)
       stopped_job = job_id
       return true
     end,
   })
-  controller.state.mission_dashboard_output_entry = entry
-  controller.state.mission_dashboard_output_key = controller:output_entry_key(entry)
-  controller.state.mission_dashboard_output_blocked_key = controller.state.mission_dashboard_output_key
+  controller.state.mission_dashboard.output_entry = entry
+  controller.state.mission_dashboard.output_key = controller:output_entry_key(entry)
+  controller.state.mission_dashboard.output_blocked_key = controller.state.mission_dashboard.output_key
 
   assert_false(controller:invalidate_output_preview_for_entry({
     safe_name = "alpha-reviewer",
@@ -461,9 +471,9 @@ do
     project_root = "/repo",
   }))
   assert_nil(stopped_job)
-  assert_equal(controller.state.mission_dashboard_output_key, controller:output_entry_key(entry))
-  assert_equal(controller.state.mission_dashboard_output_job, 77)
-  assert_equal(controller.state.mission_dashboard_output_preview.preview_session, "codux-preview-test")
+  assert_equal(controller.state.mission_dashboard.output_key, controller:output_entry_key(entry))
+  assert_equal(controller.state.mission_dashboard.output_job, 77)
+  assert_equal(controller.state.mission_dashboard.output_preview.preview_session, "codux-preview-test")
 end
 
 if type(vim.api) == "table" then
@@ -481,13 +491,14 @@ if type(vim.api) == "table" then
   }
   local controller, ctx = output_fixtures.controller({
     state = {
-      mission_dashboard_items = {
+      mission_dashboard = {
+        items = {
         [5] = { kind = "role", entry = entry },
       },
-      mission_dashboard_selectable_rows = { 5 },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 5,
-    },
+        selectable_rows = { 5 },
+        search_confirmed = true,
+        selected_row = 5,
+      }},
     workspace_interactive_preview = function()
       return output_fixtures.preview(), nil
     end,
@@ -495,15 +506,15 @@ if type(vim.api) == "table" then
       return 77
     end,
   })
-  controller.state.mission_dashboard_output_key = controller:output_entry_key(entry)
-  controller.state.mission_dashboard_output_blocked_key = controller.state.mission_dashboard_output_key
+  controller.state.mission_dashboard.output_key = controller:output_entry_key(entry)
+  controller.state.mission_dashboard.output_blocked_key = controller.state.mission_dashboard.output_key
 
   assert_true(controller:retry_output_preview_for_entry(entry, { delays = { 25, 50 } }))
   assert_equal(#scheduled, 1)
   assert_equal(scheduled[1].delay, 25)
   scheduled[1].callback()
-  assert_equal(controller.state.mission_dashboard_output_job, 77)
-  assert_nil(controller.state.mission_dashboard_output_blocked_key)
+  assert_equal(controller.state.mission_dashboard.output_job, 77)
+  assert_nil(controller.state.mission_dashboard.output_blocked_key)
   assert_equal(#scheduled, 1)
 
   output_fixtures.delete_buffer(ctx.bufnr)
@@ -525,14 +536,15 @@ if type(vim.api) == "table" then
   }
   local controller, ctx = output_fixtures.controller({
     state = {
-      mission_dashboard_output_control = true,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        output_control = true,
+        items = {
         [5] = { kind = "role", entry = entry },
       },
-      mission_dashboard_selectable_rows = { 5 },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 5,
-    },
+        selectable_rows = { 5 },
+        search_confirmed = true,
+        selected_row = 5,
+      }},
   })
   local rendered = false
   function controller:render_output_panel()
@@ -563,13 +575,14 @@ if type(vim.api) == "table" then
   }
   local controller, ctx = output_fixtures.controller({
     state = {
-      mission_dashboard_items = {
+      mission_dashboard = {
+        items = {
         [5] = { kind = "role", entry = entry },
       },
-      mission_dashboard_selectable_rows = { 5 },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 5,
-    },
+        selectable_rows = { 5 },
+        search_confirmed = true,
+        selected_row = 5,
+      }},
     is_loaded_buf = function()
       return false
     end,
@@ -603,14 +616,15 @@ if type(vim.api) == "table" then
   }
   local controller, ctx = output_fixtures.controller({
     state = {
-      mission_dashboard_items = {
+      mission_dashboard = {
+        items = {
         [5] = { kind = "role", entry = entry },
       },
-      mission_dashboard_selectable_rows = { 5 },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 5,
-      mission_dashboard_output_job = 77,
-    },
+        selectable_rows = { 5 },
+        search_confirmed = true,
+        selected_row = 5,
+        output_job = 77,
+      }},
   })
   local rendered = false
   function controller:output_preview_running()
@@ -650,13 +664,14 @@ if type(vim.api) == "table" then
   }
   local controller, ctx = output_fixtures.controller({
     state = {
-      mission_dashboard_items = {
+      mission_dashboard = {
+        items = {
         [5] = { kind = "role", entry = reviewer },
       },
-      mission_dashboard_selectable_rows = { 5 },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 5,
-    },
+        selectable_rows = { 5 },
+        search_confirmed = true,
+        selected_row = 5,
+      }},
   })
   local rendered = false
   function controller:render_output_panel()
@@ -688,20 +703,21 @@ if type(vim.api) == "table" then
   local preview_calls = 0
   local controller, ctx = output_fixtures.controller({
     state = {
-      mission_dashboard_items = {
+      mission_dashboard = {
+        items = {
         [5] = { kind = "role", entry = entry },
       },
-      mission_dashboard_selectable_rows = { 5 },
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 5,
-    },
+        selectable_rows = { 5 },
+        search_confirmed = true,
+        selected_row = 5,
+      }},
     workspace_interactive_preview = function()
       preview_calls = preview_calls + 1
       return nil, "workspace agent session is not running"
     end,
   })
-  controller.state.mission_dashboard_output_key = controller:output_entry_key(entry)
-  controller.state.mission_dashboard_output_blocked_key = controller.state.mission_dashboard_output_key
+  controller.state.mission_dashboard.output_key = controller:output_entry_key(entry)
+  controller.state.mission_dashboard.output_blocked_key = controller.state.mission_dashboard.output_key
 
   assert_true(controller:retry_output_preview_for_entry(entry, { delays = { 25, 50 } }))
   assert_equal(#scheduled, 1)
@@ -712,7 +728,7 @@ if type(vim.api) == "table" then
   scheduled[2].callback()
   assert_equal(preview_calls, 2)
   assert_equal(#scheduled, 2)
-  assert_equal(controller.state.mission_dashboard_output_blocked_key, controller:output_entry_key(entry))
+  assert_equal(controller.state.mission_dashboard.output_blocked_key, controller:output_entry_key(entry))
   assert_contains(table.concat(ctx.rendered_lines, "\n"), "workspace agent session is not running")
 
   output_fixtures.delete_buffer(ctx.bufnr)
@@ -726,17 +742,18 @@ do
   local closed_preview
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_output_win = 13,
-      mission_dashboard_output_buf = 14,
-      mission_dashboard_output_entry = { safe_name = "alpha-builder" },
-      mission_dashboard_output_key = "key",
-      mission_dashboard_output_blocked_key = "blocked",
-      mission_dashboard_output_job = 77,
-      mission_dashboard_output_preview = { preview_session = "codux-preview-test" },
-      mission_dashboard_output_buf_kind = "terminal",
-      mission_dashboard_output_control = true,
-      mission_dashboard_output_control_key = "control",
-    },
+      mission_dashboard = {
+        output_win = 13,
+        output_buf = 14,
+        output_entry = { safe_name = "alpha-builder" },
+        output_key = "key",
+        output_blocked_key = "blocked",
+        output_job = 77,
+        output_preview = { preview_session = "codux-preview-test" },
+        output_buf_kind = "terminal",
+        output_control = true,
+        output_control_key = "control",
+      }},
     ui = {
       close_window = function(win)
         closed_win = win
@@ -760,16 +777,16 @@ do
   assert_equal(deleted_buf, 14)
   assert_equal(stopped_job, 77)
   assert_equal(closed_preview.preview_session, "codux-preview-test")
-  assert_nil(controller.state.mission_dashboard_output_win)
-  assert_nil(controller.state.mission_dashboard_output_buf)
-  assert_nil(controller.state.mission_dashboard_output_entry)
-  assert_nil(controller.state.mission_dashboard_output_key)
-  assert_nil(controller.state.mission_dashboard_output_blocked_key)
-  assert_nil(controller.state.mission_dashboard_output_job)
-  assert_nil(controller.state.mission_dashboard_output_preview)
-  assert_nil(controller.state.mission_dashboard_output_buf_kind)
-  assert_false(controller.state.mission_dashboard_output_control)
-  assert_nil(controller.state.mission_dashboard_output_control_key)
+  assert_nil(controller.state.mission_dashboard.output_win)
+  assert_nil(controller.state.mission_dashboard.output_buf)
+  assert_nil(controller.state.mission_dashboard.output_entry)
+  assert_nil(controller.state.mission_dashboard.output_key)
+  assert_nil(controller.state.mission_dashboard.output_blocked_key)
+  assert_nil(controller.state.mission_dashboard.output_job)
+  assert_nil(controller.state.mission_dashboard.output_preview)
+  assert_nil(controller.state.mission_dashboard.output_buf_kind)
+  assert_false(controller.state.mission_dashboard.output_control)
+  assert_nil(controller.state.mission_dashboard.output_control_key)
 end
 
 do

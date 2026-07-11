@@ -6,6 +6,7 @@ local dashboard_search_mod = require("codux.dashboard_search")
 local manager_actions = require("codux.workspace_manager_actions")
 local manager_selection = require("codux.workspace_manager_selection")
 local manager_windows = require("codux.workspace_manager_windows")
+local state_mod = require("codux.state")
 local text_util = require("codux.text")
 local ui = require("codux.ui")
 local util = require("codux.util")
@@ -16,7 +17,7 @@ local noop = util.noop
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
   local controller = {
-    state = type(opts.state) == "table" and opts.state or {},
+    state = state_mod.ensure_ui_nests(type(opts.state) == "table" and opts.state or {}),
     notify = type(opts.notify) == "function" and opts.notify or util.noop,
     trim = type(opts.trim) == "function" and opts.trim or text_util.trim,
     ui = type(opts.ui) == "table" and opts.ui or ui,
@@ -101,7 +102,7 @@ function M:ns()
   if self.namespace then
     return self.namespace
   end
-  return self.state.workspace_manager_ns
+  return self.state.workspace_manager.ns
 end
 
 function M:action_palette_controller()
@@ -171,7 +172,7 @@ function M:dashboard_search_controller()
     bind_close_keys = self.bind_close_keys,
     notify = self.notify,
     main_win = function()
-      return self.state.workspace_manager_win
+      return self.state.workspace_manager.win
     end,
     cursor_width = function()
       return self:window_width()
@@ -282,19 +283,19 @@ function M:open_footer()
 end
 
 function M:render()
-  if not self.is_loaded_buf(self.state.workspace_manager_buf) then
+  if not self.is_loaded_buf(self.state.workspace_manager.buf) then
     return false
   end
 
-  local root = self.state.workspace_manager_project_root or self.project_root()
+  local root = self.state.workspace_manager.project_root or self.project_root()
   local all_entries, error_message = self.workspace_entries_for_project(root)
-  local query = tostring(self.state.workspace_manager_query or "")
+  local query = tostring(self.state.workspace_manager.query or "")
   local entries = error_message and all_entries
     or (query ~= "" and self.workspace_ui.fuzzy_workspace_filter(all_entries, query))
     or self.workspace_ui.sort_entries(all_entries, "status_recent")
   local ns = self:ns()
-  self.state.workspace_manager_items = entries
-  self.state.workspace_manager_best_match_index = query ~= "" and #entries > 0 and 1 or nil
+  self.state.workspace_manager.items = entries
+  self.state.workspace_manager.best_match_index = query ~= "" and #entries > 0 and 1 or nil
 
   local lines = { self:header_line() }
   if error_message then
@@ -317,17 +318,17 @@ function M:render()
     table.insert(lines, "")
   end
 
-  self.ui.set_lines(self.state.workspace_manager_buf, lines, { modifiable = true })
-  pcall(vim.api.nvim_buf_clear_namespace, self.state.workspace_manager_buf, ns, 0, -1)
-  pcall(vim.api.nvim_buf_add_highlight, self.state.workspace_manager_buf, ns, "WhichKeyDesc", 0, 0, -1)
-  local highlight_index = self.state.workspace_manager_search_confirmed and self.state.workspace_manager_selected_index
-    or self.state.workspace_manager_best_match_index
+  self.ui.set_lines(self.state.workspace_manager.buf, lines, { modifiable = true })
+  pcall(vim.api.nvim_buf_clear_namespace, self.state.workspace_manager.buf, ns, 0, -1)
+  pcall(vim.api.nvim_buf_add_highlight, self.state.workspace_manager.buf, ns, "WhichKeyDesc", 0, 0, -1)
+  local highlight_index = self.state.workspace_manager.search_confirmed and self.state.workspace_manager.selected_index
+    or self.state.workspace_manager.best_match_index
   if highlight_index then
     local highlight_row = 2 + highlight_index - 1
-    local match_highlight = self.state.workspace_manager_search_confirmed and "IncSearch" or "Visual"
+    local match_highlight = self.state.workspace_manager.search_confirmed and "IncSearch" or "Visual"
     local full_line_ok = pcall(
       vim.api.nvim_buf_set_extmark,
-      self.state.workspace_manager_buf,
+      self.state.workspace_manager.buf,
       ns,
       highlight_row - 1,
       0,
@@ -336,7 +337,7 @@ function M:render()
     if not full_line_ok then
       pcall(
         vim.api.nvim_buf_add_highlight,
-        self.state.workspace_manager_buf,
+        self.state.workspace_manager.buf,
         ns,
         match_highlight,
         highlight_row - 1,
@@ -345,13 +346,13 @@ function M:render()
       )
     end
   end
-  if self.state.workspace_manager_focus_match and self.is_valid_win(self.state.workspace_manager_win) then
+  if self.state.workspace_manager.focus_match and self.is_valid_win(self.state.workspace_manager.win) then
     local row = 1
-    if #self.state.workspace_manager_items > 0 then
-      row = 2 + (self.state.workspace_manager_best_match_index or 1) - 1
+    if #self.state.workspace_manager.items > 0 then
+      row = 2 + (self.state.workspace_manager.best_match_index or 1) - 1
     end
-    pcall(vim.api.nvim_win_set_cursor, self.state.workspace_manager_win, { row, 0 })
-    self.state.workspace_manager_focus_match = false
+    pcall(vim.api.nvim_win_set_cursor, self.state.workspace_manager.win, { row, 0 })
+    self.state.workspace_manager.focus_match = false
   end
   self:render_footer()
   return true
@@ -402,7 +403,7 @@ function M:toggle_search_list_focus()
 end
 
 function M:workspace_search_config()
-  local dashboard_config = vim.api.nvim_win_get_config(self.state.workspace_manager_win)
+  local dashboard_config = vim.api.nvim_win_get_config(self.state.workspace_manager.win)
   local dashboard_width = self:window_width() or 58
   local width = math.max(20, dashboard_width)
   local col = type(dashboard_config.col) == "number" and dashboard_config.col or 0

@@ -455,9 +455,10 @@ do
   local controller = mission_control_mod.new({
     namespace = 99,
     state = {
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 2,
-    },
+      mission_dashboard = {
+        search_confirmed = true,
+        selected_row = 2,
+      }},
   })
   controller:highlight_dashboard(12, {
     "summary",
@@ -497,9 +498,10 @@ do
   local controller = mission_control_mod.new({
     namespace = 99,
     state = {
-      mission_dashboard_search_confirmed = false,
-      mission_dashboard_selected_row = 2,
-    },
+      mission_dashboard = {
+        search_confirmed = false,
+        selected_row = 2,
+      }},
   })
   controller:highlight_dashboard(12, {
     "summary",
@@ -541,8 +543,9 @@ do
   local controller = mission_control_mod.new({
     namespace = 99,
     state = {
-      mission_dashboard_best_match_row = 2,
-    },
+      mission_dashboard = {
+        best_match_row = 2,
+      }},
   })
   controller:highlight_dashboard(12, {
     "summary",

@@ -17,7 +17,7 @@ function M.new(controller)
     bind_close_keys = controller.bind_close_keys,
     notify = controller.notify,
     main_win = function()
-      return controller.state.mission_dashboard_win
+      return controller.state.mission_dashboard.win
     end,
     cursor_width = function()
       return controller:window_width()

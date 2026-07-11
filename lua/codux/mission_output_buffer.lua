@@ -20,11 +20,11 @@ function M.attach_output_buffer_autocmd(self, bufnr)
     group = group,
     buffer = bufnr,
     callback = function()
-      if self.state.mission_dashboard_output_replacing_buf == bufnr then
+      if self.state.mission_dashboard.output_replacing_buf == bufnr then
         pcall(vim.api.nvim_del_augroup_by_id, group)
         return
       end
-      if self.state.mission_dashboard_output_buf == bufnr then
+      if self.state.mission_dashboard.output_buf == bufnr then
         self:close_output_preview()
         self:clear_output_panel_state()
       end
@@ -65,16 +65,16 @@ function M.create_output_buffer(self, kind, lines)
 end
 
 function M.output_window_buffer(self)
-  if not self.is_valid_win(self.state.mission_dashboard_output_win) then
+  if not self.is_valid_win(self.state.mission_dashboard.output_win) then
     return nil
   end
 
-  local ok, current = pcall(vim.api.nvim_win_get_buf, self.state.mission_dashboard_output_win)
+  local ok, current = pcall(vim.api.nvim_win_get_buf, self.state.mission_dashboard.output_win)
   return ok and current or nil
 end
 
 function M.unlock_output_window(self)
-  local win = self.state.mission_dashboard_output_win
+  local win = self.state.mission_dashboard.output_win
   if not self.is_valid_win(win) then
     return false
   end
@@ -83,7 +83,7 @@ function M.unlock_output_window(self)
 end
 
 function M.set_output_window_buffer(self, bufnr)
-  local win = self.state.mission_dashboard_output_win
+  local win = self.state.mission_dashboard.output_win
   if not self.is_valid_win(win) then
     return true
   end
@@ -117,40 +117,40 @@ function M.set_output_window_buffer(self, bufnr)
 end
 
 function M.replace_output_buffer(self, kind, lines)
-  local old_buf = self.state.mission_dashboard_output_buf
+  local old_buf = self.state.mission_dashboard.output_buf
   local bufnr = self:create_output_buffer(kind, lines)
   if not bufnr then
     if not self.is_loaded_buf(old_buf) then
       return false
     end
-    self.state.mission_dashboard_output_buf_kind = kind
+    self.state.mission_dashboard.output_buf_kind = kind
     return true
   end
 
-  self.state.mission_dashboard_output_replacing_buf = old_buf
+  self.state.mission_dashboard.output_replacing_buf = old_buf
   if not self:set_output_window_buffer(bufnr) then
-    if self.state.mission_dashboard_output_replacing_buf == old_buf then
-      self.state.mission_dashboard_output_replacing_buf = nil
+    if self.state.mission_dashboard.output_replacing_buf == old_buf then
+      self.state.mission_dashboard.output_replacing_buf = nil
     end
     self.ui.delete_buffer(bufnr)
     return false
   end
 
-  self.state.mission_dashboard_output_buf = bufnr
-  self.state.mission_dashboard_output_buf_kind = kind
+  self.state.mission_dashboard.output_buf = bufnr
+  self.state.mission_dashboard.output_buf_kind = kind
   if old_buf ~= bufnr then
     self.ui.delete_buffer(old_buf)
   end
-  if self.state.mission_dashboard_output_replacing_buf == old_buf then
-    self.state.mission_dashboard_output_replacing_buf = nil
+  if self.state.mission_dashboard.output_replacing_buf == old_buf then
+    self.state.mission_dashboard.output_replacing_buf = nil
   end
   return true
 end
 
 function M.ensure_output_buffer(self, kind, lines)
-  local bufnr = self.state.mission_dashboard_output_buf
+  local bufnr = self.state.mission_dashboard.output_buf
   local buftype = self:output_buffer_buftype(bufnr)
-  local current_kind = self.state.mission_dashboard_output_buf_kind
+  local current_kind = self.state.mission_dashboard.output_buf_kind
   local must_replace = not self.is_loaded_buf(bufnr)
     or current_kind ~= kind
     or buftype == "terminal"
@@ -160,7 +160,7 @@ function M.ensure_output_buffer(self, kind, lines)
     return self:replace_output_buffer(kind, lines)
   end
 
-  self.state.mission_dashboard_output_buf_kind = kind
+  self.state.mission_dashboard.output_buf_kind = kind
   return true
 end
 
@@ -169,7 +169,7 @@ function M.prepare_output_terminal_buffer(self)
     return false
   end
 
-  local bufnr = self.state.mission_dashboard_output_buf
+  local bufnr = self.state.mission_dashboard.output_buf
   pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = bufnr })
   pcall(vim.api.nvim_set_option_value, "modified", false, { buf = bufnr })
   return true

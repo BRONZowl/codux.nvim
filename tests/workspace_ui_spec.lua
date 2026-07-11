@@ -144,18 +144,18 @@ do
   assert_equal(by_key.s, "start_mission")
   assert_equal(by_key.g, "start_manager")
   assert_equal(by_key.p, "process_dispatch")
-  assert_equal(by_key.a, "add_manager")
   assert_equal(by_key.e, "edit_objective")
-  assert_equal(by_key.v, "view_objective")
+  assert_equal(by_key.f, "edit_focus")
   assert_equal(by_key.x, "close_mission")
   assert_equal(by_key.d, "delete_mission")
+  assert_nil(by_key.a)
+  assert_nil(by_key.v)
   assert_nil(by_key.n)
   assert_nil(by_key.r)
   assert_contains(workspace_ui.mission_action_line(actions[1], 40), "Start Mission")
   assert_equal(labels_by_key.s, "Start Mission")
   assert_equal(labels_by_key.g, "Start Manager")
   assert_equal(labels_by_key.p, "Process Dispatch")
-  assert_equal(labels_by_key.v, "View Objective")
   assert_equal(labels_by_key.x, "Close Mission")
   assert_nil(labels_by_key.n)
 end
@@ -169,7 +169,7 @@ do
     return table.concat(parts, "|")
   end
 
-  local actions = workspace_ui.role_workspace_action_items({ status = "inactive" })
+  local actions = workspace_ui.role_workspace_action_items({ status = "inactive", mission_role = "Agent" })
   local by_key = {}
   local labels_by_key = {}
   for _, action in ipairs(actions) do
@@ -179,20 +179,20 @@ do
 
   assert_nil(by_key.o)
   assert_equal(by_key.s, "start_workspace")
-  assert_equal(by_key.t, "prompt_role")
   assert_equal(by_key.r, "rename_role")
   assert_equal(by_key.e, "edit_instructions")
   assert_equal(by_key.x, "close_workspace")
   assert_equal(by_key.d, "delete_workspace")
   assert_equal(by_key.w, "create_workspace")
   assert_equal(by_key.p, "switch_profile")
+  assert_nil(by_key.t)
   assert_nil(by_key.i)
   assert_nil(by_key.a)
   assert_nil(by_key.X)
   assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Start Workspace")
   assert_equal(labels_by_key.s, "Start Workspace")
-  assert_equal(labels_by_key.t, "Prompt Role")
   assert_equal(labels_by_key.p, "Switch Profile")
+  assert_nil(labels_by_key.t)
   assert_nil(labels_by_key.i)
   assert_nil(labels_by_key.a)
   assert_nil(labels_by_key.o)
@@ -201,7 +201,7 @@ do
   assert_equal(labels_by_key.w, "Create Workspace")
   local inactive_signature = action_signature(actions)
   for _, status in ipairs({ "active", "idle", "question" }) do
-    local status_actions = workspace_ui.role_workspace_action_items({ status = status })
+    local status_actions = workspace_ui.role_workspace_action_items({ status = status, mission_role = "Agent" })
     local by_key = {}
     local labels_by_key = {}
     for _, action in ipairs(status_actions) do
@@ -217,6 +217,28 @@ do
     assert_equal(by_key.e, "edit_instructions")
     assert_contains(workspace_ui.role_workspace_action_line(status_actions[1], 40), "Start Workspace")
   end
+
+  local manager_actions = workspace_ui.role_workspace_action_items({
+    status = "inactive",
+    mission_role = "Manager",
+    safe_name = "manager",
+  })
+  local manager_by_key = {}
+  local manager_labels = {}
+  for _, action in ipairs(manager_actions) do
+    manager_by_key[action.key] = action.action
+    manager_labels[action.key] = action.label
+  end
+  assert_equal(manager_by_key.s, "start_workspace")
+  assert_equal(manager_labels.s, "Start Manager")
+  assert_equal(manager_by_key.p, "switch_profile")
+  assert_equal(manager_by_key.e, "edit_instructions")
+  assert_equal(manager_by_key.x, "close_workspace")
+  assert_equal(manager_labels.x, "Close Manager")
+  assert_equal(manager_by_key.w, "create_workspace")
+  assert_nil(manager_by_key.r)
+  assert_nil(manager_by_key.d)
+  assert_contains(workspace_ui.role_workspace_action_line(manager_actions[1], 40), "Start Manager")
 end
 
 do

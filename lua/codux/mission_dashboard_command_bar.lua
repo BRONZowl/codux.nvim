@@ -24,23 +24,23 @@ function M.highlight(controller, bufnr, lines, items)
 end
 
 function M.render(controller)
-  if not controller.is_loaded_buf(controller.state.mission_dashboard_command_bar_buf) then
+  if not controller.is_loaded_buf(controller.state.mission_dashboard.command_bar_buf) then
     return false
   end
   local width = controller:window_width() or controller:dashboard_config(1).width
   local lines = controller:dashboard_command_lines(width)
-  controller.ui.set_lines(controller.state.mission_dashboard_command_bar_buf, lines, { modifiable = true })
-  controller:highlight_command_bar(controller.state.mission_dashboard_command_bar_buf, lines)
+  controller.ui.set_lines(controller.state.mission_dashboard.command_bar_buf, lines, { modifiable = true })
+  controller:highlight_command_bar(controller.state.mission_dashboard.command_bar_buf, lines)
   return true
 end
 
 function M.open(controller)
-  if not controller.is_valid_win(controller.state.mission_dashboard_win) then
+  if not controller.is_valid_win(controller.state.mission_dashboard.win) then
     return false
   end
   if
-    controller.is_valid_win(controller.state.mission_dashboard_command_bar_win)
-    and controller.is_loaded_buf(controller.state.mission_dashboard_command_bar_buf)
+    controller.is_valid_win(controller.state.mission_dashboard.command_bar_win)
+    and controller.is_loaded_buf(controller.state.mission_dashboard.command_bar_buf)
   then
     return controller:render_command_bar()
   end
@@ -67,8 +67,8 @@ function M.open(controller)
     return false
   end
 
-  controller.state.mission_dashboard_command_bar_buf = bufnr
-  controller.state.mission_dashboard_command_bar_win = win
+  controller.state.mission_dashboard.command_bar_buf = bufnr
+  controller.state.mission_dashboard.command_bar_win = win
   controller.ui.set_window_options(win, {
     wrap = false,
     number = false,
@@ -84,9 +84,9 @@ function M.open(controller)
     group = group,
     buffer = bufnr,
     callback = function()
-      if controller.state.mission_dashboard_command_bar_buf == bufnr then
-        controller.state.mission_dashboard_command_bar_buf = nil
-        controller.state.mission_dashboard_command_bar_win = nil
+      if controller.state.mission_dashboard.command_bar_buf == bufnr then
+        controller.state.mission_dashboard.command_bar_buf = nil
+        controller.state.mission_dashboard.command_bar_win = nil
       end
       pcall(vim.api.nvim_del_augroup_by_id, group)
     end,
@@ -96,10 +96,10 @@ function M.open(controller)
 end
 
 function M.close(controller)
-  controller.ui.close_window(controller.state.mission_dashboard_command_bar_win)
-  controller.ui.delete_buffer(controller.state.mission_dashboard_command_bar_buf)
-  controller.state.mission_dashboard_command_bar_win = nil
-  controller.state.mission_dashboard_command_bar_buf = nil
+  controller.ui.close_window(controller.state.mission_dashboard.command_bar_win)
+  controller.ui.delete_buffer(controller.state.mission_dashboard.command_bar_buf)
+  controller.state.mission_dashboard.command_bar_win = nil
+  controller.state.mission_dashboard.command_bar_buf = nil
   return true
 end
 

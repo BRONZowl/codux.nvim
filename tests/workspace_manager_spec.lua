@@ -29,10 +29,11 @@ if type(vim.api) == "table" then
 
   local controller = manager_mod.new({
     state = {
-      workspace_manager_win = 10,
-      workspace_manager_command_win = 30,
-      workspace_manager_best_match_index = 2,
-    },
+      workspace_manager = {
+        win = 10,
+        command_win = 30,
+        best_match_index = 2,
+      }},
     is_valid_win = function(win)
       return win == 10 or win == 20 or win == 30
     end,
@@ -74,7 +75,7 @@ if type(vim.api) == "table" then
 
   assert_true(controller:open_search_input())
   assert_true(enter_rhs())
-  assert_equal(controller.state.workspace_manager_selected_index, 2)
+  assert_equal(controller.state.workspace_manager.selected_index, 2)
   assert_equal(focused_win, 10)
 
   vim.api.nvim_open_win = old_open_win
@@ -227,17 +228,18 @@ do
   local render_count = 0
   local controller = manager_mod.new({
     state = {
-      workspace_manager_win = 10,
-      workspace_manager_search_win = 20,
-      workspace_manager_items = {
+      workspace_manager = {
+        win = 10,
+        search_win = 20,
+        items = {
         { name = "Backend Debug" },
         { name = "Code Review" },
         { name = "Architecture" },
       },
-      workspace_manager_best_match_index = 2,
-      workspace_manager_search_confirmed = true,
-      workspace_manager_selected_index = 2,
-    },
+        best_match_index = 2,
+        search_confirmed = true,
+        selected_index = 2,
+      }},
     is_valid_win = function(win)
       return win == 10 or win == 20
     end,
@@ -266,16 +268,16 @@ do
   assert_equal(current_win, 20)
 
   assert_true(controller:move_workspace_selection(1))
-  assert_equal(controller.state.workspace_manager_selected_index, 3)
+  assert_equal(controller.state.workspace_manager.selected_index, 3)
   assert_equal(cursors[10][1], 4)
   assert_equal(controller:selected_item().name, "Architecture")
 
   assert_true(controller:move_workspace_selection(1))
-  assert_equal(controller.state.workspace_manager_selected_index, 3)
+  assert_equal(controller.state.workspace_manager.selected_index, 3)
   assert_equal(cursors[10][1], 4)
 
   assert_true(controller:move_workspace_selection(-1))
-  assert_equal(controller.state.workspace_manager_selected_index, 2)
+  assert_equal(controller.state.workspace_manager.selected_index, 2)
   assert_equal(cursors[10][1], 3)
   assert_equal(controller:selected_item().name, "Code Review")
   assert_equal(render_count, 3)
@@ -299,9 +301,10 @@ do
   local configs = {}
   local controller = manager_mod.new({
     state = {
-      workspace_manager_win = 10,
-      workspace_manager_footer_win = 11,
-    },
+      workspace_manager = {
+        win = 10,
+        footer_win = 11,
+      }},
     is_valid_win = function(win)
       return win == 10 or win == 11
     end,
@@ -406,12 +409,13 @@ do
   local calls = {}
   local controller = manager_mod.new({
     state = {
-      workspace_manager_action_workspace = {
+      workspace_manager = {
+        action_workspace = {
         name = "review",
         safe_name = "review",
         project_root = "/repo",
       },
-    },
+      }},
     start_saved_workspace = function(entry)
       table.insert(calls, "start:" .. tostring(entry.name))
       return true

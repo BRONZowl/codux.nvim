@@ -30,6 +30,7 @@ local function ui_subtable(flat_prefix, fields)
 end
 
 local WORKSPACE_MANAGER_FIELDS = {
+  -- list chrome
   "buf",
   "win",
   "footer_buf",
@@ -38,10 +39,12 @@ local WORKSPACE_MANAGER_FIELDS = {
   "search_win",
   "command_buf",
   "command_win",
+  -- action palette
   "action_buf",
   "action_win",
   "action_items",
   "action_workspace",
+  -- list state
   "items",
   "query",
   "best_match_index",
@@ -54,18 +57,25 @@ local WORKSPACE_MANAGER_FIELDS = {
 }
 
 local MISSION_DASHBOARD_FIELDS = {
+  -- list chrome
   "buf",
   "win",
   "search_buf",
   "search_win",
   "command_buf",
   "command_win",
+  "command_bar_buf",
+  "command_bar_win",
+  -- action palette
   "action_buf",
   "action_win",
   "action_items",
   "action_mission",
   "action_workspace",
   "action_kind",
+  "action_sink_buf",
+  "action_sink_win",
+  -- list state
   "items",
   "lines",
   "selectable_rows",
@@ -75,88 +85,102 @@ local MISSION_DASHBOARD_FIELDS = {
   "focus_match",
   "search_confirmed",
   "project_root",
+  -- output panel
   "output_buf",
   "output_win",
+  "output_buf_kind",
+  "output_entry",
+  "output_key",
+  "output_blocked_key",
+  "output_job",
+  "output_preview",
+  "output_generation",
+  "output_replacing_buf",
+  "output_retry_generation",
+  "output_retry_key",
+  "output_control",
+  "output_control_key",
+  "output_control_mouse",
+  "output_control_cursor",
+  "output_terminal_controller",
+  "output_terminal_state",
+  -- window chrome / timers / caches
+  "monitor_timer",
+  "resize_augroup",
+  "saved_mouse",
+  "saved_guicursor",
+  "branch_cache",
+  "dirty_cache",
+  "last_dispatch",
+  "token_usage_provider",
+  "token_usage_refreshed_at",
+  "token_usage_refreshed_at_by_provider",
 }
 
-local function flat_ui_key(key)
-  if type(key) ~= "string" then
+--- Resolve a UI field key for nested mission/workspace state.
+--- Accepts nested flat-style keys ("mission_dashboard_win") for dynamic accessors
+--- (dashboard_search, action_palette) and returns the nest table + field name.
+function M.ui_slot(state, key)
+  if type(state) ~= "table" or type(key) ~= "string" or key == "" then
     return nil, nil
   end
-  local field = key:match("^workspace_manager_(.+)$")
+
+  -- Lua patterns do not support | alternation; match each nest prefix explicitly.
+  local field = key:match("^mission_dashboard_(.+)$")
   if field then
-    return "workspace_manager", field
+    local sub = state.mission_dashboard
+    if type(sub) ~= "table" then
+      sub = {}
+      state.mission_dashboard = sub
+    end
+    return sub, field
   end
-  field = key:match("^mission_dashboard_(.+)$")
+
+  field = key:match("^workspace_manager_(.+)$")
   if field then
-    return "mission_dashboard", field
+    local sub = state.workspace_manager
+    if type(sub) ~= "table" then
+      sub = {}
+      state.workspace_manager = sub
+    end
+    return sub, field
   end
-  return nil, nil
+
+  return state, key
 end
 
---- Nest manager/dashboard UI state while keeping flat key access for call sites.
-function M.with_ui_proxy(state)
+function M.get(state, key)
+  local slot, field = M.ui_slot(state, key)
+  if not slot then
+    return nil
+  end
+  return slot[field]
+end
+
+function M.set(state, key, value)
+  local slot, field = M.ui_slot(state, key)
+  if not slot then
+    return
+  end
+  slot[field] = value
+end
+
+--- Ensure nested UI tables exist on an existing state object (controllers/tests).
+function M.ensure_ui_nests(state)
   if type(state) ~= "table" then
     return state
   end
-  if getmetatable(state) and getmetatable(state).__codux_ui_proxy then
-    return state
-  end
-
   if type(state.workspace_manager) ~= "table" then
     state.workspace_manager = ui_subtable("workspace_manager", WORKSPACE_MANAGER_FIELDS)
   end
   if type(state.mission_dashboard) ~= "table" then
     state.mission_dashboard = ui_subtable("mission_dashboard", MISSION_DASHBOARD_FIELDS)
   end
-
-  -- Migrate any flat keys already present on the root table into the nest.
-  for _, field in ipairs(WORKSPACE_MANAGER_FIELDS) do
-    local flat = "workspace_manager_" .. field
-    if rawget(state, flat) ~= nil and state.workspace_manager[field] == nil then
-      state.workspace_manager[field] = rawget(state, flat)
-      rawset(state, flat, nil)
-    end
-  end
-  for _, field in ipairs(MISSION_DASHBOARD_FIELDS) do
-    local flat = "mission_dashboard_" .. field
-    if rawget(state, flat) ~= nil and state.mission_dashboard[field] == nil then
-      state.mission_dashboard[field] = rawget(state, flat)
-      rawset(state, flat, nil)
-    end
-  end
-
-  return setmetatable(state, {
-    __codux_ui_proxy = true,
-    __index = function(t, key)
-      local nest, field = flat_ui_key(key)
-      if nest then
-        local sub = rawget(t, nest)
-        if type(sub) == "table" then
-          return sub[field]
-        end
-        return nil
-      end
-      return nil
-    end,
-    __newindex = function(t, key, value)
-      local nest, field = flat_ui_key(key)
-      if nest then
-        local sub = rawget(t, nest)
-        if type(sub) ~= "table" then
-          sub = {}
-          rawset(t, nest, sub)
-        end
-        sub[field] = value
-        return
-      end
-      rawset(t, key, value)
-    end,
-  })
+  return state
 end
 
 function M.initial()
-  local state = {
+  return {
     buf = nil,
     win = nil,
     job_id = nil,
@@ -209,8 +233,6 @@ function M.initial()
     pending_delete_buffers = {},
     installed_mappings = {},
   }
-
-  return M.with_ui_proxy(state)
 end
 
 return M

@@ -26,12 +26,14 @@ local function runtime(opts)
   local rendered = false
   return {
     state = opts.state or {
-      workspace_manager_project_root = "/repo",
+      workspace_manager = {
+        project_root = "/repo",
+      },
       workspace = {
         safe_name = "review",
         project_root = "/repo",
         window_name = "review",
-      },
+      }
     },
     tmux_target = runtime_mod.tmux_target,
     normalize_agent_mode = function(_, mode)

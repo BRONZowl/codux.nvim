@@ -9,7 +9,7 @@ local M = {}
 local noop = util.noop
 
 local function output_terminal_state(parent)
-  local state = parent.state.mission_dashboard_output_terminal_state
+  local state = parent.state.mission_dashboard.output_terminal_state
   if type(state) ~= "table" then
     state = {
       mode = "not running",
@@ -19,12 +19,12 @@ local function output_terminal_state(parent)
       terminal_prompt_tracking_valid = true,
       terminal_mode_sync_pending = false,
     }
-    parent.state.mission_dashboard_output_terminal_state = state
+    parent.state.mission_dashboard.output_terminal_state = state
   end
 
-  state.buf = parent.state.mission_dashboard_output_buf
-  state.win = parent.state.mission_dashboard_output_win
-  state.job_id = parent.state.mission_dashboard_output_job
+  state.buf = parent.state.mission_dashboard.output_buf
+  state.win = parent.state.mission_dashboard.output_win
+  state.job_id = parent.state.mission_dashboard.output_job
   return state
 end
 
@@ -42,7 +42,7 @@ local function adapter_ui(parent)
 end
 
 function M.output_terminal_controller(self)
-  local controller = self.state.mission_dashboard_output_terminal_controller
+  local controller = self.state.mission_dashboard.output_terminal_controller
   if type(controller) == "table" then
     controller.state = output_terminal_state(self)
     return controller
@@ -127,12 +127,12 @@ function M.output_terminal_controller(self)
     return true
   end
 
-  parent.state.mission_dashboard_output_terminal_controller = controller
+  parent.state.mission_dashboard.output_terminal_controller = controller
   return controller
 end
 
 function M.clear_output_terminal_state(self)
-  local controller = self.state.mission_dashboard_output_terminal_controller
+  local controller = self.state.mission_dashboard.output_terminal_controller
   if type(controller) == "table" then
     controller:reset_terminal_prompt_input()
     controller.state.job_id = nil
@@ -155,7 +155,7 @@ function M.bind_output_terminal_commands(self, bufnr)
     },
   })
   self.set_buffer_keymap(bufnr, { "n", "t" }, "<C-o>", function()
-    if self.state.mission_dashboard_output_control then
+    if self.state.mission_dashboard.output_control then
       return self:exit_output_control()
     end
     return self:focus_mission_list()

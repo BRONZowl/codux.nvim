@@ -73,7 +73,7 @@ function M.sync(runtime, event, current_filetype)
   workspace.git_branch = branch
   runtime.state.workspace_target_signature = signature
 
-  if runtime.state.workspace_manager_project_root == root then
+  if runtime.state.workspace_manager.project_root == root then
     runtime.render_workspace_manager()
   end
 

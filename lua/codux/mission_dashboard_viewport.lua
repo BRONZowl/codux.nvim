@@ -44,13 +44,13 @@ function M.output_preview_row(controller)
     return nil
   end
 
-  local entry = controller.state.mission_dashboard_output_entry
+  local entry = controller.state.mission_dashboard.output_entry
   local key = controller:output_entry_key(entry)
   if key == "" then
     return nil
   end
 
-  for row, item in pairs(controller.state.mission_dashboard_items or {}) do
+  for row, item in pairs(controller.state.mission_dashboard.items or {}) do
     if type(item) == "table" and item.kind == "role" and controller:output_entry_key(item.entry) == key then
       return row
     end
@@ -60,10 +60,10 @@ end
 
 function M.capture_output_preview_anchor(controller)
   local row = M.output_preview_row(controller)
-  if not row or row ~= controller.state.mission_dashboard_selected_row then
+  if not row or row ~= controller.state.mission_dashboard.selected_row then
     return nil
   end
-  local win = controller.state.mission_dashboard_win
+  local win = controller.state.mission_dashboard.win
   if not controller.is_valid_win(win) then
     return nil
   end
@@ -79,7 +79,7 @@ function M.capture_output_preview_anchor(controller)
     return nil
   end
 
-  local key = controller:output_entry_key(controller.state.mission_dashboard_output_entry)
+  local key = controller:output_entry_key(controller.state.mission_dashboard.output_entry)
   if key == "" then
     return nil
   end
@@ -97,13 +97,13 @@ function M.restore_output_preview_anchor(controller, anchor)
     return false
   end
   local row = M.output_preview_row(controller)
-  if not row or row ~= anchor.row or row ~= controller.state.mission_dashboard_selected_row then
+  if not row or row ~= anchor.row or row ~= controller.state.mission_dashboard.selected_row then
     return false
   end
-  if controller:output_entry_key(controller.state.mission_dashboard_output_entry) ~= anchor.key then
+  if controller:output_entry_key(controller.state.mission_dashboard.output_entry) ~= anchor.key then
     return false
   end
-  local win = controller.state.mission_dashboard_win
+  local win = controller.state.mission_dashboard.win
   if win ~= anchor.win or not controller.is_valid_win(win) then
     return false
   end
@@ -125,7 +125,7 @@ function M.capture_stationary_output_preview_anchor(controller)
     return nil
   end
 
-  local item = controller.state.mission_dashboard_items and controller.state.mission_dashboard_items[anchor.row] or nil
+  local item = controller.state.mission_dashboard.items and controller.state.mission_dashboard.items[anchor.row] or nil
   if
     type(item) ~= "table"
     or item.kind ~= "role"
@@ -143,11 +143,11 @@ function M.restore_stationary_output_preview_anchor(controller, anchor)
   end
 
   local row = M.output_preview_row(controller)
-  if not row or row ~= controller.state.mission_dashboard_selected_row then
+  if not row or row ~= controller.state.mission_dashboard.selected_row then
     return false
   end
 
-  local item = controller.state.mission_dashboard_items and controller.state.mission_dashboard_items[row] or nil
+  local item = controller.state.mission_dashboard.items and controller.state.mission_dashboard.items[row] or nil
   if
     type(item) ~= "table"
     or item.kind ~= "role"
@@ -156,7 +156,7 @@ function M.restore_stationary_output_preview_anchor(controller, anchor)
     return false
   end
 
-  local win = controller.state.mission_dashboard_win
+  local win = controller.state.mission_dashboard.win
   if win ~= anchor.win or not controller.is_valid_win(win) then
     return false
   end
@@ -174,24 +174,24 @@ end
 
 function M.reveal_output_preview_row(controller)
   local row = M.output_preview_row(controller)
-  if not row or row ~= controller.state.mission_dashboard_selected_row then
+  if not row or row ~= controller.state.mission_dashboard.selected_row then
     return false
   end
-  if not controller.is_valid_win(controller.state.mission_dashboard_win) then
+  if not controller.is_valid_win(controller.state.mission_dashboard.win) then
     return false
   end
-  return controller.reveal_window_row(controller.state.mission_dashboard_win, row)
+  return controller.reveal_window_row(controller.state.mission_dashboard.win, row)
 end
 
 function M.reveal_selected_dashboard_row(controller)
-  local row = tonumber(controller.state.mission_dashboard_selected_row or controller.state.mission_dashboard_best_match_row)
+  local row = tonumber(controller.state.mission_dashboard.selected_row or controller.state.mission_dashboard.best_match_row)
   if not row or row < 1 then
     return false
   end
-  if not controller.is_valid_win(controller.state.mission_dashboard_win) then
+  if not controller.is_valid_win(controller.state.mission_dashboard.win) then
     return false
   end
-  return controller.reveal_window_row(controller.state.mission_dashboard_win, row)
+  return controller.reveal_window_row(controller.state.mission_dashboard.win, row)
 end
 
 return M

@@ -16,7 +16,7 @@ local function clamp_coordinate(value)
 end
 
 function M.position(controller)
-  local win = controller.state.mission_dashboard_output_win
+  local win = controller.state.mission_dashboard.output_win
   local row = nil
   local col = nil
 
@@ -45,7 +45,7 @@ function M.sequence(controller, button)
 end
 
 function M.send(controller, terminal_controller, button)
-  if not controller.state.mission_dashboard_output_control then
+  if not controller.state.mission_dashboard.output_control then
     return false
   end
 

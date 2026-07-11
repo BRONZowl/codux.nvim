@@ -1,5 +1,6 @@
 local dashboard_viewport = require("codux.mission_dashboard_viewport")
 local mission_mod = require("codux.mission")
+local state_mod = require("codux.state")
 local ui = require("codux.ui")
 local util = require("codux.util")
 
@@ -15,7 +16,7 @@ function M.normalize(opts)
   opts = type(opts) == "table" and opts or {}
 
   return {
-    state = type(opts.state) == "table" and opts.state or {},
+    state = state_mod.ensure_ui_nests(type(opts.state) == "table" and opts.state or {}),
     mission = type(opts.mission) == "table" and opts.mission or mission_mod,
     ui = type(opts.ui) == "table" and opts.ui or ui,
     workspace_ui = type(opts.workspace_ui) == "table" and opts.workspace_ui or require("codux.workspace_ui"),

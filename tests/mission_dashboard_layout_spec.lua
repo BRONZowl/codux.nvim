@@ -93,8 +93,8 @@ do
       reserve_output_panel = true,
     })
     local reserved_command_config
-    controller.state.mission_dashboard_win = 91
-    controller.state.mission_dashboard_command_bar_win = 92
+    controller.state.mission_dashboard.win = 91
+    controller.state.mission_dashboard.command_bar_win = 92
     controller.is_valid_win = function(win)
       return win == 91 or win == 92
     end
@@ -250,10 +250,11 @@ do
   local calls = {}
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 91,
-      mission_dashboard_command_bar_win = 92,
-      mission_dashboard_output_win = 93,
-    },
+      mission_dashboard = {
+        win = 91,
+        command_bar_win = 92,
+        output_win = 93,
+      }},
     is_valid_win = function(win)
       return win == 91 or win == 92 or win == 93
     end,
@@ -320,11 +321,12 @@ do
   local calls = {}
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 91,
-      mission_dashboard_command_bar_win = 92,
-      mission_dashboard_output_win = 93,
-      mission_dashboard_search_win = 94,
-    },
+      mission_dashboard = {
+        win = 91,
+        command_bar_win = 92,
+        output_win = 93,
+        search_win = 94,
+      }},
     is_valid_win = function(win)
       return win == 91 or win == 92 or win == 93 or win == 94
     end,

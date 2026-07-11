@@ -276,7 +276,7 @@ local function update_mission_role_records(runtime, name, opts)
     return false, write_error
   end
 
-  if runtime.state.workspace_manager_project_root then
+  if runtime.state.workspace_manager.project_root then
     runtime.render_workspace_manager()
   end
 
@@ -416,7 +416,7 @@ function M.update_workspace_profile(runtime, entry, agent_provider, permission_p
   end
   permission_profile = providers.normalize_profile(permission_profile) or "default"
 
-  local root = opts.project_root or entry.project_root or runtime.state.workspace_manager_project_root or runtime:project_root()
+  local root = opts.project_root or entry.project_root or runtime.state.workspace_manager.project_root or runtime:project_root()
   local safe_name = entry.safe_name
   if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
     return false, "workspace not found"
@@ -488,7 +488,7 @@ function M.update_workspace_profile(runtime, entry, agent_provider, permission_p
     end
   end
 
-  if runtime.state.workspace_manager_project_root then
+  if runtime.state.workspace_manager.project_root then
     runtime.render_workspace_manager()
   end
 

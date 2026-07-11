@@ -6,8 +6,8 @@ local M = {}
 local dashboard_filetypes = filetypes.workspace_manager
 
 function M.stop_refresh_timer(controller)
-  local timer = controller.state.workspace_manager_refresh_timer
-  controller.state.workspace_manager_refresh_timer = nil
+  local timer = controller.state.workspace_manager.refresh_timer
+  controller.state.workspace_manager.refresh_timer = nil
   if timer then
     pcall(timer.stop, timer)
     pcall(timer.close, timer)
@@ -15,7 +15,7 @@ function M.stop_refresh_timer(controller)
 end
 
 function M.start_refresh_timer(controller)
-  if controller.state.workspace_manager_refresh_timer then
+  if controller.state.workspace_manager.refresh_timer then
     return
   end
 
@@ -25,11 +25,11 @@ function M.start_refresh_timer(controller)
     return
   end
 
-  controller.state.workspace_manager_refresh_timer = timer
+  controller.state.workspace_manager.refresh_timer = timer
   timer:start(1000, 1000, vim.schedule_wrap(function()
     if
-      not controller.is_valid_win(controller.state.workspace_manager_win)
-      or not controller.is_loaded_buf(controller.state.workspace_manager_buf)
+      not controller.is_valid_win(controller.state.workspace_manager.win)
+      or not controller.is_loaded_buf(controller.state.workspace_manager.buf)
     then
       controller:stop_refresh_timer()
       return
@@ -90,33 +90,33 @@ function M.close(controller)
     end
   end
 
-  controller.state.workspace_manager_win = nil
-  controller.state.workspace_manager_buf = nil
-  controller.state.workspace_manager_footer_win = nil
-  controller.state.workspace_manager_footer_buf = nil
-  controller.state.workspace_manager_search_win = nil
-  controller.state.workspace_manager_search_buf = nil
-  controller.state.workspace_manager_command_win = nil
-  controller.state.workspace_manager_command_buf = nil
-  controller.state.workspace_manager_action_win = nil
-  controller.state.workspace_manager_action_buf = nil
-  controller.state.workspace_manager_action_items = {}
-  controller.state.workspace_manager_action_workspace = nil
-  controller.state.workspace_manager_items = {}
-  controller.state.workspace_manager_query = ""
-  controller.state.workspace_manager_best_match_index = nil
-  controller.state.workspace_manager_selected_index = nil
-  controller.state.workspace_manager_focus_match = false
-  controller.state.workspace_manager_search_confirmed = false
-  controller.state.workspace_manager_project_root = nil
+  controller.state.workspace_manager.win = nil
+  controller.state.workspace_manager.buf = nil
+  controller.state.workspace_manager.footer_win = nil
+  controller.state.workspace_manager.footer_buf = nil
+  controller.state.workspace_manager.search_win = nil
+  controller.state.workspace_manager.search_buf = nil
+  controller.state.workspace_manager.command_win = nil
+  controller.state.workspace_manager.command_buf = nil
+  controller.state.workspace_manager.action_win = nil
+  controller.state.workspace_manager.action_buf = nil
+  controller.state.workspace_manager.action_items = {}
+  controller.state.workspace_manager.action_workspace = nil
+  controller.state.workspace_manager.items = {}
+  controller.state.workspace_manager.query = ""
+  controller.state.workspace_manager.best_match_index = nil
+  controller.state.workspace_manager.selected_index = nil
+  controller.state.workspace_manager.focus_match = false
+  controller.state.workspace_manager.search_confirmed = false
+  controller.state.workspace_manager.project_root = nil
 end
 
 function M.window_height(controller)
-  if not controller.is_valid_win(controller.state.workspace_manager_win) then
+  if not controller.is_valid_win(controller.state.workspace_manager.win) then
     return nil
   end
 
-  local height = controller.get_window_height(controller.state.workspace_manager_win)
+  local height = controller.get_window_height(controller.state.workspace_manager.win)
   if type(height) == "number" and height > 0 then
     return height
   end
@@ -125,11 +125,11 @@ function M.window_height(controller)
 end
 
 function M.window_width(controller)
-  if not controller.is_valid_win(controller.state.workspace_manager_win) then
+  if not controller.is_valid_win(controller.state.workspace_manager.win) then
     return nil
   end
 
-  local width = controller.get_window_width(controller.state.workspace_manager_win)
+  local width = controller.get_window_width(controller.state.workspace_manager.win)
   if type(width) == "number" and width > 0 then
     return width
   end
@@ -138,7 +138,7 @@ function M.window_width(controller)
 end
 
 function M.footer_config(controller)
-  if not controller.is_valid_win(controller.state.workspace_manager_win) then
+  if not controller.is_valid_win(controller.state.workspace_manager.win) then
     return nil
   end
 
@@ -146,7 +146,7 @@ function M.footer_config(controller)
   local width = controller:window_width() or 1
   return {
     relative = "win",
-    win = controller.state.workspace_manager_win,
+    win = controller.state.workspace_manager.win,
     col = 0,
     row = height - 1,
     width = width,
@@ -158,18 +158,18 @@ function M.footer_config(controller)
 end
 
 function M.position_footer(controller)
-  if not controller.is_valid_win(controller.state.workspace_manager_footer_win) then
+  if not controller.is_valid_win(controller.state.workspace_manager.footer_win) then
     return false
   end
   local config = controller:footer_config()
   if not config then
     return false
   end
-  return controller.set_window_config(controller.state.workspace_manager_footer_win, config)
+  return controller.set_window_config(controller.state.workspace_manager.footer_win, config)
 end
 
 function M.resize_dashboard(controller, line_count)
-  if not controller.is_valid_win(controller.state.workspace_manager_win) then
+  if not controller.is_valid_win(controller.state.workspace_manager.win) then
     return false
   end
 
@@ -179,14 +179,14 @@ function M.resize_dashboard(controller, line_count)
     return true
   end
 
-  local current = controller.get_window_config(controller.state.workspace_manager_win)
+  local current = controller.get_window_config(controller.state.workspace_manager.win)
   local config = controller:config(line_count)
   config.width = type(current.width) == "number" and current.width or config.width
   config.col = type(current.col) == "number" and current.col or config.col
   config.row = type(current.row) == "number" and current.row or config.row
   config.height = next_height
 
-  local ok = controller.set_window_config(controller.state.workspace_manager_win, config)
+  local ok = controller.set_window_config(controller.state.workspace_manager.win, config)
   if ok then
     controller:position_footer()
   end
@@ -194,7 +194,7 @@ function M.resize_dashboard(controller, line_count)
 end
 
 function M.render_footer(controller)
-  if not controller.is_loaded_buf(controller.state.workspace_manager_footer_buf) then
+  if not controller.is_loaded_buf(controller.state.workspace_manager.footer_buf) then
     return false
   end
 
@@ -205,18 +205,18 @@ function M.render_footer(controller)
   local text = string.rep(" ", padding) .. line
   local ns = controller:ns()
 
-  controller.ui.set_lines(controller.state.workspace_manager_footer_buf, { text }, { modifiable = true })
-  pcall(vim.api.nvim_buf_clear_namespace, controller.state.workspace_manager_footer_buf, ns, 0, -1)
+  controller.ui.set_lines(controller.state.workspace_manager.footer_buf, { text }, { modifiable = true })
+  pcall(vim.api.nvim_buf_clear_namespace, controller.state.workspace_manager.footer_buf, ns, 0, -1)
 
   local col = padding
   for index, segment in ipairs(segments) do
     local key_end = col + #segment.key
-    pcall(vim.api.nvim_buf_add_highlight, controller.state.workspace_manager_footer_buf, ns, "WhichKey", 0, col, key_end)
+    pcall(vim.api.nvim_buf_add_highlight, controller.state.workspace_manager.footer_buf, ns, "WhichKey", 0, col, key_end)
     local desc_width = #tostring(segment.desc or "")
     local desc_end = key_end
     if desc_width > 0 then
       desc_end = key_end + 1 + desc_width
-      pcall(vim.api.nvim_buf_add_highlight, controller.state.workspace_manager_footer_buf, ns, "WhichKeySeparator", 0, key_end, desc_end)
+      pcall(vim.api.nvim_buf_add_highlight, controller.state.workspace_manager.footer_buf, ns, "WhichKeySeparator", 0, key_end, desc_end)
     end
     col = desc_end
     if index < #segments then
@@ -228,7 +228,7 @@ function M.render_footer(controller)
 end
 
 function M.open_footer(controller)
-  if not controller.is_valid_win(controller.state.workspace_manager_win) then
+  if not controller.is_valid_win(controller.state.workspace_manager.win) then
     return false
   end
 
@@ -247,8 +247,8 @@ function M.open_footer(controller)
     return false
   end
 
-  controller.state.workspace_manager_footer_buf = bufnr
-  controller.state.workspace_manager_footer_win = win
+  controller.state.workspace_manager.footer_buf = bufnr
+  controller.state.workspace_manager.footer_win = win
   controller:render_footer()
   return true
 end
@@ -265,8 +265,8 @@ function M.open_command_sink(controller)
     return false
   end
 
-  controller.state.workspace_manager_command_buf = sink_bufnr
-  controller.state.workspace_manager_command_win = sink_win
+  controller.state.workspace_manager.command_buf = sink_bufnr
+  controller.state.workspace_manager.command_win = sink_win
   return true
 end
 
@@ -287,21 +287,21 @@ function M.open(controller)
     return false
   end
 
-  controller.state.workspace_manager_buf = bufnr
-  controller.state.workspace_manager_project_root = controller.project_root()
-  controller.restore_workspaces({ project_root = controller.state.workspace_manager_project_root, silent = true })
-  local preview_entries = controller.workspace_entries_for_project(controller.state.workspace_manager_project_root)
+  controller.state.workspace_manager.buf = bufnr
+  controller.state.workspace_manager.project_root = controller.project_root()
+  controller.restore_workspaces({ project_root = controller.state.workspace_manager.project_root, silent = true })
+  local preview_entries = controller.workspace_entries_for_project(controller.state.workspace_manager.project_root)
   local line_count = 1 + math.max(1, #preview_entries) + 1
 
   local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, controller:config(line_count))
   if not win_ok then
-    controller.state.workspace_manager_buf = nil
+    controller.state.workspace_manager.buf = nil
     controller.ui.delete_buffer(bufnr)
     controller.notify("Failed to open Codux workspaces window", vim.log.levels.ERROR)
     return false
   end
 
-  controller.state.workspace_manager_win = win
+  controller.state.workspace_manager.win = win
   controller.ui.set_window_options(win, {
     number = false,
     relativenumber = false,
@@ -315,13 +315,13 @@ function M.open(controller)
 
   controller:render()
   controller:start_refresh_timer()
-  if #controller.state.workspace_manager_items > 0 then
+  if #controller.state.workspace_manager.items > 0 then
     pcall(vim.api.nvim_win_set_cursor, win, { 2, 0 })
   end
   vim.schedule(function()
-    if controller.is_valid_win(controller.state.workspace_manager_win) and controller.is_loaded_buf(controller.state.workspace_manager_buf) then
+    if controller.is_valid_win(controller.state.workspace_manager.win) and controller.is_loaded_buf(controller.state.workspace_manager.buf) then
       controller:open_search_input()
-      controller.prompt_merged_workspaces(controller.state.workspace_manager_project_root)
+      controller.prompt_merged_workspaces(controller.state.workspace_manager.project_root)
     end
   end)
   return true

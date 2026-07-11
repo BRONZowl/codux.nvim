@@ -77,8 +77,8 @@ function M.action_palette_width(controller)
 end
 
 function M.action_palette_config(controller, item, item_count)
-  local dashboard_config = controller.is_valid_win(controller.state.workspace_manager_win)
-      and vim.api.nvim_win_get_config(controller.state.workspace_manager_win)
+  local dashboard_config = controller.is_valid_win(controller.state.workspace_manager.win)
+      and vim.api.nvim_win_get_config(controller.state.workspace_manager.win)
     or {}
   local dashboard_width = controller:window_width() or 58
   local width = controller:action_palette_width()
@@ -101,7 +101,7 @@ function M.render_action_palette(controller)
 end
 
 function M.run_action(controller, action, item)
-  item = item or controller.state.workspace_manager_action_workspace or controller:selected_or_notify()
+  item = item or controller.state.workspace_manager.action_workspace or controller:selected_or_notify()
   if not item then
     return false
   end
@@ -159,7 +159,7 @@ function M.open_selected_workspace(controller, item)
   if not item then
     return false
   end
-  local root = item.project_root or controller.state.workspace_manager_project_root
+  local root = item.project_root or controller.state.workspace_manager.project_root
   controller:close()
   return controller.open_saved_workspace(item.name, root)
 end
@@ -214,7 +214,7 @@ function M.close_selected_workspace_window(controller, item)
 end
 
 function M.close_all_workspace_windows(controller)
-  local root = controller.state.workspace_manager_project_root or controller.project_root()
+  local root = controller.state.workspace_manager.project_root or controller.project_root()
   local choice = vim.fn.confirm("Close all Codux workspaces for this project?", "&Yes\n&No", 2)
   if choice ~= 1 then
     return false

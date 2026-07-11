@@ -99,10 +99,10 @@ function M.dashboard_now(_, opts)
 end
 
 function M.cached_mission_dirty_roles(controller, root, mission, now)
-  local cache = type(controller.state.mission_dashboard_dirty_cache) == "table"
-      and controller.state.mission_dashboard_dirty_cache
+  local cache = type(controller.state.mission_dashboard.dirty_cache) == "table"
+      and controller.state.mission_dashboard.dirty_cache
     or {}
-  controller.state.mission_dashboard_dirty_cache = cache
+  controller.state.mission_dashboard.dirty_cache = cache
   local key = mission_cache_key(root, mission)
   local cached = cache[key]
   if type(cached) == "table" and now - (tonumber(cached.checked_at) or 0) <= 15 then
@@ -121,10 +121,10 @@ function M.cached_mission_dirty_roles(controller, root, mission, now)
 end
 
 function M.cached_workspace_branch_state(controller, entry, now)
-  local cache = type(controller.state.mission_dashboard_branch_cache) == "table"
-      and controller.state.mission_dashboard_branch_cache
+  local cache = type(controller.state.mission_dashboard.branch_cache) == "table"
+      and controller.state.mission_dashboard.branch_cache
     or {}
-  controller.state.mission_dashboard_branch_cache = cache
+  controller.state.mission_dashboard.branch_cache = cache
   local key = role_cache_key(entry)
   local cached = cache[key]
   if type(cached) == "table" and now - (tonumber(cached.checked_at) or 0) <= 15 then
@@ -295,7 +295,8 @@ function M.dashboard_token_agent_provider(controller)
 
   local saw_codex = false
   local saw_grok = false
-  local items = type(controller.state) == "table" and controller.state.mission_dashboard_items or nil
+  local dashboard = type(controller.state) == "table" and controller.state.mission_dashboard or nil
+  local items = type(dashboard) == "table" and dashboard.items or nil
   if type(items) == "table" then
     for _, item in pairs(items) do
       if type(item) == "table" and item.kind == "role" then
@@ -324,6 +325,13 @@ end
 function M.refresh_dashboard_token_usage(controller, force, opts)
   opts = type(opts) == "table" and opts or {}
   local now = tonumber(controller.token_usage_now_ms()) or (os.time() * 1000)
+  if type(controller.state) ~= "table" then
+    return false
+  end
+  if type(controller.state.mission_dashboard) ~= "table" then
+    controller.state.mission_dashboard = {}
+  end
+  local dashboard = controller.state.mission_dashboard
 
   local agent_provider = opts.agent_provider or M.dashboard_token_agent_provider(controller)
   agent_provider = providers.normalize_provider(agent_provider) or "codex"
@@ -333,7 +341,7 @@ function M.refresh_dashboard_token_usage(controller, force, opts)
   local min_ms = agent_provider == "grok" and 5000 or 10000
   refresh_ms = math.max(min_ms, refresh_ms)
 
-  local previous = providers.normalize_provider(controller.state.mission_dashboard_token_usage_provider)
+  local previous = providers.normalize_provider(dashboard.token_usage_provider)
   if not force and previous and previous ~= agent_provider then
     force = true
   end
@@ -344,13 +352,13 @@ function M.refresh_dashboard_token_usage(controller, force, opts)
     last = tonumber(controller.token_usage_provider_refreshed_at(agent_provider))
   end
   if last == nil then
-    local by_provider = type(controller.state.mission_dashboard_token_usage_refreshed_at_by_provider) == "table"
-        and controller.state.mission_dashboard_token_usage_refreshed_at_by_provider
+    local by_provider = type(dashboard.token_usage_refreshed_at_by_provider) == "table"
+        and dashboard.token_usage_refreshed_at_by_provider
       or {}
     last = tonumber(by_provider[agent_provider])
   end
   if not force and last and now - last < refresh_ms then
-    controller.state.mission_dashboard_token_usage_provider = agent_provider
+    dashboard.token_usage_provider = agent_provider
     return false
   end
 
@@ -361,13 +369,13 @@ function M.refresh_dashboard_token_usage(controller, force, opts)
     agent_provider = agent_provider,
   })
   if started or reason ~= "in_flight" then
-    controller.state.mission_dashboard_token_usage_refreshed_at = now
-    if type(controller.state.mission_dashboard_token_usage_refreshed_at_by_provider) ~= "table" then
-      controller.state.mission_dashboard_token_usage_refreshed_at_by_provider = {}
+    dashboard.token_usage_refreshed_at = now
+    if type(dashboard.token_usage_refreshed_at_by_provider) ~= "table" then
+      dashboard.token_usage_refreshed_at_by_provider = {}
     end
-    controller.state.mission_dashboard_token_usage_refreshed_at_by_provider[agent_provider] = now
+    dashboard.token_usage_refreshed_at_by_provider[agent_provider] = now
   end
-  controller.state.mission_dashboard_token_usage_provider = agent_provider
+  dashboard.token_usage_provider = agent_provider
   return started
 end
 

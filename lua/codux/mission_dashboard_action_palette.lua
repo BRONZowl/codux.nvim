@@ -50,21 +50,21 @@ function M.new(controller)
       return controller:action_palette_target()
     end,
     assign_open_state = function(palette, target, kind, action_items, bufnr)
-      palette.state.mission_dashboard_action_buf = bufnr
-      palette.state.mission_dashboard_action_items = action_items
-      palette.state.mission_dashboard_action_mission = kind == "workspace" and nil or target
-      palette.state.mission_dashboard_action_workspace = kind == "workspace" and target or nil
-      palette.state.mission_dashboard_action_kind = kind
+      palette.state.mission_dashboard.action_buf = bufnr
+      palette.state.mission_dashboard.action_items = action_items
+      palette.state.mission_dashboard.action_mission = kind == "workspace" and nil or target
+      palette.state.mission_dashboard.action_workspace = kind == "workspace" and target or nil
+      palette.state.mission_dashboard.action_kind = kind
     end,
     clear_state = function(palette)
-      palette.state.mission_dashboard_action_win = nil
-      palette.state.mission_dashboard_action_buf = nil
-      palette.state.mission_dashboard_action_sink_win = nil
-      palette.state.mission_dashboard_action_sink_buf = nil
-      palette.state.mission_dashboard_action_items = {}
-      palette.state.mission_dashboard_action_mission = nil
-      palette.state.mission_dashboard_action_workspace = nil
-      palette.state.mission_dashboard_action_kind = nil
+      palette.state.mission_dashboard.action_win = nil
+      palette.state.mission_dashboard.action_buf = nil
+      palette.state.mission_dashboard.action_sink_win = nil
+      palette.state.mission_dashboard.action_sink_buf = nil
+      palette.state.mission_dashboard.action_items = {}
+      palette.state.mission_dashboard.action_mission = nil
+      palette.state.mission_dashboard.action_workspace = nil
+      palette.state.mission_dashboard.action_kind = nil
     end,
     action_label = function(_, kind)
       return kind == "workspace" and "Workspace" or "Mission"

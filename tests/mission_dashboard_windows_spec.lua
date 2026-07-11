@@ -134,8 +134,9 @@ do
   local events = {}
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_buf = 77,
-    },
+      mission_dashboard = {
+        buf = 77,
+      }},
     is_loaded_buf = function(bufnr)
       table.insert(events, "loaded:" .. tostring(bufnr))
       return false

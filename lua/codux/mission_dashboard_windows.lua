@@ -17,7 +17,7 @@ local function ensure_dashboard_cursor_highlight()
 end
 
 function M.dashboard_is_visible(controller)
-  return controller.is_loaded_buf(controller.state.mission_dashboard_buf)
+  return controller.is_loaded_buf(controller.state.mission_dashboard.buf)
 end
 
 function M.refresh_loaded_dashboard(controller)
@@ -35,17 +35,17 @@ function M.refresh_or_open_dashboard(controller, root)
 end
 
 function M.lock_dashboard_mouse(controller)
-  if controller.state.mission_dashboard_saved_mouse == nil then
-    controller.state.mission_dashboard_saved_mouse = vim.o.mouse
+  if controller.state.mission_dashboard.saved_mouse == nil then
+    controller.state.mission_dashboard.saved_mouse = vim.o.mouse
   end
   vim.o.mouse = ""
   return true
 end
 
 function M.restore_dashboard_mouse(controller)
-  local saved = controller.state.mission_dashboard_saved_mouse
-  controller.state.mission_dashboard_saved_mouse = nil
-  controller.state.mission_dashboard_output_control_mouse = nil
+  local saved = controller.state.mission_dashboard.saved_mouse
+  controller.state.mission_dashboard.saved_mouse = nil
+  controller.state.mission_dashboard.output_control_mouse = nil
   if saved ~= nil then
     vim.o.mouse = saved
   end
@@ -53,8 +53,8 @@ function M.restore_dashboard_mouse(controller)
 end
 
 function M.lock_dashboard_cursor(controller)
-  if controller.state.mission_dashboard_saved_guicursor == nil then
-    controller.state.mission_dashboard_saved_guicursor = vim.o.guicursor
+  if controller.state.mission_dashboard.saved_guicursor == nil then
+    controller.state.mission_dashboard.saved_guicursor = vim.o.guicursor
   end
   ensure_dashboard_cursor_highlight()
   vim.o.guicursor = "a:CoduxDashboardCursor"
@@ -62,9 +62,9 @@ function M.lock_dashboard_cursor(controller)
 end
 
 function M.restore_dashboard_cursor(controller)
-  local saved = controller.state.mission_dashboard_saved_guicursor
-  controller.state.mission_dashboard_saved_guicursor = nil
-  controller.state.mission_dashboard_output_control_cursor = nil
+  local saved = controller.state.mission_dashboard.saved_guicursor
+  controller.state.mission_dashboard.saved_guicursor = nil
+  controller.state.mission_dashboard.output_control_cursor = nil
   if saved ~= nil then
     vim.o.guicursor = saved
   end
@@ -73,31 +73,31 @@ end
 
 function M.enable_output_control_mouse(controller)
   vim.o.mouse = "a"
-  controller.state.mission_dashboard_output_control_mouse = true
+  controller.state.mission_dashboard.output_control_mouse = true
   return true
 end
 
 function M.relock_output_control_mouse(controller)
-  if controller.state.mission_dashboard_output_control_mouse then
+  if controller.state.mission_dashboard.output_control_mouse then
     vim.o.mouse = ""
-    controller.state.mission_dashboard_output_control_mouse = nil
+    controller.state.mission_dashboard.output_control_mouse = nil
   end
   return true
 end
 
 function M.enable_output_control_cursor(controller)
-  local saved = controller.state.mission_dashboard_saved_guicursor
+  local saved = controller.state.mission_dashboard.saved_guicursor
   if saved ~= nil then
     vim.o.guicursor = saved
-    controller.state.mission_dashboard_output_control_cursor = true
+    controller.state.mission_dashboard.output_control_cursor = true
   end
   return true
 end
 
 function M.relock_output_control_cursor(controller)
-  if controller.state.mission_dashboard_output_control_cursor then
-    controller.state.mission_dashboard_output_control_cursor = nil
-    if controller.state.mission_dashboard_saved_guicursor ~= nil then
+  if controller.state.mission_dashboard.output_control_cursor then
+    controller.state.mission_dashboard.output_control_cursor = nil
+    if controller.state.mission_dashboard.saved_guicursor ~= nil then
       ensure_dashboard_cursor_highlight()
       vim.o.guicursor = "a:CoduxDashboardCursor"
     end
@@ -107,20 +107,20 @@ end
 
 function M.close_dashboard(controller)
   controller:stop_monitor_timer()
-  if controller.state.mission_dashboard_resize_augroup then
-    pcall(vim.api.nvim_del_augroup_by_id, controller.state.mission_dashboard_resize_augroup)
-    controller.state.mission_dashboard_resize_augroup = nil
+  if controller.state.mission_dashboard.resize_augroup then
+    pcall(vim.api.nvim_del_augroup_by_id, controller.state.mission_dashboard.resize_augroup)
+    controller.state.mission_dashboard.resize_augroup = nil
   end
   controller:close_action_palette()
   controller:close_output_panel()
   controller:close_command_bar()
-  controller.ui.close_window(controller.state.mission_dashboard_search_win)
-  controller.ui.close_window(controller.state.mission_dashboard_command_win)
-  controller.ui.close_window(controller.state.mission_dashboard_win)
-  controller.ui.delete_buffer(controller.state.mission_dashboard_search_buf)
-  controller.ui.delete_buffer(controller.state.mission_dashboard_command_bar_buf)
-  controller.ui.delete_buffer(controller.state.mission_dashboard_command_buf)
-  controller.ui.delete_buffer(controller.state.mission_dashboard_buf)
+  controller.ui.close_window(controller.state.mission_dashboard.search_win)
+  controller.ui.close_window(controller.state.mission_dashboard.command_win)
+  controller.ui.close_window(controller.state.mission_dashboard.win)
+  controller.ui.delete_buffer(controller.state.mission_dashboard.search_buf)
+  controller.ui.delete_buffer(controller.state.mission_dashboard.command_bar_buf)
+  controller.ui.delete_buffer(controller.state.mission_dashboard.command_buf)
+  controller.ui.delete_buffer(controller.state.mission_dashboard.buf)
 
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     local bufnr = controller.window_buffer(win)
@@ -135,42 +135,42 @@ function M.close_dashboard(controller)
     end
   end
 
-  controller.state.mission_dashboard_buf = nil
-  controller.state.mission_dashboard_win = nil
-  controller.state.mission_dashboard_search_buf = nil
-  controller.state.mission_dashboard_search_win = nil
-  controller.state.mission_dashboard_command_buf = nil
-  controller.state.mission_dashboard_command_win = nil
-  controller.state.mission_dashboard_command_bar_buf = nil
-  controller.state.mission_dashboard_command_bar_win = nil
+  controller.state.mission_dashboard.buf = nil
+  controller.state.mission_dashboard.win = nil
+  controller.state.mission_dashboard.search_buf = nil
+  controller.state.mission_dashboard.search_win = nil
+  controller.state.mission_dashboard.command_buf = nil
+  controller.state.mission_dashboard.command_win = nil
+  controller.state.mission_dashboard.command_bar_buf = nil
+  controller.state.mission_dashboard.command_bar_win = nil
   controller:clear_output_panel_state()
-  controller.state.mission_dashboard_action_buf = nil
-  controller.state.mission_dashboard_action_win = nil
-  controller.state.mission_dashboard_action_items = {}
-  controller.state.mission_dashboard_action_mission = nil
-  controller.state.mission_dashboard_action_workspace = nil
-  controller.state.mission_dashboard_action_kind = nil
-  controller.state.mission_dashboard_items = {}
-  controller.state.mission_dashboard_lines = {}
-  controller.state.mission_dashboard_selectable_rows = {}
-  controller.state.mission_dashboard_query = ""
-  controller.state.mission_dashboard_best_match_row = nil
-  controller.state.mission_dashboard_selected_row = nil
-  controller.state.mission_dashboard_focus_match = false
-  controller.state.mission_dashboard_search_confirmed = false
-  controller.state.mission_dashboard_project_root = nil
-  controller.state.mission_dashboard_resize_augroup = nil
-  controller.state.mission_dashboard_token_usage_refreshed_at = nil
-  controller.state.mission_dashboard_token_usage_refreshed_at_by_provider = nil
-  controller.state.mission_dashboard_token_usage_provider = nil
+  controller.state.mission_dashboard.action_buf = nil
+  controller.state.mission_dashboard.action_win = nil
+  controller.state.mission_dashboard.action_items = {}
+  controller.state.mission_dashboard.action_mission = nil
+  controller.state.mission_dashboard.action_workspace = nil
+  controller.state.mission_dashboard.action_kind = nil
+  controller.state.mission_dashboard.items = {}
+  controller.state.mission_dashboard.lines = {}
+  controller.state.mission_dashboard.selectable_rows = {}
+  controller.state.mission_dashboard.query = ""
+  controller.state.mission_dashboard.best_match_row = nil
+  controller.state.mission_dashboard.selected_row = nil
+  controller.state.mission_dashboard.focus_match = false
+  controller.state.mission_dashboard.search_confirmed = false
+  controller.state.mission_dashboard.project_root = nil
+  controller.state.mission_dashboard.resize_augroup = nil
+  controller.state.mission_dashboard.token_usage_refreshed_at = nil
+  controller.state.mission_dashboard.token_usage_refreshed_at_by_provider = nil
+  controller.state.mission_dashboard.token_usage_provider = nil
   controller:restore_dashboard_mouse()
   controller:restore_dashboard_cursor()
   return true
 end
 
 function M.stop_monitor_timer(controller)
-  local timer = controller.state.mission_dashboard_monitor_timer
-  controller.state.mission_dashboard_monitor_timer = nil
+  local timer = controller.state.mission_dashboard.monitor_timer
+  controller.state.mission_dashboard.monitor_timer = nil
   if timer then
     pcall(timer.stop, timer)
     pcall(timer.close, timer)
@@ -178,7 +178,7 @@ function M.stop_monitor_timer(controller)
 end
 
 function M.start_monitor_timer(controller)
-  if controller.state.mission_dashboard_monitor_timer then
+  if controller.state.mission_dashboard.monitor_timer then
     return true
   end
 
@@ -188,11 +188,11 @@ function M.start_monitor_timer(controller)
     return false
   end
 
-  controller.state.mission_dashboard_monitor_timer = timer
+  controller.state.mission_dashboard.monitor_timer = timer
   local function tick()
     if
-      not controller.is_valid_win(controller.state.mission_dashboard_win)
-      or not controller.is_loaded_buf(controller.state.mission_dashboard_buf)
+      not controller.is_valid_win(controller.state.mission_dashboard.win)
+      or not controller.is_loaded_buf(controller.state.mission_dashboard.buf)
     then
       controller:stop_monitor_timer()
       return
@@ -243,8 +243,8 @@ function M.open_command_sink(controller)
     return false
   end
 
-  controller.state.mission_dashboard_command_buf = bufnr
-  controller.state.mission_dashboard_command_win = win
+  controller.state.mission_dashboard.command_buf = bufnr
+  controller.state.mission_dashboard.command_win = win
   return true
 end
 
@@ -283,16 +283,16 @@ function M.open_dashboard(controller, root)
   controller:lock_dashboard_cursor()
 
   controller.ui.set_lines(bufnr, lines, { modifiable = true })
-  controller.state.mission_dashboard_buf = bufnr
-  controller.state.mission_dashboard_project_root = root
-  controller.state.mission_dashboard_lines = lines
-  controller.state.mission_dashboard_items = items
-  controller.state.mission_dashboard_selectable_rows = selectable_rows
-  controller.state.mission_dashboard_best_match_row = best_match_row
-  controller.state.mission_dashboard_selected_row = selectable_rows[1]
-  controller.state.mission_dashboard_query = ""
-  controller.state.mission_dashboard_focus_match = false
-  controller.state.mission_dashboard_search_confirmed = false
+  controller.state.mission_dashboard.buf = bufnr
+  controller.state.mission_dashboard.project_root = root
+  controller.state.mission_dashboard.lines = lines
+  controller.state.mission_dashboard.items = items
+  controller.state.mission_dashboard.selectable_rows = selectable_rows
+  controller.state.mission_dashboard.best_match_row = best_match_row
+  controller.state.mission_dashboard.selected_row = selectable_rows[1]
+  controller.state.mission_dashboard.query = ""
+  controller.state.mission_dashboard.focus_match = false
+  controller.state.mission_dashboard.search_confirmed = false
   controller:highlight_dashboard(bufnr, lines, items)
   local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, false, controller:dashboard_config(#lines, {
     reserve_command_bar = true,
@@ -305,16 +305,16 @@ function M.open_dashboard(controller, root)
     controller:restore_dashboard_mouse()
     controller:restore_dashboard_cursor()
     controller.ui.delete_buffer(bufnr)
-    controller.state.mission_dashboard_buf = nil
-    controller.state.mission_dashboard_project_root = nil
-    controller.state.mission_dashboard_lines = {}
-    controller.state.mission_dashboard_items = {}
-    controller.state.mission_dashboard_selectable_rows = {}
-    controller.state.mission_dashboard_best_match_row = nil
-    controller.state.mission_dashboard_selected_row = nil
-    controller.state.mission_dashboard_query = ""
-    controller.state.mission_dashboard_focus_match = false
-    controller.state.mission_dashboard_search_confirmed = false
+    controller.state.mission_dashboard.buf = nil
+    controller.state.mission_dashboard.project_root = nil
+    controller.state.mission_dashboard.lines = {}
+    controller.state.mission_dashboard.items = {}
+    controller.state.mission_dashboard.selectable_rows = {}
+    controller.state.mission_dashboard.best_match_row = nil
+    controller.state.mission_dashboard.selected_row = nil
+    controller.state.mission_dashboard.query = ""
+    controller.state.mission_dashboard.focus_match = false
+    controller.state.mission_dashboard.search_confirmed = false
     controller.notify("Failed to open Codux missions dashboard", vim.log.levels.ERROR)
     return false
   end
@@ -328,18 +328,18 @@ function M.open_dashboard(controller, root)
     winfixbuf = true,
     winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey,Cursor:CoduxDashboardCursor,CursorIM:CoduxDashboardCursor",
   })
-  controller.state.mission_dashboard_win = win
+  controller.state.mission_dashboard.win = win
   controller:refresh_dashboard_token_usage(true)
-  controller.state.mission_dashboard_resize_augroup = vim.api.nvim_create_augroup(
+  controller.state.mission_dashboard.resize_augroup = vim.api.nvim_create_augroup(
     "codux-mission-dashboard-" .. tostring(bufnr),
     { clear = true }
   )
   vim.api.nvim_create_autocmd("VimResized", {
-    group = controller.state.mission_dashboard_resize_augroup,
+    group = controller.state.mission_dashboard.resize_augroup,
     callback = function()
       if
-        controller.is_valid_win(controller.state.mission_dashboard_win)
-        and controller.is_loaded_buf(controller.state.mission_dashboard_buf)
+        controller.is_valid_win(controller.state.mission_dashboard.win)
+        and controller.is_loaded_buf(controller.state.mission_dashboard.buf)
       then
         controller:render_dashboard()
       end
@@ -354,8 +354,8 @@ function M.open_dashboard(controller, root)
   controller:start_monitor_timer()
   vim.schedule(function()
     if
-      controller.is_valid_win(controller.state.mission_dashboard_win)
-      and controller.is_loaded_buf(controller.state.mission_dashboard_buf)
+      controller.is_valid_win(controller.state.mission_dashboard.win)
+      and controller.is_loaded_buf(controller.state.mission_dashboard.buf)
     then
       controller:open_search_input({ focus = false })
     end

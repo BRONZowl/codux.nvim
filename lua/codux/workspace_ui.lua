@@ -1,3 +1,4 @@
+local mission = require("codux.mission")
 local text_util = require("codux.text")
 
 local M = {}
@@ -247,10 +248,8 @@ function M.mission_action_items()
     { key = "s", action = "start_mission", label = "Start Mission" },
     { key = "g", action = "start_manager", label = "Start Manager" },
     { key = "p", action = "process_dispatch", label = "Process Dispatch" },
-    { key = "v", action = "view_objective", label = "View Objective" },
     { key = "e", action = "edit_objective", label = "Edit Objective" },
     { key = "f", action = "edit_focus", label = "Edit Focus" },
-    { key = "a", action = "add_manager", label = "Add Manager" },
     { key = "x", action = "close_mission", label = "Close Mission" },
     { key = "d", action = "delete_mission", label = "Delete Mission" },
   }
@@ -260,15 +259,29 @@ function M.mission_action_line(item, width)
   return M.manager_action_line(item, width)
 end
 
-function M.role_workspace_action_items()
-  local items = {}
-  table.insert(items, { key = "s", action = "start_workspace", label = "Start Workspace" })
-  table.insert(items, { key = "t", action = "prompt_role", label = "Prompt Role" })
-  table.insert(items, { key = "p", action = "switch_profile", label = "Switch Profile" })
-  table.insert(items, { key = "r", action = "rename_role", label = "Rename Role" })
+function M.role_workspace_action_items(entry)
+  entry = type(entry) == "table" and entry or {}
+  local is_manager = mission.is_manager_role(entry)
+  local items = {
+    {
+      key = "s",
+      action = "start_workspace",
+      label = is_manager and "Start Manager" or "Start Workspace",
+    },
+    { key = "p", action = "switch_profile", label = "Switch Profile" },
+  }
+  if not is_manager then
+    table.insert(items, { key = "r", action = "rename_role", label = "Rename Role" })
+  end
   table.insert(items, { key = "e", action = "edit_instructions", label = "Edit Instructions" })
-  table.insert(items, { key = "x", action = "close_workspace", label = "Close Workspace" })
-  table.insert(items, { key = "d", action = "delete_workspace", label = "Delete Workspace" })
+  table.insert(items, {
+    key = "x",
+    action = "close_workspace",
+    label = is_manager and "Close Manager" or "Close Workspace",
+  })
+  if not is_manager then
+    table.insert(items, { key = "d", action = "delete_workspace", label = "Delete Workspace" })
+  end
   table.insert(items, { key = "w", action = "create_workspace", label = "Create Workspace" })
   return items
 end

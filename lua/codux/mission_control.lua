@@ -383,7 +383,7 @@ function M:delete_saved_mission(name, root, opts)
   end
 
   local ok = self.delete_mission(mission.name or mission.mission_id, root)
-  local dashboard_root = self.state.mission_dashboard_project_root or root
+  local dashboard_root = self.state.mission_dashboard.project_root or root
   if ok and dashboard_root == root and self:dashboard_is_visible() then
     self:update_dashboard_after_mission_delete(dashboard_root)
   end
@@ -435,15 +435,15 @@ function M:highlight_dashboard(bufnr, lines, items)
 end
 
 function M:refresh_dashboard_highlight(lines, items)
-  if not self.is_loaded_buf(self.state.mission_dashboard_buf) then
+  if not self.is_loaded_buf(self.state.mission_dashboard.buf) then
     return false
   end
-  lines = type(lines) == "table" and lines or self.state.mission_dashboard_lines
-  items = type(items) == "table" and items or self.state.mission_dashboard_items
+  lines = type(lines) == "table" and lines or self.state.mission_dashboard.lines
+  items = type(items) == "table" and items or self.state.mission_dashboard.items
   if type(lines) ~= "table" then
     return false
   end
-  self:highlight_dashboard(self.state.mission_dashboard_buf, lines, items or {})
+  self:highlight_dashboard(self.state.mission_dashboard.buf, lines, items or {})
   return true
 end
 
@@ -465,30 +465,30 @@ end
 
 function M:render_dashboard(opts)
   opts = type(opts) == "table" and opts or {}
-  if not self.is_loaded_buf(self.state.mission_dashboard_buf) then
+  if not self.is_loaded_buf(self.state.mission_dashboard.buf) then
     return false
   end
 
   if opts.skip_token_refresh ~= true then
     self:refresh_dashboard_token_usage(false)
   end
-  local root = self.state.mission_dashboard_project_root or self.project_root()
-  local query = tostring(self.state.mission_dashboard_query or "")
+  local root = self.state.mission_dashboard.project_root or self.project_root()
+  local query = tostring(self.state.mission_dashboard.query or "")
   local selected = self:selected_item()
   local lines, items, selectable_rows, best_match_row = self:dashboard_lines(root, {
     query = query,
     selected_item = selected,
   })
-  self.state.mission_dashboard_lines = lines
-  self.state.mission_dashboard_items = items
-  self.state.mission_dashboard_selectable_rows = selectable_rows
-  self.state.mission_dashboard_best_match_row = best_match_row
+  self.state.mission_dashboard.lines = lines
+  self.state.mission_dashboard.items = items
+  self.state.mission_dashboard.selectable_rows = selectable_rows
+  self.state.mission_dashboard.best_match_row = best_match_row
 
   local selected_item = self:selected_item()
   local dashboard_min_height = self:dashboard_min_height_for_lines(lines)
   local preview_anchor = self:capture_output_preview_anchor()
   self:resize_dashboard_stack(#lines, { selected_item = selected_item, dashboard_min_height = dashboard_min_height })
-  self.ui.set_lines(self.state.mission_dashboard_buf, lines, { modifiable = true })
+  self.ui.set_lines(self.state.mission_dashboard.buf, lines, { modifiable = true })
   self:render_command_bar()
   self:render_output_panel(self:dashboard_output_entry(selected_item))
   if
@@ -498,7 +498,7 @@ function M:render_dashboard(opts)
     self:reveal_selected_dashboard_row()
   end
   self:refresh_dashboard_highlight(lines, items)
-  self.state.mission_dashboard_focus_match = false
+  self.state.mission_dashboard.focus_match = false
 
   return true
 end
@@ -683,7 +683,7 @@ function M:mission_residue_for_root(root)
 end
 
 function M:cleanup_empty_mission_residue(root)
-  root = root or self.state.mission_dashboard_project_root or self.project_root()
+  root = root or self.state.mission_dashboard.project_root or self.project_root()
   if type(self.cleanup_mission_residue) ~= "function" then
     self.notify("Codux mission residue cleanup is unavailable", vim.log.levels.WARN)
     return false
@@ -761,7 +761,7 @@ function M:create_new_mission()
 end
 
 function M:create_new_workspace(workspace)
-  workspace = workspace or self.state.mission_dashboard_action_workspace or self:selected_role_workspace_or_notify()
+  workspace = workspace or self.state.mission_dashboard.action_workspace or self:selected_role_workspace_or_notify()
   local mission_context = self:mission_context_for_workspace(workspace)
   if not mission_context then
     self.notify("No Codux mission selected", vim.log.levels.WARN)

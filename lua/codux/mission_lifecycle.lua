@@ -114,7 +114,7 @@ function M.close(runtime, name, opts)
     runtime.notify("Closed Codux mission " .. tostring(mission.name or name) .. " with " .. tostring(closed) .. " roles")
   end
 
-  if runtime.state.workspace_manager_project_root then
+  if runtime.state.workspace_manager.project_root then
     runtime.render_workspace_manager()
   end
 
@@ -178,7 +178,7 @@ function M.start(runtime, name, opts)
     runtime.notify("Started Codux mission " .. tostring(mission.name or name) .. " with " .. tostring(started) .. " roles")
   end
 
-  if runtime.state.workspace_manager_project_root then
+  if runtime.state.workspace_manager.project_root then
     runtime.render_workspace_manager()
   end
 

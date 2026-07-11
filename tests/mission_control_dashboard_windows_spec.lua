@@ -18,19 +18,20 @@ do
   local render_count = 0
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_search_win = 20,
-      mission_dashboard_command_win = 30,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        win = 10,
+        search_win = 20,
+        command_win = 30,
+        items = {
         [4] = { kind = "mission", mission = { name = "Alpha" } },
         [7] = { kind = "role", mission = { name = "Alpha" }, entry = { name = "alpha-builder" } },
         [8] = { kind = "role", mission = { name = "Alpha" }, entry = { name = "alpha-reviewer" } },
       },
-      mission_dashboard_selectable_rows = { 4, 7, 8 },
-      mission_dashboard_best_match_row = 7,
-      mission_dashboard_search_confirmed = true,
-      mission_dashboard_selected_row = 7,
-    },
+        selectable_rows = { 4, 7, 8 },
+        best_match_row = 7,
+        search_confirmed = true,
+        selected_row = 7,
+      }},
     is_valid_win = function(win)
       return win == 10 or win == 20 or win == 30
     end,
@@ -59,15 +60,15 @@ do
   assert_equal(current_win, 20)
 
   assert_true(controller:move_mission_selection(1))
-  assert_equal(controller.state.mission_dashboard_selected_row, 8)
+  assert_equal(controller.state.mission_dashboard.selected_row, 8)
   assert_nil(cursors[10])
   assert_equal(controller:selected_item().entry.name, "alpha-reviewer")
 
   assert_true(controller:move_mission_selection(1))
-  assert_equal(controller.state.mission_dashboard_selected_row, 8)
+  assert_equal(controller.state.mission_dashboard.selected_row, 8)
 
   assert_true(controller:move_mission_selection(-1))
-  assert_equal(controller.state.mission_dashboard_selected_row, 7)
+  assert_equal(controller.state.mission_dashboard.selected_row, 7)
   assert_equal(controller:selected_item().entry.name, "alpha-builder")
   assert_equal(controller:selected_mission().name, "Alpha")
   assert_equal(render_count, 3)
@@ -77,9 +78,10 @@ do
   local current_win = nil
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_search_win = 20,
-    },
+      mission_dashboard = {
+        win = 10,
+        search_win = 20,
+      }},
     is_valid_win = function(win)
       return win == 10 or win == 20
     end,
@@ -112,10 +114,11 @@ if type(vim.api) == "table" then
   local controller = mission_control_mod.new({
     namespace = 99,
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_command_win = 30,
-      mission_dashboard_best_match_row = 7,
-    },
+      mission_dashboard = {
+        win = 10,
+        command_win = 30,
+        best_match_row = 7,
+      }},
     is_valid_win = function(win)
       return win == 10 or win == 20 or win == 30
     end,
@@ -157,7 +160,7 @@ if type(vim.api) == "table" then
 
   assert_true(controller:open_search_input())
   assert_true(enter_rhs())
-  assert_equal(controller.state.mission_dashboard_selected_row, 7)
+  assert_equal(controller.state.mission_dashboard.selected_row, 7)
   assert_equal(focused_win, 10)
 
   vim.api.nvim_open_win = old_open_win
@@ -182,8 +185,9 @@ if type(vim.api) == "table" then
   local controller = mission_control_mod.new({
     namespace = 99,
     state = {
-      mission_dashboard_win = 10,
-    },
+      mission_dashboard = {
+        win = 10,
+      }},
     is_valid_win = function(win)
       return win == 10 or win == 20
     end,
@@ -274,8 +278,9 @@ if type(vim.api) == "table" then
 
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-    },
+      mission_dashboard = {
+        win = 10,
+      }},
     is_loaded_buf = function(bufnr)
       return bufnr == 32
     end,
@@ -307,8 +312,8 @@ if type(vim.api) == "table" then
   assert_true(controller:open_command_bar())
   assert_equal(window_config.title, " Commands ")
   assert_equal(window_config.focusable, false)
-  assert_equal(controller.state.mission_dashboard_command_bar_buf, 32)
-  assert_equal(controller.state.mission_dashboard_command_bar_win, 42)
+  assert_equal(controller.state.mission_dashboard.command_bar_buf, 32)
+  assert_equal(controller.state.mission_dashboard.command_bar_win, 42)
   local command_text = table.concat(rendered_lines, "\n")
   assert_contains(command_text, "Tab search")
   assert_equal(command_text:find("O preview", 1, true), nil)
@@ -421,7 +426,7 @@ if type(vim.api) == "table" then
     }, { 3, 5 }, nil
   end
   function controller:highlight_dashboard()
-    highlighted_selected_row = controller.state.mission_dashboard_selected_row
+    highlighted_selected_row = controller.state.mission_dashboard.selected_row
   end
   function controller:bind_dashboard_commands() end
   function controller:open_command_bar()
@@ -443,7 +448,7 @@ if type(vim.api) == "table" then
   end
 
   assert_true(controller:open_dashboard("/repo"))
-  assert_equal(controller.state.mission_dashboard_selected_row, 3)
+  assert_equal(controller.state.mission_dashboard.selected_row, 3)
   assert_equal(highlighted_selected_row, 3)
   assert_false(dashboard_enter)
   assert_nil(output_entry)
@@ -453,7 +458,7 @@ if type(vim.api) == "table" then
   assert_equal(dashboard_cursor_highlight.fg, "NONE")
   assert_equal(dashboard_cursor_highlight.bg, "NONE")
   assert_equal(dashboard_cursor_highlight.blend, 100)
-  assert_equal(controller.state.mission_dashboard_saved_guicursor, "n-v-c:block")
+  assert_equal(controller.state.mission_dashboard.saved_guicursor, "n-v-c:block")
   assert_equal(vim.o.guicursor, "a:CoduxDashboardCursor")
   assert_equal(#token_refreshes, 1)
   assert_true(token_refreshes[1])
@@ -461,7 +466,7 @@ if type(vim.api) == "table" then
   controller:close_dashboard()
   assert_equal(vim.o.mouse, "a")
   assert_equal(vim.o.guicursor, "n-v-c:block")
-  assert_nil(controller.state.mission_dashboard_saved_guicursor)
+  assert_nil(controller.state.mission_dashboard.saved_guicursor)
 
   vim.api.nvim_open_win = old_open_win
   vim.api.nvim_create_augroup = old_create_augroup
@@ -479,16 +484,16 @@ do
 
   assert_true(controller:lock_dashboard_mouse())
   assert_equal(vim.o.mouse, "")
-  assert_equal(controller.state.mission_dashboard_saved_mouse, "a")
+  assert_equal(controller.state.mission_dashboard.saved_mouse, "a")
 
   vim.o.mouse = "n"
   assert_true(controller:lock_dashboard_mouse())
   assert_equal(vim.o.mouse, "")
-  assert_equal(controller.state.mission_dashboard_saved_mouse, "a")
+  assert_equal(controller.state.mission_dashboard.saved_mouse, "a")
 
   assert_true(controller:restore_dashboard_mouse())
   assert_equal(vim.o.mouse, "a")
-  assert_nil(controller.state.mission_dashboard_saved_mouse)
+  assert_nil(controller.state.mission_dashboard.saved_mouse)
   vim.o.mouse = old_mouse
 end
 
@@ -499,16 +504,16 @@ do
 
   assert_true(controller:lock_dashboard_cursor())
   assert_equal(vim.o.guicursor, "a:CoduxDashboardCursor")
-  assert_equal(controller.state.mission_dashboard_saved_guicursor, "n-v-c:block")
+  assert_equal(controller.state.mission_dashboard.saved_guicursor, "n-v-c:block")
 
   vim.o.guicursor = "i:ver25"
   assert_true(controller:lock_dashboard_cursor())
   assert_equal(vim.o.guicursor, "a:CoduxDashboardCursor")
-  assert_equal(controller.state.mission_dashboard_saved_guicursor, "n-v-c:block")
+  assert_equal(controller.state.mission_dashboard.saved_guicursor, "n-v-c:block")
 
   assert_true(controller:restore_dashboard_cursor())
   assert_equal(vim.o.guicursor, "n-v-c:block")
-  assert_nil(controller.state.mission_dashboard_saved_guicursor)
+  assert_nil(controller.state.mission_dashboard.saved_guicursor)
   vim.o.guicursor = old_guicursor
 end
 
@@ -547,8 +552,8 @@ if type(vim.api) == "table" then
   assert_false(controller:open_dashboard("/repo"))
   assert_equal(vim.o.mouse, "a")
   assert_equal(vim.o.guicursor, "n-v-c:block")
-  assert_nil(controller.state.mission_dashboard_saved_mouse)
-  assert_nil(controller.state.mission_dashboard_saved_guicursor)
+  assert_nil(controller.state.mission_dashboard.saved_mouse)
+  assert_nil(controller.state.mission_dashboard.saved_guicursor)
   assert_equal(deleted_buf, 33)
 
   vim.api.nvim_open_win = old_open_win
@@ -571,14 +576,14 @@ if type(vim.api) == "table" then
   assert_true(controller:enable_output_control_cursor())
   assert_equal(vim.o.mouse, "a")
   assert_equal(vim.o.guicursor, "n-v-c:block")
-  assert_true(controller.state.mission_dashboard_output_control_cursor)
+  assert_true(controller.state.mission_dashboard.output_control_cursor)
   assert_true(controller:close_dashboard())
   assert_equal(vim.o.mouse, "a")
   assert_equal(vim.o.guicursor, "n-v-c:block")
-  assert_nil(controller.state.mission_dashboard_saved_mouse)
-  assert_nil(controller.state.mission_dashboard_saved_guicursor)
-  assert_nil(controller.state.mission_dashboard_output_control_mouse)
-  assert_nil(controller.state.mission_dashboard_output_control_cursor)
+  assert_nil(controller.state.mission_dashboard.saved_mouse)
+  assert_nil(controller.state.mission_dashboard.saved_guicursor)
+  assert_nil(controller.state.mission_dashboard.output_control_mouse)
+  assert_nil(controller.state.mission_dashboard.output_control_cursor)
   vim.o.mouse = old_mouse
   vim.o.guicursor = old_guicursor
 end
@@ -588,17 +593,18 @@ if type(vim.api) == "table" then
   local closed_preview
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_output_buf = 14,
-      mission_dashboard_output_win = 13,
-      mission_dashboard_output_entry = { safe_name = "alpha-builder" },
-      mission_dashboard_output_key = "key",
-      mission_dashboard_output_blocked_key = "blocked",
-      mission_dashboard_output_job = 77,
-      mission_dashboard_output_preview = { preview_session = "codux-preview-test" },
-      mission_dashboard_output_buf_kind = "terminal",
-      mission_dashboard_output_control = true,
-      mission_dashboard_output_control_key = "control",
-    },
+      mission_dashboard = {
+        output_buf = 14,
+        output_win = 13,
+        output_entry = { safe_name = "alpha-builder" },
+        output_key = "key",
+        output_blocked_key = "blocked",
+        output_job = 77,
+        output_preview = { preview_session = "codux-preview-test" },
+        output_buf_kind = "terminal",
+        output_control = true,
+        output_control_key = "control",
+      }},
     ui = {
       close_window = function() end,
       delete_buffer = function() end,
@@ -616,16 +622,16 @@ if type(vim.api) == "table" then
   assert_true(controller:close_dashboard())
   assert_equal(stopped_job, 77)
   assert_equal(closed_preview.preview_session, "codux-preview-test")
-  assert_nil(controller.state.mission_dashboard_output_buf)
-  assert_nil(controller.state.mission_dashboard_output_win)
-  assert_nil(controller.state.mission_dashboard_output_entry)
-  assert_nil(controller.state.mission_dashboard_output_key)
-  assert_nil(controller.state.mission_dashboard_output_blocked_key)
-  assert_nil(controller.state.mission_dashboard_output_job)
-  assert_nil(controller.state.mission_dashboard_output_preview)
-  assert_nil(controller.state.mission_dashboard_output_buf_kind)
-  assert_false(controller.state.mission_dashboard_output_control)
-  assert_nil(controller.state.mission_dashboard_output_control_key)
+  assert_nil(controller.state.mission_dashboard.output_buf)
+  assert_nil(controller.state.mission_dashboard.output_win)
+  assert_nil(controller.state.mission_dashboard.output_entry)
+  assert_nil(controller.state.mission_dashboard.output_key)
+  assert_nil(controller.state.mission_dashboard.output_blocked_key)
+  assert_nil(controller.state.mission_dashboard.output_job)
+  assert_nil(controller.state.mission_dashboard.output_preview)
+  assert_nil(controller.state.mission_dashboard.output_buf_kind)
+  assert_false(controller.state.mission_dashboard.output_control)
+  assert_nil(controller.state.mission_dashboard.output_control_key)
 end
 
 

@@ -27,11 +27,11 @@ local function centered_row(total_height, height)
 end
 
 local function dashboard_window_config(controller)
-  if not controller.is_valid_win(controller.state.mission_dashboard_win) then
+  if not controller.is_valid_win(controller.state.mission_dashboard.win) then
     return {}
   end
 
-  local ok, config = pcall(controller.get_window_config, controller.state.mission_dashboard_win)
+  local ok, config = pcall(controller.get_window_config, controller.state.mission_dashboard.win)
   return ok and type(config) == "table" and config or {}
 end
 
@@ -157,11 +157,11 @@ local function dashboard_frame(controller)
 end
 
 function M.window_height(controller)
-  if not controller.is_valid_win(controller.state.mission_dashboard_win) then
+  if not controller.is_valid_win(controller.state.mission_dashboard.win) then
     return nil
   end
 
-  local height = controller.get_window_height(controller.state.mission_dashboard_win)
+  local height = controller.get_window_height(controller.state.mission_dashboard.win)
   if type(height) == "number" and height > 0 then
     return height
   end
@@ -170,11 +170,11 @@ function M.window_height(controller)
 end
 
 function M.window_width(controller)
-  if not controller.is_valid_win(controller.state.mission_dashboard_win) then
+  if not controller.is_valid_win(controller.state.mission_dashboard.win) then
     return nil
   end
 
-  local width = controller.get_window_width(controller.state.mission_dashboard_win)
+  local width = controller.get_window_width(controller.state.mission_dashboard.win)
   if type(width) == "number" and width > 0 then
     return width
   end
@@ -341,11 +341,11 @@ function M.dashboard_output_config(controller, line_count, opts)
   opts = type(opts) == "table" and opts or {}
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
   local frame = dashboard_frame(controller)
-  local command_config = controller.is_valid_win(controller.state.mission_dashboard_command_bar_win)
-      and controller.get_window_config(controller.state.mission_dashboard_command_bar_win)
+  local command_config = controller.is_valid_win(controller.state.mission_dashboard.command_bar_win)
+      and controller.get_window_config(controller.state.mission_dashboard.command_bar_win)
     or nil
-  local command_height = controller.is_valid_win(controller.state.mission_dashboard_command_bar_win)
-      and controller.get_window_height(controller.state.mission_dashboard_command_bar_win)
+  local command_height = controller.is_valid_win(controller.state.mission_dashboard.command_bar_win)
+      and controller.get_window_height(controller.state.mission_dashboard.command_bar_win)
     or nil
   command_height = command_height or #controller:dashboard_command_lines(frame.width)
   local row = command_config and type(command_config.row) == "number" and command_height
@@ -378,39 +378,39 @@ end
 
 function M.resize_dashboard_stack(controller, line_count, opts)
   opts = type(opts) == "table" and opts or {}
-  if not controller.is_valid_win(controller.state.mission_dashboard_win) then
+  if not controller.is_valid_win(controller.state.mission_dashboard.win) then
     return false
   end
 
   local dashboard_config = controller:dashboard_config(line_count, {
     reserve_command_bar = true,
     reserve_output_panel = true,
-    reserve_search_input = controller.is_valid_win(controller.state.mission_dashboard_search_win),
+    reserve_search_input = controller.is_valid_win(controller.state.mission_dashboard.search_win),
     selected_item = opts.selected_item,
     preview_mode = opts.preview_mode,
     dashboard_min_height = opts.dashboard_min_height,
   })
-  local ok = apply_window_config(controller, controller.state.mission_dashboard_win, dashboard_config)
+  local ok = apply_window_config(controller, controller.state.mission_dashboard.win, dashboard_config)
   if not ok then
     return false
   end
 
-  if controller.is_valid_win(controller.state.mission_dashboard_search_win) then
-    ok = apply_window_config(controller, controller.state.mission_dashboard_search_win, controller:dashboard_search_config())
+  if controller.is_valid_win(controller.state.mission_dashboard.search_win) then
+    ok = apply_window_config(controller, controller.state.mission_dashboard.search_win, controller:dashboard_search_config())
       and ok
   end
-  if controller.is_valid_win(controller.state.mission_dashboard_command_bar_win) then
+  if controller.is_valid_win(controller.state.mission_dashboard.command_bar_win) then
     local command_lines = controller:dashboard_command_lines(dashboard_config.width)
     ok = apply_window_config(
       controller,
-      controller.state.mission_dashboard_command_bar_win,
+      controller.state.mission_dashboard.command_bar_win,
       controller:dashboard_command_config(#command_lines)
     ) and ok
   end
-  if controller.is_valid_win(controller.state.mission_dashboard_output_win) then
+  if controller.is_valid_win(controller.state.mission_dashboard.output_win) then
     ok = apply_window_config(
       controller,
-      controller.state.mission_dashboard_output_win,
+      controller.state.mission_dashboard.output_win,
       controller:dashboard_output_config(line_count, {
         selected_item = opts.selected_item,
         preview_mode = opts.preview_mode,

@@ -81,10 +81,10 @@ end
 
 function Output:render_compact_output_status(entry)
   self:close_output_preview()
-  self.state.mission_dashboard_output_entry = entry
+  self.state.mission_dashboard.output_entry = entry
   -- Clear key/job so the next workspace selection starts a clean full-height attach.
-  self.state.mission_dashboard_output_key = nil
-  self.state.mission_dashboard_output_blocked_key = nil
+  self.state.mission_dashboard.output_key = nil
+  self.state.mission_dashboard.output_blocked_key = nil
   local message = "select role row to expand preview"
   if type(entry) ~= "table" then
     message = nil
@@ -107,33 +107,33 @@ function Output:output_entry_key(entry)
 end
 
 function Output:clear_output_panel_state()
-  self.state.mission_dashboard_output_win = nil
-  self.state.mission_dashboard_output_buf = nil
-  self.state.mission_dashboard_output_entry = nil
-  self.state.mission_dashboard_output_key = nil
-  self.state.mission_dashboard_output_blocked_key = nil
-  self.state.mission_dashboard_output_job = nil
-  self.state.mission_dashboard_output_preview = nil
-  self.state.mission_dashboard_output_buf_kind = nil
-  self.state.mission_dashboard_output_control = false
-  self.state.mission_dashboard_output_control_key = nil
-  self.state.mission_dashboard_output_control_mouse = nil
-  self.state.mission_dashboard_output_terminal_controller = nil
-  self.state.mission_dashboard_output_terminal_state = nil
-  self.state.mission_dashboard_output_retry_generation = nil
-  self.state.mission_dashboard_output_retry_key = nil
+  self.state.mission_dashboard.output_win = nil
+  self.state.mission_dashboard.output_buf = nil
+  self.state.mission_dashboard.output_entry = nil
+  self.state.mission_dashboard.output_key = nil
+  self.state.mission_dashboard.output_blocked_key = nil
+  self.state.mission_dashboard.output_job = nil
+  self.state.mission_dashboard.output_preview = nil
+  self.state.mission_dashboard.output_buf_kind = nil
+  self.state.mission_dashboard.output_control = false
+  self.state.mission_dashboard.output_control_key = nil
+  self.state.mission_dashboard.output_control_mouse = nil
+  self.state.mission_dashboard.output_terminal_controller = nil
+  self.state.mission_dashboard.output_terminal_state = nil
+  self.state.mission_dashboard.output_retry_generation = nil
+  self.state.mission_dashboard.output_retry_key = nil
 end
 
 function Output:invalidate_output_preview_for_entry(entry)
   local key = self:output_entry_key(entry)
-  if key == "" or key ~= self.state.mission_dashboard_output_key then
+  if key == "" or key ~= self.state.mission_dashboard.output_key then
     return false
   end
 
   self:close_output_preview()
-  self.state.mission_dashboard_output_entry = nil
-  self.state.mission_dashboard_output_key = nil
-  self.state.mission_dashboard_output_blocked_key = nil
+  self.state.mission_dashboard.output_entry = nil
+  self.state.mission_dashboard.output_key = nil
+  self.state.mission_dashboard.output_blocked_key = nil
   return true
 end
 
@@ -145,34 +145,34 @@ function Output:retry_output_preview_for_entry(entry, opts)
   end
 
   local delays = type(opts.delays) == "table" and opts.delays or output_preview_retry_delays_ms
-  local generation = (tonumber(self.state.mission_dashboard_output_retry_generation) or 0) + 1
-  self.state.mission_dashboard_output_retry_generation = generation
-  self.state.mission_dashboard_output_retry_key = key
+  local generation = (tonumber(self.state.mission_dashboard.output_retry_generation) or 0) + 1
+  self.state.mission_dashboard.output_retry_generation = generation
+  self.state.mission_dashboard.output_retry_key = key
 
   local function schedule(attempt)
     local delay = tonumber(delays[attempt])
     if not delay then
-      if self.state.mission_dashboard_output_retry_generation == generation then
-        self.state.mission_dashboard_output_retry_key = nil
+      if self.state.mission_dashboard.output_retry_generation == generation then
+        self.state.mission_dashboard.output_retry_key = nil
       end
       return false
     end
 
     vim.defer_fn(function()
-      if self.state.mission_dashboard_output_retry_generation ~= generation then
+      if self.state.mission_dashboard.output_retry_generation ~= generation then
         return
       end
-      if self.state.mission_dashboard_output_control then
+      if self.state.mission_dashboard.output_control then
         return
       end
-      if not self.is_loaded_buf(self.state.mission_dashboard_output_buf) then
+      if not self.is_loaded_buf(self.state.mission_dashboard.output_buf) then
         return
       end
-      if not self.is_valid_win(self.state.mission_dashboard_output_win) then
+      if not self.is_valid_win(self.state.mission_dashboard.output_win) then
         return
       end
       if self:output_preview_running() then
-        self.state.mission_dashboard_output_retry_key = nil
+        self.state.mission_dashboard.output_retry_key = nil
         return
       end
 
@@ -181,19 +181,19 @@ function Output:retry_output_preview_for_entry(entry, opts)
         return
       end
 
-      if self.state.mission_dashboard_output_blocked_key == key then
-        self.state.mission_dashboard_output_blocked_key = nil
+      if self.state.mission_dashboard.output_blocked_key == key then
+        self.state.mission_dashboard.output_blocked_key = nil
       end
 
       self:render_output_panel(selected_entry)
-      if self.state.mission_dashboard_output_retry_generation ~= generation then
+      if self.state.mission_dashboard.output_retry_generation ~= generation then
         return
       end
       if self:output_preview_running() then
-        self.state.mission_dashboard_output_retry_key = nil
+        self.state.mission_dashboard.output_retry_key = nil
         return
       end
-      if self.state.mission_dashboard_output_blocked_key == key then
+      if self.state.mission_dashboard.output_blocked_key == key then
         schedule(attempt + 1)
       end
     end, delay)
@@ -209,17 +209,17 @@ function Output:render_output_status(entry, message)
     return false
   end
   local lines = self:output_panel_lines(entry, message)
-  self.ui.set_lines(self.state.mission_dashboard_output_buf, lines, { modifiable = true })
-  self:highlight_output_panel(self.state.mission_dashboard_output_buf, lines)
-  pcall(vim.api.nvim_set_option_value, "modified", false, { buf = self.state.mission_dashboard_output_buf })
+  self.ui.set_lines(self.state.mission_dashboard.output_buf, lines, { modifiable = true })
+  self:highlight_output_panel(self.state.mission_dashboard.output_buf, lines)
+  pcall(vim.api.nvim_set_option_value, "modified", false, { buf = self.state.mission_dashboard.output_buf })
   return true
 end
 
 function Output:render_output_panel(entry)
-  if not self.is_loaded_buf(self.state.mission_dashboard_output_buf) then
+  if not self.is_loaded_buf(self.state.mission_dashboard.output_buf) then
     return false
   end
-  if self.state.mission_dashboard_output_control then
+  if self.state.mission_dashboard.output_control then
     return true
   end
   entry = type(entry) == "table" and entry or self:selected_output_entry()
@@ -229,31 +229,31 @@ function Output:render_output_panel(entry)
   local key = self:output_entry_key(entry)
   if type(entry) == "table" and entry.status == "inactive" then
     self:close_output_preview()
-    self.state.mission_dashboard_output_entry = entry
-    self.state.mission_dashboard_output_key = key
-    self.state.mission_dashboard_output_blocked_key = key ~= "" and key or nil
+    self.state.mission_dashboard.output_entry = entry
+    self.state.mission_dashboard.output_key = key
+    self.state.mission_dashboard.output_blocked_key = key ~= "" and key or nil
     return self:render_output_status(entry, "workspace is not active")
   end
-  if key ~= self.state.mission_dashboard_output_key then
+  if key ~= self.state.mission_dashboard.output_key then
     return self:start_output_preview(entry)
   end
   if self:output_preview_running() then
-    self.state.mission_dashboard_output_entry = entry
+    self.state.mission_dashboard.output_entry = entry
     return true
   end
-  if key ~= "" and key == self.state.mission_dashboard_output_blocked_key then
-    self.state.mission_dashboard_output_entry = entry
+  if key ~= "" and key == self.state.mission_dashboard.output_blocked_key then
+    self.state.mission_dashboard.output_entry = entry
     return true
   end
   return self:start_output_preview(entry)
 end
 
 function Output:focus_output_panel()
-  if not self.is_valid_win(self.state.mission_dashboard_output_win) then
+  if not self.is_valid_win(self.state.mission_dashboard.output_win) then
     return false
   end
   self:unlock_output_window()
-  local ok = self.set_current_win(self.state.mission_dashboard_output_win)
+  local ok = self.set_current_win(self.state.mission_dashboard.output_win)
   if ok and self:output_preview_running() then
     pcall(vim.cmd, "startinsert")
   end
@@ -261,7 +261,7 @@ function Output:focus_output_panel()
 end
 
 function Output:set_output_window_focusable(focusable)
-  local win = self.state.mission_dashboard_output_win
+  local win = self.state.mission_dashboard.output_win
   if not self.is_valid_win(win) then
     return false
   end
@@ -272,8 +272,8 @@ function Output:set_output_window_focusable(focusable)
 end
 
 function Output:reset_output_control_state()
-  self.state.mission_dashboard_output_control = false
-  self.state.mission_dashboard_output_control_key = nil
+  self.state.mission_dashboard.output_control = false
+  self.state.mission_dashboard.output_control_key = nil
   self:relock_output_control_mouse()
   self:relock_output_control_cursor()
   self:set_output_window_focusable(false)
@@ -290,15 +290,15 @@ function Output:enter_output_control()
     self.notify("Workspace output is inactive", vim.log.levels.WARN)
     return false
   end
-  if not self.is_loaded_buf(self.state.mission_dashboard_output_buf) or not self.is_valid_win(self.state.mission_dashboard_output_win) then
+  if not self.is_loaded_buf(self.state.mission_dashboard.output_buf) or not self.is_valid_win(self.state.mission_dashboard.output_win) then
     if not self:open_output_panel(entry) then
       return false
     end
   end
 
   self:stop_monitor_timer()
-  self.state.mission_dashboard_output_control = true
-  self.state.mission_dashboard_output_control_key = self:output_entry_key(entry)
+  self.state.mission_dashboard.output_control = true
+  self.state.mission_dashboard.output_control_key = self:output_entry_key(entry)
   self:set_output_window_focusable(true)
 
   if not self:start_output_preview(entry, { control = true }) then
@@ -317,11 +317,11 @@ function Output:enter_output_control()
 end
 
 function Output:exit_output_control()
-  if not self.state.mission_dashboard_output_control then
+  if not self.state.mission_dashboard.output_control then
     return false
   end
 
-  local entry = self:selected_output_entry() or self.state.mission_dashboard_output_entry
+  local entry = self:selected_output_entry() or self.state.mission_dashboard.output_entry
   self:reset_output_control_state()
   self:close_output_preview()
   self:render_output_panel(entry)
@@ -338,7 +338,7 @@ function Output:bind_output_panel_commands(bufnr)
     nowait = true,
   })
   self.set_buffer_keymap(bufnr, { "n", "t" }, "<C-o>", function()
-    if self.state.mission_dashboard_output_control then
+    if self.state.mission_dashboard.output_control then
       return self:exit_output_control()
     end
     return self:focus_mission_list()
@@ -348,10 +348,10 @@ function Output:bind_output_panel_commands(bufnr)
 end
 
 function Output:open_output_panel(entry)
-  if not self.is_valid_win(self.state.mission_dashboard_win) then
+  if not self.is_valid_win(self.state.mission_dashboard.win) then
     return false
   end
-  if self.is_valid_win(self.state.mission_dashboard_output_win) and self.is_loaded_buf(self.state.mission_dashboard_output_buf) then
+  if self.is_valid_win(self.state.mission_dashboard.output_win) and self.is_loaded_buf(self.state.mission_dashboard.output_buf) then
     return self:render_output_panel(entry)
   end
 
@@ -370,11 +370,11 @@ function Output:open_output_panel(entry)
     return false
   end
 
-  self.state.mission_dashboard_output_buf = bufnr
-  self.state.mission_dashboard_output_win = win
-  self.state.mission_dashboard_output_buf_kind = "status"
-  self.state.mission_dashboard_output_entry = entry
-  self.state.mission_dashboard_output_key = nil
+  self.state.mission_dashboard.output_buf = bufnr
+  self.state.mission_dashboard.output_win = win
+  self.state.mission_dashboard.output_buf_kind = "status"
+  self.state.mission_dashboard.output_entry = entry
+  self.state.mission_dashboard.output_key = nil
   self.ui.set_window_options(win, {
     wrap = false,
     number = false,
@@ -392,8 +392,8 @@ function Output:close_output_panel()
   self:relock_output_control_mouse()
   self:relock_output_control_cursor()
   self:close_output_preview()
-  self.ui.close_window(self.state.mission_dashboard_output_win)
-  self.ui.delete_buffer(self.state.mission_dashboard_output_buf)
+  self.ui.close_window(self.state.mission_dashboard.output_win)
+  self.ui.delete_buffer(self.state.mission_dashboard.output_buf)
   self:clear_output_panel_state()
   return true
 end

@@ -114,9 +114,10 @@ do
   end
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_command_win = 30,
-    },
+      mission_dashboard = {
+        win = 10,
+        command_win = 30,
+      }},
     notify = function(message)
       table.insert(calls, "notify:" .. tostring(message))
     end,
@@ -207,9 +208,10 @@ do
   local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "question" }
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_command_win = 30,
-    },
+      mission_dashboard = {
+        win = 10,
+        command_win = 30,
+      }},
     notify = notify,
     is_valid_win = function(win)
       return win == 10 or win == 30
@@ -265,9 +267,10 @@ do
   local entry = { name = "alpha-builder", safe_name = "alpha-builder", mission_role = "Builder", status = "question" }
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_win = 10,
-      mission_dashboard_command_win = 30,
-    },
+      mission_dashboard = {
+        win = 10,
+        command_win = 30,
+      }},
     notify = notify,
     is_valid_win = function(win)
       return win == 10 or win == 30
@@ -505,8 +508,9 @@ do
   }
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        project_root = "/repo",
+      }},
     notify = notify,
     ui = {
       close_window = function() end,
@@ -568,8 +572,9 @@ do
   local refreshed = false
   local controller = mission_control_mod.new({
     state = {
-      mission_dashboard_project_root = "/repo",
-    },
+      mission_dashboard = {
+        project_root = "/repo",
+      }},
     notify = notify,
     ui = {
       single_line_prompt = function(_, callback)

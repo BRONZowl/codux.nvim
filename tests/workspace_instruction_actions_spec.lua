@@ -30,7 +30,9 @@ local function runtime(opts)
   local writes = 0
   local rendered = false
   return {
-    state = opts.state or { workspace_manager_project_root = "/repo" },
+    state = opts.state or { workspace_manager = {
+   project_root = "/repo",
+ }},
     read_state = function()
       return state_data, opts.read_error
     end,

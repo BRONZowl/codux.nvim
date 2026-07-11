@@ -772,11 +772,12 @@ end
 do
   local controller = {
     state = {
-      mission_dashboard_items = {
+      mission_dashboard = {
+        items = {
         [4] = { kind = "role", entry = { agent_provider = "grok" } },
         [6] = { kind = "role", entry = { agent_provider = "codex" } },
       },
-    },
+      }},
     selected_item = function()
       return { kind = "role", entry = { agent_provider = "grok" } }
     end,
@@ -788,12 +789,12 @@ do
   end
   assert_equal(dashboard_render.dashboard_token_agent_provider(controller), "codex", "any codex role wins when unselected")
 
-  controller.state.mission_dashboard_items = {
+  controller.state.mission_dashboard.items = {
     [4] = { kind = "role", entry = { agent_provider = "grok" } },
   }
   assert_equal(dashboard_render.dashboard_token_agent_provider(controller), "grok", "grok-only dashboard")
 
-  controller.state.mission_dashboard_items = {}
+  controller.state.mission_dashboard.items = {}
   controller.default_agent_provider = function()
     return "grok"
   end
@@ -855,7 +856,7 @@ do
 
   assert_false(dashboard_render.refresh_dashboard_token_usage(controller, false))
   assert_equal(refresh_calls, 1)
-  assert_nil(controller.state.mission_dashboard_token_usage_refreshed_at, "in-flight must not stamp throttle")
+  assert_nil(controller.state.mission_dashboard.token_usage_refreshed_at, "in-flight must not stamp throttle")
 
   assert_false(dashboard_render.refresh_dashboard_token_usage(controller, false))
   assert_equal(refresh_calls, 2, "in-flight refresh should remain eligible immediately")
@@ -865,7 +866,7 @@ do
     return false
   end
   assert_false(dashboard_render.refresh_dashboard_token_usage(controller, false))
-  assert_equal(controller.state.mission_dashboard_token_usage_refreshed_at, 1000, "permanent failure should stamp throttle")
+  assert_equal(controller.state.mission_dashboard.token_usage_refreshed_at, 1000, "permanent failure should stamp throttle")
   assert_equal(refresh_calls, 3)
 
   assert_false(dashboard_render.refresh_dashboard_token_usage(controller, false))
@@ -877,7 +878,7 @@ do
   end
   now_ms = 62000
   assert_true(dashboard_render.refresh_dashboard_token_usage(controller, false))
-  assert_equal(controller.state.mission_dashboard_token_usage_refreshed_at, 62000)
+  assert_equal(controller.state.mission_dashboard.token_usage_refreshed_at, 62000)
   assert_equal(refresh_calls, 4)
 
   assert_false(dashboard_render.refresh_dashboard_token_usage(controller, false))
@@ -948,24 +949,25 @@ do
   local calls = {}
   local controller = {
     state = {
-      mission_dashboard_token_usage_provider = "codex",
-      mission_dashboard_selectable_rows = { 4, 6 },
-      mission_dashboard_selected_row = 4,
-      mission_dashboard_items = {
+      mission_dashboard = {
+        token_usage_provider = "codex",
+        selectable_rows = { 4, 6 },
+        selected_row = 4,
+        items = {
         [4] = { kind = "role", entry = { agent_provider = "codex" } },
         [6] = { kind = "role", entry = { agent_provider = "grok" } },
       },
-      mission_dashboard_win = 1,
-    },
+        win = 1,
+      }},
     is_valid_win = function()
       return true
     end,
     selected_item = function(self)
-      local row = self.state.mission_dashboard_selected_row
-      return self.state.mission_dashboard_items[row]
+      local row = self.state.mission_dashboard.selected_row
+      return self.state.mission_dashboard.items[row]
     end,
     selected_row = function(self)
-      return self.state.mission_dashboard_selected_row
+      return self.state.mission_dashboard.selected_row
     end,
     capture_stationary_output_preview_anchor = function()
       return nil
@@ -984,7 +986,7 @@ do
   }
   local selection = require("codux.mission_dashboard_selection")
   assert_true(selection.move_mission_selection(controller, 1))
-  assert_equal(controller.state.mission_dashboard_selected_row, 6)
+  assert_equal(controller.state.mission_dashboard.selected_row, 6)
   assert_equal(calls[1][1], "token")
   assert_true(calls[1][2], "provider change should force token refresh")
   assert_equal(calls[2][1], "render")

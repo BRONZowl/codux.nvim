@@ -6,7 +6,7 @@ local trim = text_util.trim
 
 function M.saved_workspace_instruction_request(runtime, entry)
   entry = type(entry) == "table" and entry or {}
-  local root = entry.project_root or runtime.state.workspace_manager_project_root
+  local root = entry.project_root or runtime.state.workspace_manager.project_root
   local safe_name = entry.safe_name
   if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
     return nil, "workspace not found"
@@ -41,7 +41,7 @@ function M.update_saved_workspace_instruction(runtime, entry, instruction)
     return false, "Workspace instruction is required"
   end
 
-  local root = entry.project_root or runtime.state.workspace_manager_project_root
+  local root = entry.project_root or runtime.state.workspace_manager.project_root
   local safe_name = entry.safe_name
   if type(root) ~= "string" or root == "" or type(safe_name) ~= "string" or safe_name == "" then
     return false, "workspace not found"
@@ -74,7 +74,7 @@ function M.update_saved_workspace_instruction(runtime, entry, instruction)
     runtime.state.workspace.custom_instruction = instruction
     runtime.state.workspace.resolved_instruction = instruction
   end
-  if runtime.state.workspace_manager_project_root == root then
+  if runtime.state.workspace_manager.project_root == root then
     runtime.render_workspace_manager()
   end
 

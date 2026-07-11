@@ -437,8 +437,9 @@ function M.workspace_delete_runtime(store, opts)
   opts = opts or {}
   return runtime_mod.new({
     state = opts.state or {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     notify = opts.notify or function() end,
     render_workspace_manager = opts.render_workspace_manager or function() end,
     close_workspace_manager = opts.close_workspace_manager or function() end,
@@ -508,8 +509,9 @@ function M.lifecycle_runtime(opts)
   local messages = opts.messages or {}
   local runtime = runtime_mod.new({
     state = opts.state or {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     notify = opts.notify or function(message)
       table.insert(messages, message)
     end,

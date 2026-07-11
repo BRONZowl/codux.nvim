@@ -139,7 +139,7 @@ local function rename_saved_workspace_impl(runtime, entry, new_name, opts)
     return fail(safe_name_or_error)
   end
 
-  local root = entry.project_root or runtime.state.workspace_manager_project_root
+  local root = entry.project_root or runtime.state.workspace_manager.project_root
   local state_data, state_error = runtime:read_state()
   if state_error then
     return fail(state_error)
@@ -397,7 +397,7 @@ end
 
 function M.delete_saved_workspace(runtime, entry)
   entry = type(entry) == "table" and entry or {}
-  local root = entry.project_root or runtime.state.workspace_manager_project_root
+  local root = entry.project_root or runtime.state.workspace_manager.project_root
   local state_data, state_error = runtime:read_state()
   if state_error then
     runtime.notify(state_error, vim.log.levels.ERROR)
@@ -535,7 +535,7 @@ function M.delete_saved_workspace(runtime, entry)
 end
 
 function M.close_saved_workspace_window(runtime, entry)
-  local root = entry.project_root or runtime.state.workspace_manager_project_root
+  local root = entry.project_root or runtime.state.workspace_manager.project_root
   local state_data, state_error = runtime:read_state()
   if state_error then
     runtime.notify(state_error, vim.log.levels.ERROR)
@@ -578,7 +578,7 @@ function M.close_saved_workspace_window(runtime, entry)
 end
 
 function M.close_all_saved_workspace_windows(runtime, root)
-  root = root or runtime.state.workspace_manager_project_root or runtime:project_root()
+  root = root or runtime.state.workspace_manager.project_root or runtime:project_root()
   local state_data, state_error = runtime:read_state()
   if state_error then
     runtime.notify(state_error, vim.log.levels.ERROR)
@@ -647,7 +647,7 @@ function M.close_all_saved_workspace_windows(runtime, root)
   else
     runtime.notify("Closed " .. tostring(closed) .. " Codux workspaces")
   end
-  if runtime.state.workspace_manager_project_root == root then
+  if runtime.state.workspace_manager.project_root == root then
     runtime.render_workspace_manager()
   end
 
@@ -712,7 +712,7 @@ function M.start_saved_workspace(runtime, entry, opts)
 
   local label = entry.mission_role or workspace.name or name
   runtime.notify("Started Codux workspace " .. tostring(label))
-  if runtime.state.workspace_manager_project_root then
+  if runtime.state.workspace_manager.project_root then
     runtime.render_workspace_manager()
   end
   return true
@@ -767,7 +767,7 @@ function M.restore_workspaces(runtime, opts)
     )
   end
 
-  if runtime.state.workspace_manager_project_root == root then
+  if runtime.state.workspace_manager.project_root == root then
     runtime.render_workspace_manager()
   end
 

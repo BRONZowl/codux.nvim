@@ -35,7 +35,9 @@ local function runtime(opts)
   local killed = {}
   local rendered = false
   return {
-    state = opts.state or { workspace_manager_project_root = "/repo" },
+    state = opts.state or { workspace_manager = {
+   project_root = "/repo",
+ }},
     sanitize_workspace_name = runtime_mod.sanitize_workspace_name,
     target_path_exists = function()
       return false

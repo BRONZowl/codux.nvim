@@ -27,8 +27,8 @@ function M.action_palette_width(controller)
 end
 
 function M.action_palette_config(controller, target, item_count, kind)
-  local dashboard_config = controller.is_valid_win(controller.state.mission_dashboard_win)
-      and controller.get_window_config(controller.state.mission_dashboard_win)
+  local dashboard_config = controller.is_valid_win(controller.state.mission_dashboard.win)
+      and controller.get_window_config(controller.state.mission_dashboard.win)
     or {}
   local dashboard_width = controller:window_width() or 58
   local width = controller:action_palette_width()
@@ -48,12 +48,12 @@ function M.action_palette_config(controller, target, item_count, kind)
 end
 
 function M.render_action_palette(controller)
-  return controller:action_palette_controller():render(nil, controller.state.mission_dashboard_action_kind)
+  return controller:action_palette_controller():render(nil, controller.state.mission_dashboard.action_kind)
 end
 
 local function edit_selected_mission_text(controller, mission, opts)
   opts = type(opts) == "table" and opts or {}
-  local root = controller.state.mission_dashboard_project_root or controller.project_root()
+  local root = controller.state.mission_dashboard.project_root or controller.project_root()
   mission = mission or controller:selected_mission()
   if not mission then
     controller.notify("No Codux mission selected", vim.log.levels.WARN)
@@ -95,7 +95,7 @@ function M.edit_selected_mission_focus(controller, mission)
 end
 
 function M.delete_selected_mission(controller, mission)
-  local root = controller.state.mission_dashboard_project_root or controller.project_root()
+  local root = controller.state.mission_dashboard.project_root or controller.project_root()
   mission = mission or controller:selected_mission()
   if not mission then
     controller.notify("No Codux mission selected", vim.log.levels.WARN)
@@ -112,7 +112,7 @@ function M.delete_selected_mission(controller, mission)
 end
 
 function M.close_selected_mission(controller, mission)
-  local root = controller.state.mission_dashboard_project_root or controller.project_root()
+  local root = controller.state.mission_dashboard.project_root or controller.project_root()
   mission = mission or controller:selected_mission()
   if not mission then
     controller.notify("No Codux mission selected", vim.log.levels.WARN)
@@ -126,7 +126,7 @@ function M.close_selected_mission(controller, mission)
 end
 
 function M.start_selected_mission(controller, mission)
-  local root = controller.state.mission_dashboard_project_root or controller.project_root()
+  local root = controller.state.mission_dashboard.project_root or controller.project_root()
   mission = mission or controller:selected_mission()
   if not mission then
     controller.notify("No Codux mission selected", vim.log.levels.WARN)
@@ -141,10 +141,10 @@ function M.start_selected_mission(controller, mission)
 end
 
 function M.action_palette_target(controller)
-  if controller.state.mission_dashboard_action_kind == "workspace" then
-    return controller.state.mission_dashboard_action_workspace
+  if controller.state.mission_dashboard.action_kind == "workspace" then
+    return controller.state.mission_dashboard.action_workspace
   end
-  return controller.state.mission_dashboard_action_mission
+  return controller.state.mission_dashboard.action_mission
 end
 
 function M.run_workspace_action(controller, action, target)
@@ -156,7 +156,7 @@ function M.run_mission_action(controller, action, target)
     controller:close_action_palette()
     return controller:create_new_mission()
   end
-  local mission = target or controller.state.mission_dashboard_action_mission or controller:selected_mission_or_notify()
+  local mission = target or controller.state.mission_dashboard.action_mission or controller:selected_mission_or_notify()
   if not mission then
     return false
   end
@@ -207,10 +207,10 @@ function M.start_selected_manager(controller, mission)
   end
   local manager = mission_mod.find_manager_role(mission)
   if not manager then
-    controller.notify("No Manager role for this mission (use Add Manager)", vim.log.levels.WARN)
+    controller.notify("No Manager role for this mission", vim.log.levels.WARN)
     return false
   end
-  local root = manager.project_root or controller.state.mission_dashboard_project_root or controller.project_root()
+  local root = manager.project_root or controller.state.mission_dashboard.project_root or controller.project_root()
   local ok = controller.start_saved_workspace(manager, { restart_inactive = true })
   if ok and type(controller.invalidate_output_preview_for_entry) == "function" then
     controller:invalidate_output_preview_for_entry(manager)
@@ -231,7 +231,7 @@ end
 
 function M.process_selected_mission_dispatch(controller, mission)
   mission = type(mission) == "table" and mission or nil
-  local root = controller.state.mission_dashboard_project_root or controller.project_root()
+  local root = controller.state.mission_dashboard.project_root or controller.project_root()
   if type(controller.process_mission_dispatch) ~= "function" then
     controller.notify("Mission dispatch is unavailable", vim.log.levels.ERROR)
     return false
@@ -271,7 +271,7 @@ function M.record_dispatch_summary(controller, summary)
     return
   end
   local util = require("codux.util")
-  controller.state.mission_dashboard_last_dispatch = {
+  controller.state.mission_dashboard.last_dispatch = {
     processed = tonumber(summary.processed) or 0,
     succeeded = tonumber(summary.succeeded) or 0,
     failed = tonumber(summary.failed) or 0,

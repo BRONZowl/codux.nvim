@@ -31,8 +31,9 @@ if type(vim.api) == "table" then
   local controller = mission_control_mod.new({
     namespace = 99,
     state = {
-      mission_dashboard_win = 10,
-    },
+      mission_dashboard = {
+        win = 10,
+      }},
     is_valid_win = function(win)
       return win == 10
     end,

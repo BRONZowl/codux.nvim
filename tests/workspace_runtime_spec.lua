@@ -220,8 +220,9 @@ do
   local rendered_manager = false
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     notify = function(message)
       table.insert(notifications, message)
     end,
@@ -291,8 +292,9 @@ do
   local calls = {}
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     render_workspace_manager = function() end,
   })
   function runtime:mission_for_name(root, name)
@@ -338,8 +340,9 @@ do
   local calls = {}
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     render_workspace_manager = function() end,
   })
   function runtime:mission_for_name(root, name)
@@ -457,8 +460,9 @@ do
   local rendered = false
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     notify = function(message)
       table.insert(notifications, message)
     end,
@@ -508,8 +512,9 @@ do
   local calls = {}
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     render_workspace_manager = function() end,
   })
   function runtime:mission_for_name(root, name)
@@ -555,8 +560,9 @@ do
   local notifications = {}
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     notify = function(message)
       table.insert(notifications, message)
     end,
@@ -678,8 +684,9 @@ do
   local store = workspace_store({ state_data = state_data })
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     store = store.store,
     render_workspace_manager = function() end,
   })
@@ -717,8 +724,9 @@ do
   local store = workspace_store({ state_data = state_data })
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     store = store.store,
     render_workspace_manager = function() end,
   })
@@ -775,11 +783,13 @@ do
   local store = workspace_store({ state_data = state_data })
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
+      workspace_manager = {
+        project_root = "/repo",
+      },
       workspace = {
         project_root = "/repo",
         safe_name = "review",
-      },
+      }
     },
     store = store.store,
     render_workspace_manager = function() end,

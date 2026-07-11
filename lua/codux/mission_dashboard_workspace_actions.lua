@@ -72,14 +72,14 @@ local function open_profile_picker(controller, entry)
 end
 
 function M.run_workspace_action(controller, action, target)
-  local workspace = target or controller.state.mission_dashboard_action_workspace
+  local workspace = target or controller.state.mission_dashboard.action_workspace
   if action == "start_workspace" then
     workspace = workspace or controller:selected_role_workspace_or_notify()
     if not workspace then
       return false
     end
     controller:close_action_palette()
-    local root = workspace.project_root or controller.state.mission_dashboard_project_root or controller.project_root()
+    local root = workspace.project_root or controller.state.mission_dashboard.project_root or controller.project_root()
     local ok = controller.start_saved_workspace(workspace)
     -- Match profile-restart: clear blocked inactive preview, refresh, then retry attach.
     if ok and type(controller.invalidate_output_preview_for_entry) == "function" then
@@ -123,7 +123,7 @@ function M.run_workspace_action(controller, action, target)
       return false
     end
     controller:close_action_palette()
-    local root = workspace.project_root or controller.state.mission_dashboard_project_root or controller.project_root()
+    local root = workspace.project_root or controller.state.mission_dashboard.project_root or controller.project_root()
     local ok = controller.close_saved_workspace_window(workspace)
     -- Tear down stale output attach and refresh status immediately (do not wait on monitor tick).
     if ok and type(controller.invalidate_output_preview_for_entry) == "function" then
@@ -468,7 +468,7 @@ function M.rename_selected_role(controller, entry)
       return
     end
 
-    local root = controller.state.mission_dashboard_project_root or controller.project_root()
+    local root = controller.state.mission_dashboard.project_root or controller.project_root()
     local ok, error_message = controller.rename_mission_role(entry, new_name, root)
     if ok then
       controller.notify("Renamed Codux role to " .. tostring(new_name))

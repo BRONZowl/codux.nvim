@@ -163,8 +163,9 @@ do
   vim.env.TMUX = nil
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     notify = function(message)
       table.insert(messages, message)
     end,
@@ -237,8 +238,9 @@ do
   vim.env.TMUX = "/tmp/tmux,1,0"
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     notify = function() end,
     get_config = function()
       return { tmux_cmd = "tmux" }
@@ -301,8 +303,9 @@ do
   vim.env.TMUX = "/tmp/tmux,1,0"
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     notify = function() end,
     get_config = function()
       return { tmux_cmd = "tmux" }
@@ -375,8 +378,9 @@ do
   local notification
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     notify = function(message)
       notification = message
     end,
@@ -456,8 +460,9 @@ do
   local notification
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     notify = function(message)
       notification = message
     end,
@@ -573,7 +578,9 @@ do
     local written_instruction
     local runtime = runtime_mod.new({
       state = {
-        workspace_manager_project_root = "/repo",
+        workspace_manager = {
+          project_root = "/repo",
+        },
         workspace = {
           name = "alpha-builder",
           safe_name = "alpha-builder",
@@ -582,7 +589,7 @@ do
           worktree_branch = "dev/alpha-builder",
           tmux_target = "session:alpha-builder",
           mission_role = "Builder",
-        },
+        }
       },
       notify = function() end,
       system = function(args)
@@ -701,8 +708,9 @@ do
   local commands = {}
   local runtime = runtime_mod.new({
     state = {
-      workspace_manager_project_root = "/repo",
-    },
+      workspace_manager = {
+        project_root = "/repo",
+      }},
     system = function(args)
       table.insert(commands, table.concat(args, " "))
       return "", 1

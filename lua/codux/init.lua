@@ -261,9 +261,9 @@ local token_monitor_setup = token_monitor_setup_mod.new({
     if
       mission_controller
       and type(mission_controller.render_dashboard) == "function"
-      and state.mission_dashboard_buf ~= nil
-      and is_loaded_buf(state.mission_dashboard_buf)
-      and is_valid_win(state.mission_dashboard_win)
+      and state.mission_dashboard.buf ~= nil
+      and is_loaded_buf(state.mission_dashboard.buf)
+      and is_valid_win(state.mission_dashboard.win)
     then
       -- Redraw labels only; avoid re-entering refresh from the async callback.
       mission_controller:render_dashboard({ skip_token_refresh = true })
@@ -519,7 +519,7 @@ workspace_manager_controller = workspace_manager_mod.new({
   single_line_prompt = app.single_line_prompt,
   set_buffer_keymap = app.set_buffer_keymap,
   bind_close_keys = app.bind_close_keys,
-  namespace = state.workspace_manager_ns,
+  namespace = state.workspace_manager.ns,
 })
 
 compat_mod.install_workspace_manager(app, {
@@ -841,7 +841,7 @@ workspace_create_controller = workspace_create_mod.new({
   create_workspace = function(name, opts)
     return M.create_workspace(name, opts)
   end,
-  namespace = state.workspace_manager_ns,
+  namespace = state.workspace_manager.ns,
 })
 
 compat_mod.install_workspace_create(app, {
@@ -890,7 +890,7 @@ mission_controller = mission_setup_mod.new({
   project_root = workspace_manager_project_root,
   set_buffer_keymap = app.set_buffer_keymap,
   bind_close_keys = app.bind_close_keys,
-  namespace = state.workspace_manager_ns,
+  namespace = state.workspace_manager.ns,
 })
 
 function M.open_mission_prompt(opts)

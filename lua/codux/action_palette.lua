@@ -1,11 +1,14 @@
 local M = {}
 M.__index = M
 
+local state_mod = require("codux.state")
 local ui = require("codux.ui")
 local util = require("codux.util")
 
 local api_function = util.api_function
 local value_from = util.value_from
+local state_get = state_mod.get
+local state_set = state_mod.set
 
 function M.palette_width(dashboard_width)
   dashboard_width = type(dashboard_width) == "number" and dashboard_width or 58
@@ -89,21 +92,21 @@ function M.new(opts)
       return {}
     end,
     target = type(opts.target) == "function" and opts.target or function(self)
-      return self.state[self.target_key]
+      return state_get(self.state, self.target_key)
     end,
     assign_open_state = type(opts.assign_open_state) == "function" and opts.assign_open_state or function(self, target, _, items, bufnr)
-      self.state[self.buf_key] = bufnr
-      self.state[self.items_key] = items
+      state_set(self.state, self.buf_key, bufnr)
+      state_set(self.state, self.items_key, items)
       if self.target_key then
-        self.state[self.target_key] = target
+        state_set(self.state, self.target_key, target)
       end
     end,
     clear_state = type(opts.clear_state) == "function" and opts.clear_state or function(self)
-      self.state[self.win_key] = nil
-      self.state[self.buf_key] = nil
-      self.state[self.items_key] = {}
+      state_set(self.state, self.win_key, nil)
+      state_set(self.state, self.buf_key, nil)
+      state_set(self.state, self.items_key, {})
       if self.target_key then
-        self.state[self.target_key] = nil
+        state_set(self.state, self.target_key, nil)
       end
     end,
     action_label = opts.action_label or "Action",
@@ -120,15 +123,16 @@ function M.new(opts)
 end
 
 function M:win()
-  return self.state[self.win_key]
+  return state_get(self.state, self.win_key)
 end
 
 function M:buf()
-  return self.state[self.buf_key]
+  return state_get(self.state, self.buf_key)
 end
 
 function M:items_list()
-  return type(self.state[self.items_key]) == "table" and self.state[self.items_key] or {}
+  local items = state_get(self.state, self.items_key)
+  return type(items) == "table" and items or {}
 end
 
 function M:ns(...)
@@ -139,13 +143,13 @@ function M:close()
   self.ui.close_window(self:win())
   self.ui.delete_buffer(self:buf())
   if self.key_only then
-    self.ui.close_window(self.state[self.sink_win_key])
-    self.ui.delete_buffer(self.state[self.sink_buf_key])
+    self.ui.close_window(state_get(self.state, self.sink_win_key))
+    self.ui.delete_buffer(state_get(self.state, self.sink_buf_key))
   end
   self:clear_state()
   if self.key_only then
-    self.state[self.sink_win_key] = nil
-    self.state[self.sink_buf_key] = nil
+    state_set(self.state, self.sink_win_key, nil)
+    state_set(self.state, self.sink_buf_key, nil)
   end
   return true
 end
@@ -303,7 +307,7 @@ function M:open(target, context)
     return false
   end
 
-  self.state[self.win_key] = win
+  state_set(self.state, self.win_key, win)
   self.ui.set_window_options(win, {
     number = false,
     relativenumber = false,
@@ -333,8 +337,8 @@ function M:open(target, context)
       self.notify(value_from(self.open_error, target, context), vim.log.levels.ERROR)
       return false
     end
-    self.state[self.sink_buf_key] = sink_buf
-    self.state[self.sink_win_key] = sink_win
+    state_set(self.state, self.sink_buf_key, sink_buf)
+    state_set(self.state, self.sink_win_key, sink_win)
   else
     self:bind_keys(bufnr, target, context)
     self.set_window_cursor(win, { 1, 0 })

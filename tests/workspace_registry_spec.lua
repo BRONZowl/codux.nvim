@@ -189,7 +189,9 @@ end
 
 do
   local opts = {
-    state = { workspace_manager_project_root = "/repo" },
+    state = { workspace_manager = {
+   project_root = "/repo",
+ }},
     state_data = {
       projects = {
         ["/repo"] = {
@@ -222,11 +224,13 @@ end
 do
   local opts = {
     state = {
-      workspace_manager_project_root = "/repo",
+      workspace_manager = {
+        project_root = "/repo",
+      },
       workspace = {
         project_root = "/repo",
         safe_name = "builder",
-      },
+      }
     },
     state_data = {
       projects = {

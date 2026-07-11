@@ -63,7 +63,7 @@ function M.sync_activity(runtime, agent_status)
     runtime.state.workspace.agent_status = "idle"
     runtime.state.workspace.status = dashboard_status
     runtime.state.workspace.agent_mode = nil
-    if runtime.state.workspace_manager_project_root == root then
+    if runtime.state.workspace_manager.project_root == root then
       runtime.render_workspace_manager()
     end
 
@@ -91,7 +91,7 @@ function M.sync_activity(runtime, agent_status)
 
   runtime.state.workspace.agent_status = agent_status
   runtime.state.workspace.status = record.status
-  if runtime.state.workspace_manager_project_root == root then
+  if runtime.state.workspace_manager.project_root == root then
     runtime.render_workspace_manager()
   end
 
@@ -136,7 +136,7 @@ function M.sync_mode(runtime, mode)
   end
 
   runtime.state.workspace.agent_mode = mode
-  if runtime.state.workspace_manager_project_root == root then
+  if runtime.state.workspace_manager.project_root == root then
     runtime.render_workspace_manager()
   end
 

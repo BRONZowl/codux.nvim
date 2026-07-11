@@ -205,7 +205,8 @@ function M.token_usage_line(controller, dashboard_width)
 end
 
 function M.dispatch_status_line(controller, dashboard_width)
-  local last = type(controller.state) == "table" and controller.state.mission_dashboard_last_dispatch or nil
+  local dashboard = type(controller.state) == "table" and controller.state.mission_dashboard or nil
+  local last = type(dashboard) == "table" and dashboard.last_dispatch or nil
   if type(last) ~= "table" then
     return nil
   end
@@ -408,8 +409,8 @@ function M.highlight(controller, bufnr, lines, items)
     end
   end
 
-  local has_selected_row = controller.state.mission_dashboard_selected_row ~= nil
-  local selected_row = controller.state.mission_dashboard_selected_row or controller.state.mission_dashboard_best_match_row
+  local has_selected_row = controller.state.mission_dashboard.selected_row ~= nil
+  local selected_row = controller.state.mission_dashboard.selected_row or controller.state.mission_dashboard.best_match_row
   if selected_row then
     local group = has_selected_row and "IncSearch" or "Visual"
     local start_col, end_col = M.row_highlight_range(lines[selected_row])

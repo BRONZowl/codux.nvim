@@ -4,8 +4,15 @@ local M = {}
 
 local function extend(target, source)
   target = type(target) == "table" and target or {}
-  for key, value in pairs(type(source) == "table" and source or {}) do
-    target[key] = value
+  source = type(source) == "table" and source or {}
+  for key, value in pairs(source) do
+    if (key == "mission_dashboard" or key == "workspace_manager") and type(value) == "table" and type(target[key]) == "table" then
+      for nested_key, nested_value in pairs(value) do
+        target[key][nested_key] = nested_value
+      end
+    else
+      target[key] = value
+    end
   end
   return target
 end
@@ -36,9 +43,10 @@ end
 function M.dashboard_state_for_roles(roles, opts)
   opts = type(opts) == "table" and opts or {}
   return extend({
-    mission_dashboard_buf = 10,
-    mission_dashboard_win = 11,
-    mission_dashboard_items = {
+    mission_dashboard = {
+      buf = 10,
+      win = 11,
+      items = {
       [3] = {
         kind = "mission",
         mission = {
@@ -46,10 +54,10 @@ function M.dashboard_state_for_roles(roles, opts)
         },
       },
     },
-    mission_dashboard_selectable_rows = { 3 },
-    mission_dashboard_search_confirmed = true,
-    mission_dashboard_selected_row = 3,
-  }, opts)
+      selectable_rows = { 3 },
+      search_confirmed = true,
+      selected_row = 3,
+    }}, opts)
 end
 
 function M.set_lines_to_buffer(target, lines, opts)
@@ -72,19 +80,20 @@ function M.controller(opts)
   }
 
   local controller_state = extend({
-    mission_dashboard_output_buf = ctx.bufnr,
-    mission_dashboard_output_win = opts.output_win or 13,
-  }, opts.state)
+    mission_dashboard = {
+      output_buf = ctx.bufnr,
+      output_win = opts.output_win or 13,
+    }}, opts.state)
 
   local controller_opts = extend({
     namespace = opts.namespace,
     state = controller_state,
     is_loaded_buf = function(target)
-      return (type(target) == "number" and vim.api.nvim_buf_is_loaded(target)) or target == controller_state.mission_dashboard_buf
+      return (type(target) == "number" and vim.api.nvim_buf_is_loaded(target)) or target == controller_state.mission_dashboard.buf
     end,
     is_valid_win = function(win)
-      return win == controller_state.mission_dashboard_win
-        or win == controller_state.mission_dashboard_output_win
+      return win == controller_state.mission_dashboard.win
+        or win == controller_state.mission_dashboard.output_win
         or (type(win) == "number" and vim.api.nvim_win_is_valid(win))
     end,
     ui = {

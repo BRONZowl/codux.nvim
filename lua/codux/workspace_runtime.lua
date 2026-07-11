@@ -3,6 +3,7 @@ M.__index = M
 
 local command_util = require("codux.command")
 local mission_lifecycle = require("codux.mission_lifecycle")
+local state_mod = require("codux.state")
 local text_util = require("codux.text")
 local workspace_git = require("codux.workspace_git")
 local workspace_instructions = require("codux.workspace_instructions")
@@ -150,7 +151,7 @@ end
 function M.new(opts)
   opts = type(opts) == "table" and opts or {}
   local runtime = {
-    state = type(opts.state) == "table" and opts.state or {},
+    state = state_mod.ensure_ui_nests(type(opts.state) == "table" and opts.state or {}),
     defaults = type(opts.defaults) == "table" and opts.defaults or {},
     get_config = type(opts.get_config) == "function" and opts.get_config or function()
       return {}
