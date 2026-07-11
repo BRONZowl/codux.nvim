@@ -23,8 +23,6 @@
   <a href="#installation"><strong>Install in minutes →</strong></a>
   ·
   <a href="#quick-start"><strong>Quick Start</strong></a>
-  ·
-  <a href="#showcase--demos"><strong>See it in action</strong></a>
 </p>
 
 ---
@@ -158,7 +156,6 @@ Restart Neovim, open a project, then verify:
 - [Token & Status Monitoring](#token--status-monitoring)
 - [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
-- [Showcase / Demos](#showcase--demos)
 - [License](#license)
 
 ---
@@ -451,24 +448,6 @@ Profiles map to CLI sandbox/approval settings (default / auto / full). Prefer de
 
 **Why does Grok token usage often show “full” or 0%?**  
 Grok monitoring reports **current-window rate-limit headroom**, not lifetime spend. xAI TPM ceilings are large, so light use often still shows full remaining.
-
----
-
-## Showcase / Demos
-
-| Demo | Asset |
-| --- | --- |
-| Codux Doctor | `assets/codux-doctor-full.png` |
-
-<!-- Add more as you capture them:
-| Single-session agent + context send | `assets/codux-demo.gif` |
-| Workspaces | `assets/codux-workspaces.gif` |
-| Mission Control dashboard | `assets/codux-mission-control.gif` |
-| Send selection workflow | `assets/codux-send-selection.gif` |
-| Provider switch (Codex ↔ Grok) | `assets/codux-providers.gif` |
--->
-
-More walkthrough stills live under `001screenshots/` (how it works, send selection, workspaces, menus).
 
 ---
 
