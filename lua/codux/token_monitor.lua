@@ -485,15 +485,17 @@ function M:refresh_grok(force)
   self.state.usage_provider = "grok"
 
   local job_id
+  -- Accumulate stdout synchronously so a scheduled on_exit never races an empty buffer.
+  -- Only complete_request / UI work is deferred via schedule_wrap.
   job_id = vim.fn.jobstart(command, {
     stdout_buffered = true,
     stderr_buffered = true,
-    on_stdout = vim.schedule_wrap(function(_, data)
+    on_stdout = function(_, data)
       if self.state.job_id ~= job_id or type(data) ~= "table" then
         return
       end
       self.state.stdout = (self.state.stdout or "") .. table.concat(data, "\n")
-    end),
+    end,
     on_exit = vim.schedule_wrap(function(_, code)
       if self.state.job_id ~= job_id then
         return

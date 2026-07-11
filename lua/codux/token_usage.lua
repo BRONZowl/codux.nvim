@@ -59,6 +59,12 @@ function M.parse_response(response)
 end
 
 local function used_percent(limit, remaining)
+  if type(limit) == "string" then
+    limit = limit:match("^%s*(.-)%s*$")
+  end
+  if type(remaining) == "string" then
+    remaining = remaining:match("^%s*(.-)%s*$")
+  end
   limit = tonumber(limit)
   remaining = tonumber(remaining)
   if limit == nil or limit <= 0 or remaining == nil then
@@ -75,10 +81,29 @@ local function header_value(headers, name)
   local want = tostring(name or ""):lower()
   for key, value in pairs(headers) do
     if type(key) == "string" and key:lower() == want then
+      if type(value) == "string" then
+        return value:match("^%s*(.-)%s*$")
+      end
       return value
     end
   end
   return nil
+end
+
+local function parse_header_line(line)
+  line = tostring(line or ""):gsub("\r", "")
+  if line == "" or line:match("^%s*$") then
+    return nil, nil
+  end
+  -- Status lines: "HTTP/1.1 200 OK", "HTTP/2 200 "
+  if line:match("^HTTP/") then
+    return nil, nil
+  end
+  local name, value = line:match("^([^:]+):%s*(.-)%s*$")
+  if not name or name == "" then
+    return nil, nil
+  end
+  return name, value
 end
 
 --- Parse xAI rate-limit headers from a header map or raw HTTP header text.
@@ -86,8 +111,10 @@ function M.parse_grok_headers(headers)
   local map = headers
   if type(headers) == "string" then
     map = {}
-    for line in (headers .. "\n"):gmatch("(.-)\n") do
-      local name, value = line:match("^([^:]+):%s*(.-)%s*$")
+    -- Accept both LF and CRLF dumps from curl -D -.
+    local normalized = headers:gsub("\r\n", "\n"):gsub("\r", "\n")
+    for line in (normalized .. "\n"):gmatch("(.-)\n") do
+      local name, value = parse_header_line(line)
       if name and value then
         map[name] = value
       end

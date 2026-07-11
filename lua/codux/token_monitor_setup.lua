@@ -24,6 +24,7 @@ function M.new(opts)
       return monitor:label({
         running = opts.is_running(),
         mode = opts.get_mode(),
+        show_error = true,
       })
     end,
     mission_token_usage_label = function(provider)

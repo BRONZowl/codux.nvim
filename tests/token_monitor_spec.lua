@@ -327,6 +327,21 @@ do
   )
   assert_equal(parsed.tpm_percent, 60)
   assert_equal(parsed.rpm_percent, 30)
+
+  -- Live-shaped curl -D - dump: HTTP/2, trailing space on status, large limits, CRLF.
+  parsed = token_usage.parse_grok_headers(
+    "HTTP/2 200 \r\nx-ratelimit-limit-tokens: 53000000\r\nx-ratelimit-remaining-tokens: 53000000\r\nx-ratelimit-limit-requests: 8300\r\nx-ratelimit-remaining-requests: 8300\r\n\r\n"
+  )
+  assert_equal(parsed.tpm_percent, 0)
+  assert_equal(parsed.rpm_percent, 0)
+  assert_equal(parsed.usage_provider, "grok")
+
+  parsed = token_usage.parse_grok_headers(
+    "HTTP/2 200\r\nx-ratelimit-limit-tokens: 100\r\nx-ratelimit-remaining-tokens: 25\r\nx-ratelimit-limit-requests: 20\r\nx-ratelimit-remaining-requests: 10\r\n\r\n"
+  )
+  assert_equal(parsed.tpm_percent, 75)
+  assert_equal(parsed.rpm_percent, 50)
+
   assert_nil(token_usage.parse_grok_headers({}))
   assert_nil(token_usage.parse_grok_headers({ ["x-ratelimit-limit-tokens"] = "0", ["x-ratelimit-remaining-tokens"] = "0" }))
 end
@@ -503,8 +518,13 @@ do
 end
 
 do
-  local state = {}
+  local state = {
+    five_hour_percent = 11,
+    weekly_percent = 22,
+    by_provider = { codex = { five_hour_percent = 11, weekly_percent = 22 }, grok = {} },
+  }
   local updates = 0
+  local stdout_cb
   local exit_cb
   local monitor = token_monitor_mod.new({
     defaults = {
@@ -551,6 +571,7 @@ do
       target = vim.fn,
       key = "jobstart",
       value = function(_, opts)
+        stdout_cb = opts.on_stdout
         exit_cb = opts.on_exit
         return 42
       end,
@@ -558,14 +579,102 @@ do
   }, function()
     assert_true(monitor:refresh(false, { require_running = false, agent_provider = "grok" }))
     assert_equal(state.job_id, 42)
-    state.stdout =
-      "HTTP/2 200\nx-ratelimit-limit-tokens: 100\nx-ratelimit-remaining-tokens: 25\nx-ratelimit-limit-requests: 20\nx-ratelimit-remaining-requests: 10\n\n"
+    -- Realistic path: buffered stdout arrives, then exit (stdout must not depend on schedule order).
+    stdout_cb(nil, {
+      "HTTP/2 200 ",
+      "x-ratelimit-limit-tokens: 100",
+      "x-ratelimit-remaining-tokens: 25",
+      "x-ratelimit-limit-requests: 20",
+      "x-ratelimit-remaining-requests: 10",
+      "",
+      "",
+    })
     exit_cb(nil, 0)
     assert_equal(state.tpm_percent, 75)
     assert_equal(state.rpm_percent, 50)
     assert_equal(state.usage_provider, "grok")
     assert_nil(state.last_error)
+    assert_equal(state.by_provider.grok.tpm_percent, 75)
+    assert_equal(state.by_provider.grok.rpm_percent, 50)
+    assert_nil(state.by_provider.grok.last_error)
+    assert_true(type(state.by_provider.grok.refreshed_at) == "number")
+    assert_equal(state.five_hour_percent, 11, "Grok success must not clear Codex snapshot")
+    assert_equal(state.weekly_percent, 22, "Grok success must not clear Codex snapshot")
     assert_true(updates >= 1)
+  end)
+  vim.uv = old_uv
+  vim.loop = old_loop
+end
+
+do
+  -- Regression: even if exit runs before a deferred stdout would have, sync on_stdout
+  -- means pre-exit accumulation always wins when nvim delivers stdout first in-process.
+  local state = {}
+  local stdout_cb
+  local exit_cb
+  local monitor = token_monitor_mod.new({
+    defaults = {
+      enabled = true,
+      refresh_ms = 60000,
+      timeout_ms = 5000,
+      grok = { enabled = true, model = "grok-4.5", base_url = "https://api.x.ai/v1" },
+    },
+    state = state,
+    get_config = function()
+      return { token_monitor = { grok = { api_key = "k" } } }
+    end,
+    is_running = function()
+      return true
+    end,
+    json_encode = function()
+      return "{}"
+    end,
+    on_update = function() end,
+  })
+
+  local old_uv = vim.uv
+  local old_loop = vim.loop
+  vim.uv = nil
+  vim.loop = nil
+  h.with_stubs({
+    {
+      target = vim,
+      key = "schedule_wrap",
+      value = function(fn)
+        return fn
+      end,
+    },
+    {
+      target = vim.fn,
+      key = "executable",
+      value = function()
+        return 1
+      end,
+    },
+    {
+      target = vim.fn,
+      key = "jobstart",
+      value = function(_, opts)
+        stdout_cb = opts.on_stdout
+        exit_cb = opts.on_exit
+        return 7
+      end,
+    },
+  }, function()
+    assert_true(monitor:refresh(false, { agent_provider = "grok" }))
+    -- Deliver headers synchronously (as production on_stdout now does).
+    stdout_cb(nil, {
+      "HTTP/1.1 200 OK",
+      "x-ratelimit-limit-tokens: 200",
+      "x-ratelimit-remaining-tokens: 50",
+      "x-ratelimit-limit-requests: 40",
+      "x-ratelimit-remaining-requests: 10",
+      "",
+    })
+    exit_cb(nil, 0)
+    assert_equal(state.tpm_percent, 75)
+    assert_equal(state.rpm_percent, 75)
+    assert_equal(state.usage_provider, "grok")
   end)
   vim.uv = old_uv
   vim.loop = old_loop
