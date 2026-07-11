@@ -60,6 +60,80 @@ do
 end
 
 do
+  local controller = workspace_create_mod.new({})
+  local mission = mission_control_mod.new({})
+
+  with_editor_size(140, 40, function()
+    local config = controller:create_preview_config(8)
+    local mission_preview = mission:preview_config(8)
+    assert_equal(config.width, 82)
+    assert_equal(config.height, 10)
+    assert_equal(config.zindex, 80)
+    assert_true(config.focusable)
+    assert_equal(config.zindex, mission_preview.zindex)
+    assert_equal(config.title, " create codux workspace ")
+  end)
+
+  with_editor_size(42, 12, function()
+    local config = controller:create_preview_config(20)
+    assert_true(config.width <= 38)
+    assert_true(config.height <= 7)
+    assert_equal(config.zindex, 80)
+  end)
+
+  with_editor_size(120, 40, function()
+    local config = controller:create_preview_config(20)
+    assert_equal(config.width, math.min(82, math.max(50, math.floor(120 * 0.62))))
+    assert_equal(config.height, 21)
+    assert_equal(config.zindex, 80)
+  end)
+end
+
+if type(vim.api) == "table" then
+  local opened
+  local controller = workspace_create_mod.new({
+    namespace = 3,
+    is_valid_win = function(win)
+      return win == 20
+    end,
+    is_loaded_buf = function()
+      return true
+    end,
+    ui = {
+      create_scratch_buffer = function()
+        return 31
+      end,
+      set_lines = function() end,
+      delete_buffer = function() end,
+    },
+  })
+
+  h.with_vim_api({
+    nvim_win_get_height = function()
+      return 10
+    end,
+    nvim_win_get_width = function()
+      return 60
+    end,
+    nvim_open_win = function(bufnr, enter, config)
+      opened = { bufnr = bufnr, enter = enter, config = config }
+      return 41
+    end,
+    nvim_buf_clear_namespace = function() end,
+    nvim_buf_add_highlight = function() end,
+  }, function()
+    local bufnr, win = controller:open_create_footer(20)
+    assert_equal(bufnr, 31)
+    assert_equal(win, 41)
+  end)
+
+  assert_equal(opened.config.relative, "win")
+  assert_equal(opened.config.win, 20)
+  assert_equal(opened.config.row, 9)
+  assert_equal(opened.config.zindex, 81)
+end
+
+do
   h.with_vim_api({
     nvim_set_option_value = function() end,
     nvim_open_win = function()

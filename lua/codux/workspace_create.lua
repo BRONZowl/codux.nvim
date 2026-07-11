@@ -88,10 +88,14 @@ function M:preview_lines(request)
 end
 
 function M:create_preview_config(line_count)
+  -- Match mission create-preview stacking/clamping so confirmation sits above
+  -- Mission Control and never exceeds the editor (same class as zindex 80 floats).
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
-  local width = math.min(82, math.max(50, math.floor(total_width * 0.62)))
-  local height = math.min(math.max(10, (line_count or 1) + 1), math.max(6, total_height - 4))
+  local max_width = math.max(1, total_width - 4)
+  local max_height = math.max(1, total_height - 4)
+  local width = math.min(max_width, math.min(82, math.max(50, math.floor(total_width * 0.62))))
+  local height = math.min(max_height, math.max(10, (line_count or 1) + 1))
 
   return {
     relative = "editor",
@@ -103,6 +107,8 @@ function M:create_preview_config(line_count)
     height = height,
     col = math.max(0, math.floor((total_width - width) / 2)),
     row = math.max(0, math.floor((total_height - height) / 2)),
+    focusable = true,
+    zindex = 80,
   }
 end
 
@@ -126,7 +132,7 @@ end
 function M:open_create_footer(win)
   return confirmation_footer.open(self, win, {
     filetype = "codux-workspace-create-footer",
-    zindex = 51,
+    zindex = 81,
     segments = self:create_footer_segments(),
   })
 end
