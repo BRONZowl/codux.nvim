@@ -869,6 +869,9 @@ mission_controller = mission_setup_mod.new({
   token_usage_provider_refreshed_at = token_usage_provider_refreshed_at,
   workspace_runtime = workspace_runtime,
   workspace_entries_for_project = workspace_entries_for_project,
+  doctor = function()
+    return M.doctor()
+  end,
   edit_saved_workspace_instruction = edit_saved_workspace_instruction,
   start_saved_workspace = function(entry, opts)
     return M.start_saved_workspace(entry, opts)

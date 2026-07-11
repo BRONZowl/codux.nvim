@@ -23,6 +23,12 @@ function M.new(deps)
     create_mission = function(mission)
       return codux.create_mission(mission)
     end,
+    doctor = type(deps.doctor) == "function" and deps.doctor
+      or function()
+        if type(codux.doctor) == "function" then
+          return codux.doctor()
+        end
+      end,
     create_workspace_prompt = function(opts)
       return codux.open_workspace_prompt(opts)
     end,

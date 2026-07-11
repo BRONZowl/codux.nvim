@@ -76,6 +76,7 @@ do
   assert_equal(bound["<C-o>"], "Control Codux Mission Role Output")
   assert_equal(bound.n, "Create Codux Mission")
   assert_equal(bound.c, "Clean Codux Mission Residue")
+  assert_equal(bound.h, "Run Codux Doctor")
   assert_nil(bound.a)
   assert_nil(bound.o)
   assert_nil(bound.p)

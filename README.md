@@ -145,7 +145,7 @@ Codux can send editor context to the active agent session:
 | Close a mission | none | `:CoduxMissionClose <mission>` |
 | Delete a mission | none | `:CoduxMissionDelete <mission>` |
 | Run Neovim health checks | none | `:CoduxHealth` |
-| Run Codux Doctor | `h` in workspace dashboard | `:CoduxDoctor` |
+| Run Codux Doctor | `h` in workspace / mission dashboard | `:CoduxDoctor` |
 
 By default, Codux maps only the core single-session actions and Mission Control:
 open, set default provider, review file, review selection, diagnostics, diff,
@@ -334,6 +334,7 @@ Dashboard controls:
   rows.
 - `n` creates a mission.
 - `c` cleans empty Mission Control residue.
+- `h` runs Codux Doctor (same as `:CoduxDoctor`).
 - `<C-o>` enters output control for the highlighted active role workspace.
 
 While controlling role output, type directly into the agent session. `<C-o>`

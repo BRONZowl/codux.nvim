@@ -71,6 +71,7 @@ function M.normalize(opts)
     end),
     create_mission = opt_function(opts, "create_mission", noop),
     cleanup_mission_residue = opt_function(opts, "cleanup_mission_residue", nil),
+    doctor = opt_function(opts, "doctor", noop),
     create_workspace_prompt = opt_function(opts, "create_workspace_prompt", noop),
     select_provider_profile = opt_function(opts, "select_provider_profile", nil),
     default_agent_provider = opt_function(opts, "default_agent_provider", nil),

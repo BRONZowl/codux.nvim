@@ -16,6 +16,7 @@ do
   assert_equal(#command_lines, 1)
   assert_true(command_lines[1]:find("Tab search", 1, true) ~= nil)
   assert_contains(command_text, "Tab search")
+  assert_contains(command_text, "h doctor")
   assert_contains(command_text, "m menu")
   assert_contains(command_text, "<C-o> control")
   assert_equal(command_text:find("o control", 1, true), nil)

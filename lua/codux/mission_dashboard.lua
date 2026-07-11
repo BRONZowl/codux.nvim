@@ -7,6 +7,7 @@ local COMMAND_ITEMS = {
   { key = "m", label = "menu" },
   { key = "n", label = "new" },
   { key = "c", label = "cleanup" },
+  { key = "h", label = "doctor" },
   { key = "<C-o>", label = "control" },
 }
 
