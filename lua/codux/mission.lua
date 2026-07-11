@@ -116,13 +116,67 @@ function M.mission_id(safe_name)
   return "mission:" .. tostring(safe_name or "")
 end
 
+M.MANAGER_ROLE = {
+  name = "Manager",
+  safe_name = "manager",
+  focus = "Own the mission objective and focus packet. Plan work, coordinate worker roles, write clear handoffs, and do not implement everything yourself. This role is the mission console in Mission Control.",
+}
+
 M.DEFAULT_ROLES = {
+  M.MANAGER_ROLE,
   {
     name = "Agent",
     safe_name = "agent",
     focus = "Create the requested outcome accurately, keep context focused, validate cheaply, and ask only high-impact questions.",
   },
 }
+
+--- True when a planned role or workspace entry is the mission Manager.
+function M.is_manager_role(entry_or_role)
+  entry_or_role = type(entry_or_role) == "table" and entry_or_role or {}
+  -- Check fields individually (do not pack into a list with ipairs — nils stop iteration).
+  for _, value in ipairs({
+    entry_or_role.mission_role or false,
+    entry_or_role.name or false,
+    entry_or_role.safe_name or false,
+  }) do
+    if value and safe_name(value) == "manager" then
+      return true
+    end
+  end
+  return false
+end
+
+--- First Manager role among mission.roles (planned or workspace entries).
+function M.find_manager_role(mission)
+  mission = type(mission) == "table" and mission or {}
+  for _, role in ipairs(type(mission.roles) == "table" and mission.roles or {}) do
+    if M.is_manager_role(role) then
+      return role
+    end
+  end
+  return nil
+end
+
+--- Ensure a Manager role is present; prepend MANAGER_ROLE when missing.
+function M.ensure_manager_in_roles(roles)
+  roles = type(roles) == "table" and roles or {}
+  local result = {}
+  for _, role in ipairs(roles) do
+    table.insert(result, role)
+  end
+  for _, role in ipairs(result) do
+    if M.is_manager_role(role) then
+      return result
+    end
+  end
+  table.insert(result, 1, {
+    name = M.MANAGER_ROLE.name,
+    safe_name = M.MANAGER_ROLE.safe_name,
+    focus = M.MANAGER_ROLE.focus,
+  })
+  return result
+end
 
 function M.default_focus_packet(mission_name, objective)
   return table.concat({
@@ -135,7 +189,7 @@ function M.default_focus_packet(mission_name, objective)
     trim(objective),
     "",
     "Current Direction:",
-    "Use one focused Agent by default. Preserve prompt fidelity, keep context narrow, and avoid unnecessary review loops.",
+    "The Manager owns planning and handoffs. Worker roles (e.g. Agent) execute scoped tasks. Preserve prompt fidelity and keep context narrow.",
     "",
     "User Preferences:",
     "- Prefer accurate creation from the user's prompt.",
@@ -146,10 +200,10 @@ function M.default_focus_packet(mission_name, objective)
     "The files, behavior, and validation needed for this mission.",
     "",
     "Out of Scope:",
-    "Automatic reviewer loops, heavy acceptance workflows, and unrelated refactors.",
+    "Heavy acceptance workflows and unrelated refactors without Manager direction.",
     "",
     "Next Action:",
-    "Ground in the current repo state, implement the most faithful interpretation, and report validation clearly.",
+    "Manager: ground in the repo and sequence work. Workers: implement the handoff they receive.",
   }, "\n")
 end
 
@@ -158,10 +212,22 @@ function M.workspace_name(safe_mission_name, role)
   return tostring(safe_mission_name or "") .. "-" .. tostring(role.safe_name or "")
 end
 
-function M.role_instruction(mission_name, objective, role)
+function M.role_instruction(mission_name, objective, role, opts)
   role = type(role) == "table" and role or {}
+  opts = type(opts) == "table" and opts or {}
   local role_name = role.name or role.safe_name or "Agent"
-  return table.concat({
+  local closing
+  if M.is_manager_role(role) then
+    closing = table.concat({
+      "You are the mission console for this mission in Codux Mission Control.",
+      "Plan, sequence, and write clear handoffs for worker roles. Do not implement everything yourself.",
+      "Stay inside this Manager workspace for chat and planning; worker execution happens in other role workspaces.",
+    }, " ")
+  else
+    closing =
+      "Stay inside this workspace and keep your work scoped to this role. Coordinate through concise handoff notes when another role needs context."
+  end
+  local lines = {
     "You are the " .. role_name .. " for Codux Mission Control.",
     "",
     "Mission: " .. tostring(mission_name or ""),
@@ -172,8 +238,20 @@ function M.role_instruction(mission_name, objective, role)
     "Role focus:",
     tostring(role.focus or ""),
     "",
-    "Stay inside this workspace and keep your work scoped to this role. Coordinate through concise handoff notes when another role needs context.",
-  }, "\n")
+    closing,
+  }
+  if M.is_manager_role(role) then
+    local orchestrate = require("codux.mission_orchestrate")
+    local help = orchestrate.manager_dispatch_help(
+      opts.project_root,
+      opts.mission_safe or safe_name(mission_name),
+      opts.instruction_directory
+    )
+    table.insert(lines, "")
+    table.insert(lines, "Worker dispatch protocol:")
+    table.insert(lines, help)
+  end
+  return table.concat(lines, "\n")
 end
 
 function M.prompt_with_focus_packet(prompt, focus_packet)
@@ -213,6 +291,14 @@ end
 function M.role_prompt(mission_name, objective, role, focus_packet)
   role = type(role) == "table" and role or {}
   local role_name = role.name or role.safe_name or "Agent"
+  local first_pass
+  if M.is_manager_role(role) then
+    first_pass =
+      "First pass: stay in plan mode, ground yourself in the repo, outline worker handoffs, and identify the next action for each role. Report blockers clearly. Do not implement the whole mission yourself."
+  else
+    first_pass =
+      "First pass: stay in plan mode, ground yourself in the repo, and identify your role-specific next steps before executing. Report blockers and handoff notes clearly."
+  end
   local prompt = table.concat({
     "Start your Mission Control role now.",
     "",
@@ -222,7 +308,7 @@ function M.role_prompt(mission_name, objective, role, focus_packet)
     "Objective:",
     trim(objective),
     "",
-    "First pass: stay in plan mode, ground yourself in the repo, and identify your role-specific next steps before executing. Report blockers and handoff notes clearly.",
+    first_pass,
   }, "\n")
   return M.prompt_with_focus_packet(prompt, focus_packet)
 end
@@ -267,6 +353,8 @@ function M.plan(name, objective, opts)
   end
 
   local roles = type(opts.roles) == "table" and opts.roles or M.DEFAULT_ROLES
+  -- Product rule: every mission always includes a Manager role.
+  roles = M.ensure_manager_in_roles(roles)
   local mission = {
     name = mission_name,
     safe_name = safe_name_or_error,
@@ -303,7 +391,11 @@ function M.plan(name, objective, opts)
       focus = trim(role.focus),
     }
     normalized_role.workspace_name = M.workspace_name(mission.safe_name, normalized_role)
-    normalized_role.instruction = M.role_instruction(mission.name, objective, normalized_role)
+    normalized_role.instruction = M.role_instruction(mission.name, objective, normalized_role, {
+      project_root = opts.project_root,
+      mission_safe = mission.safe_name,
+      instruction_directory = opts.instruction_directory,
+    })
     normalized_role.initial_prompt = M.role_prompt(mission.name, objective, normalized_role, mission.focus_packet)
     table.insert(mission.roles, normalized_role)
   end

@@ -14,17 +14,26 @@ do
   assert_equal(mission.name, "Blow Socks Off")
   assert_equal(mission.safe_name, "blow-socks-off")
   assert_equal(mission.mission_id, "mission:blow-socks-off")
-  assert_equal(#mission.roles, 1)
-  assert_equal(mission.roles[1].workspace_name, "blow-socks-off-agent")
-  assert_equal(mission.roles[1].name, "Agent")
-  assert_equal(mission.roles[1].safe_name, "agent")
+  assert_equal(#mission.roles, 2, "default crew is Manager + Agent")
+  assert_equal(mission.roles[1].name, "Manager")
+  assert_equal(mission.roles[1].safe_name, "manager")
+  assert_equal(mission.roles[1].workspace_name, "blow-socks-off-manager")
+  assert_equal(mission.roles[2].workspace_name, "blow-socks-off-agent")
+  assert_equal(mission.roles[2].name, "Agent")
+  assert_equal(mission.roles[2].safe_name, "agent")
+  assert_true(mission_mod.is_manager_role(mission.roles[1]))
+  assert_false(mission_mod.is_manager_role(mission.roles[2]))
+  assert_equal(mission_mod.find_manager_role(mission).safe_name, "manager")
   assert_contains(mission.focus_packet, "# Mission Focus Packet")
   assert_contains(mission.focus_packet, "Build a standout agentic engineering feature.")
-  assert_contains(mission.focus_packet, "Use one focused Agent by default")
+  assert_contains(mission.focus_packet, "The Manager owns planning")
+  assert_contains(mission.roles[1].instruction, "mission console")
   assert_contains(mission.roles[1].instruction, "Mission: Blow Socks Off")
+  assert_contains(mission.roles[2].instruction, "Mission: Blow Socks Off")
   assert_contains(mission.roles[1].initial_prompt, "Mission Focus Packet:")
   assert_contains(mission.roles[1].initial_prompt, "Start your Mission Control role now.")
   assert_contains(mission.roles[1].initial_prompt, "stay in plan mode")
+  assert_contains(mission.roles[1].initial_prompt, "outline worker handoffs")
 end
 
 do
@@ -62,13 +71,31 @@ do
     },
   })
   assert_nil(error_message)
-  assert_equal(mission.roles[1].name, "Build Lead")
-  assert_equal(mission.roles[1].safe_name, "build-lead")
-  assert_equal(mission.roles[1].workspace_name, "crew-build-lead")
-  assert_contains(mission.roles[1].instruction, "You are the Build Lead")
-  assert_equal(mission.roles[2].name, "QA Lead")
-  assert_equal(mission.roles[2].safe_name, "qa-lead")
-  assert_equal(mission.roles[2].workspace_name, "crew-qa-lead")
+  assert_equal(#mission.roles, 3, "Manager is injected when missing from custom roles")
+  assert_equal(mission.roles[1].name, "Manager")
+  assert_equal(mission.roles[1].safe_name, "manager")
+  assert_equal(mission.roles[1].workspace_name, "crew-manager")
+  assert_equal(mission.roles[2].name, "Build Lead")
+  assert_equal(mission.roles[2].safe_name, "build-lead")
+  assert_equal(mission.roles[2].workspace_name, "crew-build-lead")
+  assert_contains(mission.roles[2].instruction, "You are the Build Lead")
+  assert_equal(mission.roles[3].name, "QA Lead")
+  assert_equal(mission.roles[3].safe_name, "qa-lead")
+  assert_equal(mission.roles[3].workspace_name, "crew-qa-lead")
+end
+
+do
+  -- Caller already includes Manager: do not duplicate.
+  local mission, error_message = mission_mod.plan("Crew", "Ship it", {
+    roles = {
+      { name = "Manager", safe_name = "manager", focus = "Custom manager focus." },
+      { name = "Builder", safe_name = "builder" },
+    },
+  })
+  assert_nil(error_message)
+  assert_equal(#mission.roles, 2)
+  assert_equal(mission.roles[1].focus, "Custom manager focus.")
+  assert_equal(mission.roles[2].name, "Builder")
 end
 
 do

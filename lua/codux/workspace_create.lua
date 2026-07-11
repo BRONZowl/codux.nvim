@@ -503,8 +503,13 @@ function M:open_prompt(opts)
     return false
   end
 
+  opts = type(opts) == "table" and opts or {}
   local context = mission_context(opts)
-  self.single_line_prompt({ prompt = "Codux workspace: " }, function(input)
+  local default_name = type(opts.default_name) == "string" and opts.default_name or ""
+  self.single_line_prompt({
+    prompt = "Codux workspace: ",
+    default = default_name,
+  }, function(input)
     local name = self.trim(input)
     if name == "" then
       return

@@ -15,10 +15,16 @@ local function role_cache_key(entry)
 end
 
 function Output:dashboard_output_entry(item)
-  if type(item) == "table" then
-    if item.kind == "role" and type(item.entry) == "table" then
-      return item.entry
-    end
+  if type(item) ~= "table" then
+    return nil
+  end
+  if item.kind == "role" and type(item.entry) == "table" then
+    return item.entry
+  end
+  -- Mission row is the Manager console: same preview/control entry as the Manager role.
+  if item.kind == "mission" and type(item.mission) == "table" then
+    local mission_mod = require("codux.mission")
+    return mission_mod.find_manager_role(item.mission)
   end
   return nil
 end
@@ -37,7 +43,12 @@ end
 function Output:output_panel_lines(entry, message)
   local lines = {}
   if type(entry) ~= "table" then
-    table.insert(lines, "Output: select a workspace row to preview its Codux session")
+    local item = type(self.selected_item) == "function" and self:selected_item() or nil
+    if type(item) == "table" and item.kind == "mission" then
+      table.insert(lines, "Output: no Manager role for this mission")
+    else
+      table.insert(lines, "Output: select a mission or role row to preview its Codux session")
+    end
     return lines
   end
 

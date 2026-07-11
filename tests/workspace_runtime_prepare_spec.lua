@@ -301,11 +301,17 @@ do
           table.sort(lines)
           return table.concat(lines, "\n") .. (#lines > 0 and "\n" or ""), 0
         end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-manager" then
+          return "", 1
+        end
         if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-architect" then
           return "", 1
         end
         if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/mission-builder" then
           return "", 1
+        end
+        if command == "git -C /repo worktree add -b dev/mission-manager /codux-worktrees/repo/mission-manager main" then
+          return "", 0
         end
         if command == "git -C /repo worktree add -b dev/mission-architect /codux-worktrees/repo/mission-architect main" then
           return "", 0
@@ -314,15 +320,14 @@ do
           return "", 0
         end
         if command:find("tmux new%-window", 1, false) == 1 then
-          local name = command:find("mission%-architect") and "mission-architect" or "mission-builder"
+          local name = command:find("mission%-manager") and "mission-manager"
+            or command:find("mission%-architect") and "mission-architect"
+            or "mission-builder"
           windows[name] = "@" .. tostring(next_window_id)
           next_window_id = next_window_id + 1
           return "", 0
         end
-        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
-          return "nvim\n", 0
-        end
-        if command == "tmux list-panes -t @2 -F #{pane_current_command}" then
+        if command:match("tmux list%-panes %-t @%d+ %-F") then
           return "nvim\n", 0
         end
         if command:find("remote_workspace_status", 1, true) then
@@ -345,15 +350,21 @@ do
     local preflight_ok, preflight_error, role_specs = runtime:preflight_mission(mission)
     assert_true(preflight_ok)
     assert_nil(preflight_error)
-    assert_equal(role_specs[1].safe_name, "mission-architect")
-    assert_equal(role_specs[1].worktree_path, "/codux-worktrees/repo/mission-architect")
-    assert_equal(role_specs[2].safe_name, "mission-builder")
-    assert_equal(role_specs[2].worktree_path, "/codux-worktrees/repo/mission-builder")
+    assert_equal(#role_specs, 3, "Manager is always first in the mission crew")
+    assert_equal(role_specs[1].safe_name, "mission-manager")
+    assert_equal(role_specs[1].worktree_path, "/codux-worktrees/repo/mission-manager")
+    assert_equal(role_specs[2].safe_name, "mission-architect")
+    assert_equal(role_specs[2].worktree_path, "/codux-worktrees/repo/mission-architect")
+    assert_equal(role_specs[3].safe_name, "mission-builder")
+    assert_equal(role_specs[3].worktree_path, "/codux-worktrees/repo/mission-builder")
     assert_true(runtime:create_mission(mission))
 
+    local manager = store.state_data().projects["/codux-worktrees/repo/mission-manager"].workspaces["mission-manager"]
     local architect =
       store.state_data().projects["/codux-worktrees/repo/mission-architect"].workspaces["mission-architect"]
     local builder = store.state_data().projects["/codux-worktrees/repo/mission-builder"].workspaces["mission-builder"]
+    assert_equal(manager.permission_profile, "danger")
+    assert_equal(manager.mission_role, "Manager")
     assert_equal(architect.permission_profile, "danger")
     assert_equal(builder.permission_profile, "danger")
     assert_equal(architect.mission_id, "mission:mission")
@@ -379,10 +390,12 @@ do
     local missions = runtime:missions_for_project("/repo")
     assert_equal(#missions, 1)
     assert_equal(missions[1].name, "Mission")
-    assert_equal(#missions[1].roles, 2)
+    assert_equal(#missions[1].roles, 3)
     assert_contains(harness.command_text(), "git -C /repo status --porcelain")
     assert_contains(harness.command_text(), "--listen")
     assert_equal(harness.command_text():find("Start your Mission Control role now.", 1, true), nil)
+    assert_contains(harness.launch_scripts["/tmp/codux/mission-manager.lua"], "Mission Focus Packet:")
+    assert_contains(harness.launch_scripts["/tmp/codux/mission-manager.lua"], "outline worker handoffs")
     assert_contains(harness.launch_scripts["/tmp/codux/mission-builder.lua"], "Mission Focus Packet:")
     assert_contains(harness.launch_scripts["/tmp/codux/mission-architect.lua"], "Start your Mission Control role now.")
     assert_contains(harness.launch_scripts["/tmp/codux/mission-builder.lua"], "Start your Mission Control role now.")
@@ -404,20 +417,27 @@ do
           end
           return table.concat(lines, "\n") .. (#lines > 0 and "\n" or ""), 0
         end
+        if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/long-manager" then
+          return "", 1
+        end
         if command == "git -C /repo show-ref --verify --quiet refs/heads/dev/long-builder" then
           return "", 1
+        end
+        if command == "git -C /repo worktree add -b dev/long-manager /codux-worktrees/repo/long-manager main" then
+          return "", 0
         end
         if command == "git -C /repo worktree add -b dev/long-builder /codux-worktrees/repo/long-builder main" then
           return "", 0
         end
         if command:find("tmux new%-window", 1, false) == 1 then
-          windows["long-builder"] = "@1"
+          local name = command:find("long%-manager") and "long-manager" or "long-builder"
+          windows[name] = "@" .. tostring((name == "long-manager") and 1 or 2)
           if #command > 5000 then
             return "command too long\n", 1
           end
           return "", 0
         end
-        if command == "tmux list-panes -t @1 -F #{pane_current_command}" then
+        if command:match("tmux list%-panes %-t @%d+ %-F") then
           return "nvim\n", 0
         end
         if command:find("remote_workspace_status", 1, true) then
@@ -437,9 +457,11 @@ do
     assert_nil(error_message)
 
     assert_true(runtime:create_mission(mission))
+    assert_contains(harness.command_text(), "-c 'luafile /tmp/codux/long-manager.lua'")
     assert_contains(harness.command_text(), "-c 'luafile /tmp/codux/long-builder.lua'")
     assert_equal(harness.command_text():find(normalized_objective, 1, true), nil)
     assert_contains(harness.launch_scripts["/tmp/codux/long-builder.lua"], normalized_objective)
+    assert_contains(harness.launch_scripts["/tmp/codux/long-manager.lua"], normalized_objective)
   end)
 end
 

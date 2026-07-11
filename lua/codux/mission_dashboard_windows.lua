@@ -146,6 +146,28 @@ function M.start_monitor_timer(controller)
       controller:stop_monitor_timer()
       return
     end
+    if type(controller.process_mission_dispatch) == "function" then
+      local summary = controller.process_mission_dispatch()
+      if type(summary) == "table" then
+        local actions = require("codux.mission_dashboard_actions")
+        if type(actions.record_dispatch_summary) == "function" then
+          actions.record_dispatch_summary(controller, summary)
+        end
+        if (summary.processed or 0) > 0 and type(controller.notify) == "function" then
+          local mission_label =
+            tostring(summary.missions and summary.missions[1] and summary.missions[1].mission or "mission")
+          controller.notify(
+            string.format(
+              "Dispatched %d action(s) for %s (%d ok, %d failed)",
+              tonumber(summary.processed) or 0,
+              mission_label,
+              tonumber(summary.succeeded) or 0,
+              tonumber(summary.failed) or 0
+            )
+          )
+        end
+      end
+    end
     controller:render_dashboard()
   end
   local scheduled_tick = type(vim.schedule_wrap) == "function" and vim.schedule_wrap(tick) or tick

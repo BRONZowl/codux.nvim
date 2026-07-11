@@ -505,6 +505,13 @@ function M.create_mission(runtime, mission_or_name, objective, opts)
     table.insert(created, workspace)
   end
 
+  if type(runtime.ensure_mission_dispatch_dirs) == "function" then
+    -- Best-effort: mission launch must not fail if the shared project path is not writable in tests/CI.
+    pcall(function()
+      runtime:ensure_mission_dispatch_dirs(mission, { project_root = base_root })
+    end)
+  end
+
   if runtime.state.workspace_manager_project_root then
     runtime.render_workspace_manager()
   end

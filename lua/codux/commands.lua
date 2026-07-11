@@ -201,6 +201,31 @@ function M.create(codux, deps)
     codux.close_saved_mission(opts.args)
   end, { force = true, nargs = 1, complete = codux._v5.complete_mission_names, desc = "Close a Codux mission" })
 
+  vim.api.nvim_create_user_command("CoduxMissionProcessDispatch", function()
+    local root = workspace_manager_project_root()
+    local summary = codux.process_mission_dispatch({ project_root = root })
+    if type(summary) ~= "table" then
+      notify("Mission dispatch processing failed", vim.log.levels.ERROR)
+      return
+    end
+    if (summary.processed or 0) == 0 then
+      notify("No pending mission dispatch actions")
+      return
+    end
+    notify(
+      string.format(
+        "Dispatched %d action(s) (%d ok, %d failed)",
+        tonumber(summary.processed) or 0,
+        tonumber(summary.succeeded) or 0,
+        tonumber(summary.failed) or 0
+      ),
+      (summary.failed or 0) > 0 and vim.log.levels.WARN or vim.log.levels.INFO
+    )
+    if mission_controller and type(mission_controller.refresh_loaded_dashboard) == "function" then
+      mission_controller:refresh_loaded_dashboard(root)
+    end
+  end, { force = true, desc = "Process pending Codux mission Manager dispatch files" })
+
   vim.api.nvim_create_user_command("CoduxToggle", function()
     codux.toggle()
   end, { force = true, desc = "Toggle the Codux agent popup" })

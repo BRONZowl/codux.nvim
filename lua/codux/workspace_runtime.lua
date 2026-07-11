@@ -841,6 +841,105 @@ function M:start_mission(name, opts)
   return mission_lifecycle.start(self, name, opts)
 end
 
+function M:mission_orchestrate_ops()
+  local mission_mod = require("codux.mission")
+  local runtime = self
+  return {
+    start_workspace = function(entry)
+      local ok = runtime:start_saved_workspace(entry, { restart_inactive = true })
+      if not ok then
+        return false, "failed to start workspace " .. tostring(entry and (entry.mission_role or entry.name or entry.safe_name))
+      end
+      return true
+    end,
+    send_prompt = function(entry, prompt)
+      local packet = entry and entry.mission_focus_packet
+      local wrapped = mission_mod.prompt_with_focus_packet(prompt, packet)
+      local ok, err = runtime:send_prompt_to_workspace(entry, wrapped)
+      if not ok then
+        return false, err or "failed to send prompt"
+      end
+      return true
+    end,
+    create_role = function(mission, role_name, opts)
+      opts = type(opts) == "table" and opts or {}
+      local role = {
+        name = role_name,
+        safe_name = require("codux.mission_orchestrate").safe_name(role_name),
+        focus = opts.focus or "",
+      }
+      local workspace_name = mission_mod.workspace_name(mission.safe_name or mission.name, role)
+      local instruction = mission_mod.role_instruction(mission.name, mission.objective, role, {
+        project_root = mission.project_root,
+        mission_safe = mission.safe_name,
+      })
+      local created = runtime:create_workspace(workspace_name, {
+        custom_instruction = instruction,
+        resolved_instruction = instruction,
+        initial_prompt = opts.prompt and mission_mod.prompt_with_focus_packet(opts.prompt, mission.focus_packet)
+          or mission_mod.role_prompt(mission.name, mission.objective, role, mission.focus_packet),
+        initial_mode = "plan",
+        agent_provider = opts.agent_provider or mission.agent_provider,
+        permission_profile = opts.permission_profile or mission.permission_profile or "auto",
+        mission_id = mission.mission_id,
+        mission_name = mission.name,
+        mission_role = role.name,
+        mission_objective = mission.objective,
+        mission_focus_packet = mission.focus_packet,
+      })
+      if not created then
+        return false, "failed to create role " .. tostring(role_name)
+      end
+      return true
+    end,
+    update_focus = function(mission, focus_packet)
+      local ok, err = runtime:update_mission_focus_packet(mission.name or mission.mission_id, focus_packet, {
+        project_root = mission.project_root,
+      })
+      if ok == false then
+        return false, err or "failed to update focus"
+      end
+      return true
+    end,
+  }
+end
+
+function M:process_mission_dispatch(opts)
+  opts = type(opts) == "table" and opts or {}
+  local orchestrate = require("codux.mission_orchestrate")
+  local root = opts.project_root or self:project_root()
+  local missions = opts.missions
+  if type(missions) ~= "table" then
+    missions = self:missions_for_project(root)
+  end
+  local instruction_directory = nil
+  if self.store and type(self.store.instruction_files_config) == "function" then
+    local cfg = self.store:instruction_files_config()
+    instruction_directory = type(cfg) == "table" and cfg.directory or nil
+  end
+  return orchestrate.process_project(self:mission_orchestrate_ops(), root, missions, {
+    max_actions = opts.max_actions,
+    instruction_directory = instruction_directory,
+    fs = opts.fs,
+  })
+end
+
+function M:ensure_mission_dispatch_dirs(mission, opts)
+  opts = type(opts) == "table" and opts or {}
+  local orchestrate = require("codux.mission_orchestrate")
+  local root = opts.project_root or self:project_root()
+  local mission_safe = mission and (mission.safe_name or mission.name)
+  local instruction_directory = nil
+  if self.store and type(self.store.instruction_files_config) == "function" then
+    local cfg = self.store:instruction_files_config()
+    instruction_directory = type(cfg) == "table" and cfg.directory or nil
+  end
+  return orchestrate.ensure_dispatch_dirs(root, mission_safe, {
+    instruction_directory = instruction_directory,
+    fs = opts.fs,
+  })
+end
+
 function M:shell_env_assignment(name, value)
   return workspace_launch.shell_env_assignment(name, value)
 end

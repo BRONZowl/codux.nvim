@@ -65,7 +65,8 @@ TEST_SPECS := \
 	tests/terminal_window_spec.lua \
 	tests/text_spec.lua \
 	tests/ui_spec.lua \
-	tests/token_monitor_spec.lua
+	tests/token_monitor_spec.lua \
+	tests/mission_orchestrate_spec.lua
 
 test:
 	for f in $(TEST_SPECS); do $(LUA) $$f || exit 1; done

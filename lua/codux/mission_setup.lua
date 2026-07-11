@@ -111,6 +111,15 @@ function M.new(deps)
       end
       return ok
     end,
+    process_mission_dispatch = function(opts)
+      opts = type(opts) == "table" and opts or {}
+      if type(opts.project_root) ~= "string" or opts.project_root == "" then
+        opts.project_root = deps.state and deps.state.mission_dashboard_project_root
+          or (type(deps.project_root) == "function" and deps.project_root())
+          or workspace_runtime:project_root()
+      end
+      return workspace_runtime:process_mission_dispatch(opts)
+    end,
     select_workspace_question_option = function(entry, option, opts)
       local ok, error_message = workspace_runtime:select_workspace_question_option(entry, option, opts)
       if not ok and error_message then

@@ -255,6 +255,45 @@ do
   assert_equal(items[4].kind, "mission")
   assert_equal(items[6].kind, "role")
   assert_equal(table.concat(rows, ","), "4,6")
+  assert_equal(controller:dashboard_min_height_for_lines(lines), 2, "codex usage line reserves height")
+end
+
+do
+  local mission_dashboard = require("codux.mission_dashboard")
+  assert_true(mission_dashboard.is_token_usage_line("usage | 5hr 12% | wk 34%"))
+  assert_true(mission_dashboard.is_token_usage_line("quota | tpm full 53.0M | rpm full 8300"))
+  assert_true(mission_dashboard.is_token_usage_line("   quota | tpm used 5/8300 | rpm full 8300   "))
+  assert_false(mission_dashboard.is_token_usage_line("1 mission | 1 role"))
+  assert_equal(
+    mission_dashboard.min_height_for_lines({ "header", "quota | tpm full 53.0M | rpm full 8300" }),
+    2,
+    "grok quota line reserves height"
+  )
+end
+
+do
+  local controller = mission_control_mod.new({
+    token_usage_label = function()
+      return "quota | tpm full 53.0M | rpm full 8300"
+    end,
+    workspace_entries_for_project = function()
+      return {
+        {
+          name = "alpha-builder",
+          safe_name = "alpha-builder",
+          mission_id = "mission:alpha",
+          mission_name = "Alpha",
+          mission_role = "Builder",
+          agent_provider = "grok",
+          status = "idle",
+        },
+      }, nil
+    end,
+  })
+
+  local lines = controller:dashboard_lines("/repo", { dashboard_width = 80 })
+  assert_contains(lines[2], "quota | tpm full 53.0M | rpm full 8300")
+  assert_equal(controller:dashboard_min_height_for_lines(lines), 2, "grok quota line reserves height on dashboard")
 end
 
 do

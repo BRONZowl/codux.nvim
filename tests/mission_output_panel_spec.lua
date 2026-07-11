@@ -72,6 +72,71 @@ if type(vim.api) == "table" then
 end
 
 do
+  -- Mission row resolves to Manager role for output preview/control.
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_items = {
+        [2] = {
+          kind = "mission",
+          mission = {
+            roles = {
+              {
+                safe_name = "alpha-manager",
+                mission_role = "Manager",
+                name = "Manager",
+                status = "idle",
+              },
+              {
+                safe_name = "alpha-agent",
+                mission_role = "Agent",
+                status = "idle",
+              },
+            },
+          },
+        },
+        [4] = {
+          kind = "role",
+          entry = { safe_name = "alpha-agent", mission_role = "Agent", status = "idle" },
+        },
+      },
+      mission_dashboard_selected_row = 2,
+      mission_dashboard_selectable_rows = { 2, 4 },
+      mission_dashboard_search_confirmed = true,
+    },
+  })
+  local entry = controller:selected_output_entry()
+  assert_equal(entry.safe_name, "alpha-manager")
+  assert_equal(entry.mission_role, "Manager")
+
+  controller.state.mission_dashboard_selected_row = 4
+  entry = controller:selected_output_entry()
+  assert_equal(entry.safe_name, "alpha-agent")
+end
+
+do
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_items = {
+        [2] = {
+          kind = "mission",
+          mission = {
+            roles = {
+              { safe_name = "alpha-builder", mission_role = "Builder", status = "active" },
+            },
+          },
+        },
+      },
+      mission_dashboard_selected_row = 2,
+      mission_dashboard_selectable_rows = { 2 },
+      mission_dashboard_search_confirmed = true,
+    },
+  })
+  assert_nil(controller:selected_output_entry(), "legacy mission without Manager has no console entry")
+  local lines = controller:output_panel_lines(nil)
+  assert_contains(table.concat(lines, "\n"), "no Manager role")
+end
+
+do
   local bound = {}
   local closed = false
   local focused = false

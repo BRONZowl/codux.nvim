@@ -120,12 +120,12 @@ do
       return "execute"
     end,
     token_usage_label = function()
-      return "quota | tpm 53.0M/53.0M | rpm 8300/8300"
+      return "quota | tpm full 53.0M | rpm full 8300"
     end,
   })
   local title = controller:title()
   assert_equal(title[1][1], " codux ")
-  assert_contains(title[2][1], "tpm 53.0M/53.0M")
+  assert_contains(title[2][1], "tpm full 53.0M")
   assert_equal(title[2][1]:find("quota", 1, true), nil, "quota prefix should be stripped from title")
   local min_width = controller:chrome_min_width()
   assert_true(min_width >= controller:title_display_width(), "min width should cover full title")
@@ -142,6 +142,9 @@ do
   end
 
   assert_equal(by_key.s, "start_mission")
+  assert_equal(by_key.g, "start_manager")
+  assert_equal(by_key.p, "process_dispatch")
+  assert_equal(by_key.a, "add_manager")
   assert_equal(by_key.e, "edit_objective")
   assert_equal(by_key.v, "view_objective")
   assert_equal(by_key.x, "close_mission")
@@ -149,9 +152,9 @@ do
   assert_nil(by_key.n)
   assert_nil(by_key.r)
   assert_contains(workspace_ui.mission_action_line(actions[1], 40), "Start Mission")
-  assert_contains(workspace_ui.mission_action_line(actions[2], 40), "View Objective")
-  assert_contains(workspace_ui.mission_action_line(actions[3], 40), "Edit Objective")
   assert_equal(labels_by_key.s, "Start Mission")
+  assert_equal(labels_by_key.g, "Start Manager")
+  assert_equal(labels_by_key.p, "Process Dispatch")
   assert_equal(labels_by_key.v, "View Objective")
   assert_equal(labels_by_key.x, "Close Mission")
   assert_nil(labels_by_key.n)
@@ -176,6 +179,7 @@ do
 
   assert_nil(by_key.o)
   assert_equal(by_key.s, "start_workspace")
+  assert_equal(by_key.t, "prompt_role")
   assert_equal(by_key.r, "rename_role")
   assert_equal(by_key.e, "edit_instructions")
   assert_equal(by_key.x, "close_workspace")
@@ -187,6 +191,7 @@ do
   assert_nil(by_key.X)
   assert_contains(workspace_ui.role_workspace_action_line(actions[1], 40), "Start Workspace")
   assert_equal(labels_by_key.s, "Start Workspace")
+  assert_equal(labels_by_key.t, "Prompt Role")
   assert_equal(labels_by_key.p, "Switch Profile")
   assert_nil(labels_by_key.i)
   assert_nil(labels_by_key.a)

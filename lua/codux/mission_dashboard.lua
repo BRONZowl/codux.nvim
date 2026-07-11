@@ -204,9 +204,33 @@ function M.token_usage_line(controller, dashboard_width)
   return M.center_display_line(controller.workspace_ui, usage, dashboard_width)
 end
 
+function M.dispatch_status_line(controller, dashboard_width)
+  local last = type(controller.state) == "table" and controller.state.mission_dashboard_last_dispatch or nil
+  if type(last) ~= "table" then
+    return nil
+  end
+  local processed = tonumber(last.processed) or 0
+  if processed <= 0 and (tonumber(last.failed) or 0) <= 0 then
+    return nil
+  end
+  local label = string.format(
+    "dispatch | %d ok | %d failed%s",
+    tonumber(last.succeeded) or 0,
+    tonumber(last.failed) or 0,
+    type(last.mission) == "string" and last.mission ~= "" and (" | " .. last.mission) or ""
+  )
+  return M.center_display_line(controller.workspace_ui, label, dashboard_width)
+end
+
+--- Codex labels use "usage |", Grok labels use "quota |" (may be centered with padding).
+function M.is_token_usage_line(line)
+  line = tostring(line or ""):match("^%s*(.-)%s*$") or ""
+  return line:find("usage | ", 1, true) ~= nil or line:find("quota | ", 1, true) ~= nil
+end
+
 function M.min_height_for_lines(lines)
   for _, line in ipairs(lines or {}) do
-    if tostring(line):find("usage | ", 1, true) then
+    if M.is_token_usage_line(line) then
       return 2
     end
   end
@@ -295,6 +319,10 @@ function M.lines(controller, root, opts)
   if token_usage_line then
     table.insert(lines, token_usage_line)
   end
+  local dispatch_line = M.dispatch_status_line(controller, dashboard_width)
+  if dispatch_line then
+    table.insert(lines, dispatch_line)
+  end
 
   for _, mission in ipairs(missions) do
     table.insert(lines, "")
@@ -346,7 +374,7 @@ function M.highlight(controller, bufnr, lines, items)
     local item = items[index]
     if line == "Commands" then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, controller.namespace, "WhichKeyDesc", index - 1, 0, -1)
-    elseif line:find("usage | ", 1, true) then
+    elseif M.is_token_usage_line(line) then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, controller.namespace, "CoduxWhichKeyUsage", index - 1, 0, -1)
     elseif line:find("^%s+Tab%s", 1, false) or line:find("^%s+O%s", 1, false) or line:find("^%s+n%s", 1, false) then
       pcall(vim.api.nvim_buf_add_highlight, bufnr, controller.namespace, "Comment", index - 1, 0, -1)

@@ -245,9 +245,12 @@ end
 function M.mission_action_items()
   return {
     { key = "s", action = "start_mission", label = "Start Mission" },
+    { key = "g", action = "start_manager", label = "Start Manager" },
+    { key = "p", action = "process_dispatch", label = "Process Dispatch" },
     { key = "v", action = "view_objective", label = "View Objective" },
     { key = "e", action = "edit_objective", label = "Edit Objective" },
     { key = "f", action = "edit_focus", label = "Edit Focus" },
+    { key = "a", action = "add_manager", label = "Add Manager" },
     { key = "x", action = "close_mission", label = "Close Mission" },
     { key = "d", action = "delete_mission", label = "Delete Mission" },
   }
@@ -260,6 +263,7 @@ end
 function M.role_workspace_action_items()
   local items = {}
   table.insert(items, { key = "s", action = "start_workspace", label = "Start Workspace" })
+  table.insert(items, { key = "t", action = "prompt_role", label = "Prompt Role" })
   table.insert(items, { key = "p", action = "switch_profile", label = "Switch Profile" })
   table.insert(items, { key = "r", action = "rename_role", label = "Rename Role" })
   table.insert(items, { key = "e", action = "edit_instructions", label = "Edit Instructions" })

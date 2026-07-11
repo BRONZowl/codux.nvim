@@ -146,6 +146,14 @@ function M.run_workspace_action(controller, action, target)
     controller:close_action_palette()
     return controller:create_new_workspace(workspace)
   end
+  if action == "prompt_role" then
+    workspace = workspace or controller:selected_role_workspace_or_notify()
+    if not workspace then
+      return false
+    end
+    controller:close_action_palette()
+    return controller:open_workspace_prompt(workspace)
+  end
   return nil
 end
 

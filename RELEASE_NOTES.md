@@ -1,5 +1,16 @@
 # Release Notes
 
+## Unreleased
+
+Mission Manager console and multi-role dispatch.
+
+- Every new mission always creates a **Manager** role (plus default **Agent**); custom role lists still get Manager injected when missing.
+- Mission row in Mission Control previews and controls the Manager session (same Output panel and `<C-o>` as a role row).
+- Manager can activate workers via JSON dispatch files under `.agents/codux/missions/<mission>/dispatch/pending/` (`start`, `prompt`, `start_and_prompt`, `create_role`, `update_focus`).
+- Pending dispatch is processed while Mission Control is open and via `:CoduxMissionProcessDispatch`.
+- Mission menu: Start Manager, Process Dispatch, Add Manager (legacy). Role menu: Prompt Role (`t`).
+- Dashboard shows last dispatch status (`dispatch | N ok | M failed`).
+
 ## v1.0.1
 
 Global default provider and Grok usage polish.

@@ -92,6 +92,9 @@ function M.normalize(opts)
     send_prompt_to_workspace = opt_function(opts, "send_prompt_to_workspace", function()
       return false, "workspace prompt unavailable"
     end),
+    process_mission_dispatch = opt_function(opts, "process_mission_dispatch", function()
+      return { processed = 0, succeeded = 0, failed = 0, errors = {}, missions = {} }
+    end),
     select_workspace_question_option = opt_function(opts, "select_workspace_question_option", function()
       return false, "workspace answer unavailable"
     end),
