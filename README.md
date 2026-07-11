@@ -2,36 +2,74 @@
   <img src="assets/codux-title.svg" alt="codux.nvim" width="900">
 </p>
 
+<p align="center">
+  <a href="https://neovim.io/"><img src="https://img.shields.io/badge/Neovim-0.9%2B-57A143?style=flat-square&logo=neovim&logoColor=white" alt="Neovim"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/Providers-Codex%20%7C%20Grok-111827?style=flat-square" alt="Codex and Grok">
+  <img src="https://img.shields.io/badge/Lua-2C2D72?style=flat-square&logo=lua&logoColor=white" alt="Lua">
+  <a href="https://github.com/BRONZowl/codux.nvim"><img src="https://img.shields.io/badge/GitHub-BRONZowl%2Fcodux.nvim-181717?style=flat-square&logo=github" alt="GitHub"></a>
+</p>
 
-codux.nvim runs Codex CLI or Grok CLI from Neovim and keeps the session close to
-the code you are already editing. It provides a persistent floating terminal,
-editor-native prompt helpers, token/status visibility, tmux-backed Codux
-workspaces, and Mission Control for coordinated multi-role agent sessions.
+<p align="center">
+  <strong>Persistent AI coding agents inside Neovim — Codex and Grok, workspaces, and Mission Control.</strong>
+</p>
 
-Codux is plugin-first. Install it as a Neovim plugin, then use Neovim commands
-and mappings to open an agent, send context, manage workspaces, and launch missions.
+<p align="center">
+  Keep your agent next to the code. Send context in one keystroke. Run parallel workstreams.
+  Coordinate multi-role missions without leaving the editor.
+</p>
+
+<p align="center">
+  <a href="#installation"><strong>Install in minutes →</strong></a>
+  ·
+  <a href="#quick-start"><strong>Quick Start</strong></a>
+  ·
+  <a href="#showcase--demos"><strong>See it in action</strong></a>
+</p>
+
+---
+
+## Features
+
+- **Persistent sessions** — Open a floating agent terminal, hide it, keep coding; the process keeps running until you exit it.
+- **Codex + Grok, first-class** — One plugin surface for both CLIs: open, workspaces, missions, profiles, and status.
+- **Editor-native context** — Send the current file, visual selection, diagnostics, or Git diff straight into the active agent.
+- **Permission profiles** — Start with **default**, **auto**, or **full access**; new sessions default to **plan mode** for safer iteration.
+- **Codux workspaces** — tmux-backed windows with isolated Git worktrees, instruction files, and saved state per stream of work.
+- **Mission Control** — Launch multi-role crews around a shared objective, with a live dashboard, Manager coordination, and focus packets.
+- **Token & status monitoring** — Live usage in the which-key header; Codex rate windows and Grok TPM/RPM headroom.
+- **Doctor & health** — `:checkhealth codux` and `:CoduxDoctor` for CLI, tmux, and workspace diagnostics.
+
+---
 
 ## Requirements
 
-- Neovim with terminal and floating window support
-- OpenAI Codex CLI available as `codex`, or Grok CLI available as `grok`
+| Requirement | Notes |
+| --- | --- |
+| **Neovim** | Terminal + floating window support |
+| **Agent CLI** | OpenAI **Codex** (`codex`) and/or xAI **Grok** (`grok`) |
 
-Optional:
+**Optional**
 
-- which-key.nvim for the `<leader>z` group label and live Codux status header
-- tmux for Codux workspaces and Mission Control
-- Neo-tree, Oil.nvim, nvim-tree, or mini.files for file explorer targets
+| Dependency | Why |
+| --- | --- |
+| [which-key.nvim](https://github.com/folke/which-key.nvim) | `<leader>z` group label + live Codux status header |
+| **tmux** | Codux workspaces and Mission Control |
+| Neo-tree, Oil.nvim, nvim-tree, or mini.files | Send explorer targets via review commands |
 
-Windows users can use WSL2 with the Linux Codex CLI install flow. For remote or
-headless login, run:
+**Windows:** use **WSL2** with the Linux CLI install flow. For remote or headless Codex login:
 
 ```bash
 codex login --device-auth
 ```
 
-## Install
+---
 
-This example uses lazy.nvim and works unchanged in LazyVim:
+## Installation
+
+### lazy.nvim (recommended)
+
+Works unchanged in LazyVim:
 
 ```lua
 {
@@ -40,10 +78,17 @@ This example uses lazy.nvim and works unchanged in LazyVim:
 }
 ```
 
-With another plugin manager, add codux.nvim to Neovim's `runtimepath` and call
-`require("codux").setup({})`.
+### Manual / other managers
 
-Install and authenticate the Codex CLI if `codex` is not already available:
+Add codux.nvim to Neovim's `runtimepath`, then:
+
+```lua
+require("codux").setup({})
+```
+
+### CLI setup
+
+**Codex** (if `codex` is not installed):
 
 ```bash
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
@@ -51,8 +96,7 @@ codex login
 codex --version
 ```
 
-Install and authenticate Grok CLI if you want to use Grok-backed sessions
-([official setup](https://docs.x.ai/build/overview)):
+**Grok** ([official setup](https://docs.x.ai/build/overview)):
 
 ```bash
 curl -fsSL https://x.ai/cli/install.sh | bash
@@ -60,109 +104,130 @@ grok login
 grok version
 ```
 
-Restart Neovim, open a project, then verify Codux:
+Restart Neovim, open a project, then verify:
 
 ```vim
 :checkhealth codux
 :Codux
 ```
 
+---
+
 ## Quick Start
 
-`:Codux` opens or focuses the persistent agent popup. Closing the popup with
-`:CoduxClose` or `<C-q>` hides the window without stopping the agent; `:CoduxExit`
-stops the agent process.
+1. **Open the agent** with `:Codux` or `<leader>zc`.
+2. Pick a **permission profile** when nothing is running yet: `d` default · `a` auto · `f` full access.
+3. **Hide** the popup with `:CoduxClose` or `<C-q>` — the agent **keeps running**.
+4. **Stop** the process only with `:CoduxExit`.
+5. **Send context** from the buffer you already have open.
 
-Set the global default agent provider with `<leader>zP` or
-`:CoduxSetDefaultProvider` (picker keys `g` for Grok, `c` for Codex). That
-choice is used by open, workspace create, and mission create, and is saved under
-`stdpath("data")/codux/settings.json` so it persists across Neovim restarts.
-Startup precedence (highest wins): setup option `default_agent_provider`, then
-env `CODUX_AGENT_PROVIDER`, then the saved preference, then `"codex"`.
+| Goal | Mapping | Command |
+| --- | --- | --- |
+| Open / focus agent | `<leader>zc` | `:Codux` |
+| Set default provider (Grok / Codex) | `<leader>zP` | `:CoduxSetDefaultProvider` |
+| Send file / folder / explorer node | `<leader>zf` | `:CoduxReview` |
+| Send visual selection | `<leader>zs` | `:'<,'>CoduxReviewSelection` |
+| Send diagnostics | `<leader>zd` | `:CoduxDiagnostics` |
+| Send Git diff | `<leader>zg` | `:CoduxDiff` |
+| Mission Control | `<leader>zM` | `:CoduxMissions` |
+| Toggle plan mode (in agent terminal) | `<leader>zp` | `:CoduxTogglePlan` |
 
-The default open mapping is `<leader>zc`. When no agent is running, it opens a
-permission-profile picker for the global default provider:
+**Provider default** — Set once with `<leader>zP` (`g` Grok, `c` Codex). Used for open, workspace create, and mission create. Saved under `stdpath("data")/codux/settings.json`.
 
-- `d` for default
-- `a` for auto
-- `f` for full access
+**Startup precedence** (highest wins): setup `default_agent_provider` → env `CODUX_AGENT_PROVIDER` → saved preference → `"codex"`.
 
-Those profile choices set only the startup permission profile for the new
-session. If the Codux popup is already open, `:Codux` and `<leader>zc` are a
-no-op until you hide it with `:CoduxClose` or `<C-q>`. When an agent is still
-running but the popup is closed, those commands reopen and focus that session
-instead of changing its provider or profile. Mission Control and workspace
-dashboard **Switch Profile** menus still use a two-step provider + profile
-picker so individual roles or workspaces can differ from the global default.
-Use full access only in repositories you trust. `:CoduxOpenDanger` starts Codex
-with no approval prompts and no sandbox; `:CoduxOpenGrokDanger` starts Grok with
-its full-access command.
+**Session rules worth knowing**
 
-Codux can send editor context to the active agent session:
+- If the popup is **already open**, `:Codux` / `<leader>zc` are a **no-op** until you hide it.
+- If the agent is **still running** but the popup is closed, those commands **reopen and focus** the same session (provider/profile unchanged).
+- Mission Control and workspace **Switch Profile** menus still use a two-step provider + profile picker so roles can differ from the global default.
+- Use **full access** only in repositories you trust. `:CoduxOpenDanger` / `:CoduxOpenGrokDanger` start with no approval prompts / no sandbox.
 
-- `:CoduxReview` sends the current file, directory, or supported file explorer
-  target.
-- `:'<,'>CoduxReviewSelection` sends the visual selection.
-- `:CoduxDiagnostics` sends diagnostics, quickfix/location list context, and
-  Codux health output.
-- `:CoduxDiff` sends the current Git diff.
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Commands](#commands)
+- [Configuration](#configuration)
+- [Workspaces](#workspaces)
+- [Mission Control](#mission-control)
+- [Token & Status Monitoring](#token--status-monitoring)
+- [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
+- [Showcase / Demos](#showcase--demos)
+- [License](#license)
+
+---
 
 ## Commands
 
+### Essentials
+
 | Action | Default key | Command |
 | --- | --- | --- |
-| Open or focus agent | `<leader>zc` | `:Codux` or `:CoduxOpen` |
+| Open or focus agent | `<leader>zc` | `:Codux` / `:CoduxOpen` |
 | Set default agent provider | `<leader>zP` | `:CoduxSetDefaultProvider [codex\|grok]` |
-| Set preferred Grok TUI theme | none | `:CoduxSetGrokTheme [theme]` |
-| Toggle agent popup | none | `:CoduxToggle` |
-| Hide the popup | `<C-q>` in popup | `:CoduxClose` |
-| Stop agent | none | `:CoduxExit` |
-| Open Codex with auto profile | none | `:CoduxOpenAuto` |
-| Open Codex with full access | none | `:CoduxOpenDanger` |
-| Open a specific provider | none | `:CoduxOpenProvider <codex\|grok> <default\|auto\|danger>` |
-| Open Grok | none | `:CoduxOpenGrok` |
-| Open Grok with auto profile | none | `:CoduxOpenGrokAuto` |
-| Open Grok with full access | none | `:CoduxOpenGrokDanger` |
-| Send file, folder, or explorer node | `<leader>zf` | `:CoduxReview` |
+| Hide popup (session keeps running) | `<C-q>` in popup | `:CoduxClose` |
+| Toggle popup | — | `:CoduxToggle` |
+| Stop agent process | — | `:CoduxExit` |
+| Send file / folder / explorer node | `<leader>zf` | `:CoduxReview` |
 | Send visual selection | `<leader>zs` | `:CoduxReviewSelection` |
-| Send diagnostics and health output | `<leader>zd` | `:CoduxDiagnostics` |
+| Send diagnostics + health context | `<leader>zd` | `:CoduxDiagnostics` |
 | Send Git diff | `<leader>zg` | `:CoduxDiff` |
-| Toggle agent plan mode | `<leader>zp` in agent terminal | `:CoduxTogglePlan` |
-| Create a tmux workspace | none | `:CoduxWorkspace` or `:CoduxWorkspaceCreate` |
-| Show current workspaces | none | `:CoduxWorkspaces` |
-| Open a saved workspace | none | `:CoduxWorkspaceOpen <name>` |
-| Select a saved workspace | none | `:CoduxWorkspaceSelect <name>` |
-| Rename a workspace | none | `:CoduxWorkspaceRename <old> <new>` |
-| Delete a workspace | none | `:CoduxWorkspaceDelete <name>` |
-| Restore workspace state from tmux | none | `:CoduxWorkspaceRestore` |
-| Close all workspace windows | none | `:CoduxWorkspaceCloseAll` |
-| Ignore local workspace files | none | `:CoduxWorkspaceIgnore` |
-| Create a Mission Control crew | none | `:CoduxMissionCreate` |
-| Create a Grok Mission Control crew | none | `:CoduxMissionCreateGrok` |
-| Show Mission Control | `<leader>zM` | `:CoduxMissions` or `:CoduxMissionDashboard` |
-| Edit a mission objective | none | `:CoduxMissionEdit <mission>` |
-| Edit a mission focus packet | none | `:CoduxMissionFocus <mission>` |
-| Close a mission | none | `:CoduxMissionClose <mission>` |
-| Delete a mission | none | `:CoduxMissionDelete <mission>` |
-| Run Neovim health checks | none | `:CoduxHealth` |
-| Run Codux Doctor | `h` in workspace / mission dashboard | `:CoduxDoctor` |
+| Toggle plan mode | `<leader>zp` in agent terminal | `:CoduxTogglePlan` |
+| Mission Control | `<leader>zM` | `:CoduxMissions` / `:CoduxMissionDashboard` |
+| Health / Doctor | `h` in dashboards | `:CoduxHealth` / `:CoduxDoctor` |
 
-By default, Codux maps only the core single-session actions and Mission Control:
-open, set default provider, review file, review selection, diagnostics, diff,
-and missions. Plan-mode toggle is available as `:CoduxTogglePlan` and as a
-buffer-local map inside the agent terminal (`mappings.mode`, default
-`<leader>zp`), not as a global leader-z which-key entry. Workspace create/list
-mappings are disabled by default, but every workspace command is available
-directly.
+### Providers & profiles
+
+| Action | Command |
+| --- | --- |
+| Open Codex (auto profile) | `:CoduxOpenAuto` |
+| Open Codex (full access) | `:CoduxOpenDanger` |
+| Open Grok | `:CoduxOpenGrok` |
+| Open Grok (auto) | `:CoduxOpenGrokAuto` |
+| Open Grok (full access) | `:CoduxOpenGrokDanger` |
+| Open specific provider + profile | `:CoduxOpenProvider <codex\|grok> <default\|auto\|danger>` |
+| Preferred Grok TUI theme | `:CoduxSetGrokTheme [theme]` |
+
+### Workspaces
+
+| Action | Command |
+| --- | --- |
+| Create workspace | `:CoduxWorkspace` / `:CoduxWorkspaceCreate` |
+| Workspace dashboard | `:CoduxWorkspaces` |
+| Open / select / rename / delete | `:CoduxWorkspaceOpen` · `:CoduxWorkspaceSelect` · `:CoduxWorkspaceRename` · `:CoduxWorkspaceDelete` |
+| Restore state from tmux | `:CoduxWorkspaceRestore` |
+| Close all workspace windows | `:CoduxWorkspaceCloseAll` |
+| Ignore local workspace files | `:CoduxWorkspaceIgnore` |
+
+### Mission Control
+
+| Action | Command |
+| --- | --- |
+| Create mission | `:CoduxMissionCreate` |
+| Create Grok mission crew | `:CoduxMissionCreateGrok` |
+| Dashboard | `:CoduxMissions` / `:CoduxMissionDashboard` |
+| Edit objective / focus | `:CoduxMissionEdit` · `:CoduxMissionFocus` |
+| Process Manager dispatch | `:CoduxMissionProcessDispatch` |
+| Close / delete mission | `:CoduxMissionClose` · `:CoduxMissionDelete` |
+
+By default Codux maps **core single-session actions** and **Mission Control** only. Workspace create/list mappings are empty by default; every workspace command is still available by name. Plan-mode toggle is buffer-local in the agent terminal (`mappings.mode`, default `<leader>zp`), not a global which-key entry.
+
+---
 
 ## Configuration
 
-The key defaults are:
+Sensible defaults work out of the box. A solid starting point:
 
 ```lua
 require("codux").setup({
-  default_initial_mode = "plan",
-  default_agent_provider = "codex",
+  default_initial_mode = "plan",       -- safer default; use "execute" for older behavior
+  default_agent_provider = "codex",    -- or "grok"
   providers = {
     codex = {
       default_cmd = 'codex -s workspace-write -a on-request -c approvals_reviewer="user"',
@@ -180,15 +245,13 @@ require("codux").setup({
     enabled = true,
     refresh_ms = 60000,
     timeout_ms = 5000,
-    -- Optional dedicated CLI for Codex usage checks (defaults to providers.codex executable):
-    -- codex_cmd = "codex",
     grok = {
       enabled = true,
-      refresh_ms = 15000, -- faster poll; RPM headroom recovers within seconds
+      refresh_ms = 15000, -- RPM headroom recovers quickly
       base_url = "https://api.x.ai/v1",
       model = "grok-4.5",
-      -- api_key = nil, -- or set XAI_API_KEY / GROK_API_KEY
-      -- auth_file = nil, -- default ~/.grok/auth.json (Grok CLI OAuth)
+      -- api_key = nil, -- or XAI_API_KEY / GROK_API_KEY
+      -- auth_file = nil, -- default ~/.grok/auth.json (CLI OAuth)
     },
   },
   workspaces = {
@@ -206,169 +269,120 @@ require("codux").setup({
 })
 ```
 
-The nested `providers.codex` fields are preferred. For backward compatibility,
-the top-level `codex_cmd`, `workspace_auto_cmd`, and
-`danger_full_access_cmd` options remain supported. When both forms configure
-the same profile, the nested provider field takes precedence.
+**Nested `providers.*` is preferred.** Legacy top-level `codex_cmd`, `workspace_auto_cmd`, and `danger_full_access_cmd` still work; when both set the same profile, the nested field wins.
 
-Provider commands can be overridden through setup options or environment
-variables:
+**Environment overrides**
 
-- `CODEX_CMD` for the default profile
-- `CODEX_WORKSPACE_AUTO_CMD` for the auto profile
-- `CODEX_DANGER_FULL_ACCESS_CMD` for the full-access profile
-- `GROK_CMD` for the default Grok profile
-- `GROK_WORKSPACE_AUTO_CMD` for the Grok auto profile
-- `GROK_DANGER_FULL_ACCESS_CMD` for the Grok full-access profile
+| Variable | Profile |
+| --- | --- |
+| `CODEX_CMD` | Codex default |
+| `CODEX_WORKSPACE_AUTO_CMD` | Codex auto |
+| `CODEX_DANGER_FULL_ACCESS_CMD` | Codex full access |
+| `GROK_CMD` | Grok default |
+| `GROK_WORKSPACE_AUTO_CMD` | Grok auto |
+| `GROK_DANGER_FULL_ACCESS_CMD` | Grok full access |
+| `CODUX_AGENT_PROVIDER` | Default provider seed |
+| `CODUX_GROK_THEME` | Preferred Grok TUI theme |
 
-`default_agent_provider` is the startup seed for open, workspace create, and
-mission create. Resolution order: setup option → `CODUX_AGENT_PROVIDER` → last
-value from `<leader>zP` / `:CoduxSetDefaultProvider` (persisted) → `"codex"`.
+**Grok themes** — `:CoduxSetGrokTheme` (or setup / env) persists under `stdpath("data")/codux/settings.json` and syncs `[ui].theme` in `~/.grok/config.toml`. Resolution: setup → env → saved preference → existing config. Themes: `auto`, `groknight`, `grokday`, `tokyonight`, `rosepine-moon`, `oscura-midnight` (aliases like `dark` / `tokyo` work).
 
-Preferred Grok TUI theme is set with `:CoduxSetGrokTheme` (or setup
-`providers.grok.theme` / env `CODUX_GROK_THEME`). Codux saves it under
-`stdpath("data")/codux/settings.json` and syncs `[ui].theme` in
-`~/.grok/config.toml` so new Grok processes start with that theme. Resolution
-order: setup `providers.grok.theme` → `CODUX_GROK_THEME` → saved preference →
-existing `~/.grok/config.toml`. Themes: `auto`, `groknight`, `grokday`,
-`tokyonight`, `rosepine-moon`, `oscura-midnight` (aliases like `dark` / `tokyo`
-also work).
+New Codux-managed sessions start in **plan mode**. Set `default_initial_mode = "execute"` to restore older execute-mode startup.
 
-New Codux-managed agent sessions start in plan mode. Set
-`default_initial_mode = "execute"` to keep older execute-mode startup behavior.
+---
 
 ## Workspaces
 
-Codux workspaces are tmux-backed Neovim windows with their own Codex or Grok
-session, instruction file, Git worktree, target path, provider/profile, and
-saved state.
-They are intended for dedicated streams of work such as implementation, review,
-debugging, or architecture.
+**Codux workspaces** are tmux-backed Neovim windows with their own Codex or Grok session, instruction file, Git worktree, target path, provider/profile, and saved state — ideal for parallel streams (implement, review, debug, architecture).
 
-Run `:CoduxWorkspaceCreate` inside tmux to create a guided workspace. Add
-`--grok` or `--codex` to force a provider for that workspace. Codux:
+### Create one
 
-- prompts for a workspace name
-- uses the global default provider unless the provider was forced
-- prompts for default, auto, or full permission profile
-- opens a Vim-like instruction editor
-- previews the instruction before launch
-- requires the current checkout to be clean
-- creates `../codux-worktrees/<workspace>` from the current ref
-- creates a `dev/<workspace>` branch, or the next available namespace such as
-  `dev1/<workspace>` when needed
-- writes `.agents/codux/<workspace>.md` in the workspace
-- opens a tmux window named for the workspace
-- starts the workspace agent session in plan mode
+Run `:CoduxWorkspaceCreate` **inside tmux** (add `--grok` or `--codex` to force a provider). Codux will:
 
-For Grok workspaces, Codux keeps first-launch CLI arguments minimal: it starts
-the configured Grok profile command, adds `--rules` only when workspace or
-mission instructions exist, and pastes any initial prompt after the Grok TUI is
-ready instead of passing it as an argv argument.
+1. Prompt for a name and permission profile (uses the global default provider unless forced)
+2. Open a Vim-like **instruction editor** and preview before launch
+3. Require a **clean** checkout
+4. Create `../codux-worktrees/<workspace>` from the current ref
+5. Create a `dev/<workspace>` branch (or the next free namespace, e.g. `dev1/<workspace>`)
+6. Write `.agents/codux/<workspace>.md`
+7. Open a named tmux window and start the agent in **plan mode**
 
-Workspace state is stored per project in
-`stdpath("data")/codux/workspaces.json`. Instruction files are project-local; if
-a non-empty `.agents/codux/<workspace>.md` exists, Codux uses it over the saved
-JSON copy.
+**Grok workspaces** keep first-launch CLI args minimal: configured profile command, `--rules` only when instructions exist, and any initial prompt pasted after the Grok TUI is ready (not as argv).
 
-Use `:CoduxWorkspaces` to open the workspace dashboard. It includes fuzzy search,
-`<Tab>` search/list switching, `j`/`k` movement, `<CR>` open, `h` Doctor, and
-`m` for the selected-workspace menu. The menu supports start workspace, rename,
-edit instructions, switch provider/profile, close workspace, close all
-workspaces, and delete workspace. Switching the profile of an active workspace restarts that
-workspace with the selected Codex or Grok command; switching an inactive
-workspace updates its saved startup provider/profile for the next launch.
+Outside tmux, creation stops with `no tmux session running`.
 
-Deleting a workspace removes saved state and the matching instruction file,
-closes the tmux window, removes the worktree, and deletes the workspace branch.
-When `.agents/codux/` is not ignored by Git, Codux warns; run
-`:CoduxWorkspaceIgnore` once per project to add the ignore rule.
+### Dashboard & lifecycle
 
-Outside tmux, workspace creation stops with `no tmux session running`.
+`:CoduxWorkspaces` opens the workspace dashboard: fuzzy search, `<Tab>` search/list, `j`/`k`, `<CR>` open, `h` Doctor, `m` menu.
+
+**Menu:** start, rename, edit instructions, switch provider/profile, close, close all, delete.
+
+- Switching profile on an **active** workspace **restarts** it with the new Codex/Grok command.
+- Switching an **inactive** workspace updates saved startup profile for next launch.
+- **Delete** removes saved state, instruction file, tmux window, worktree, and branch (destructive).
+- When `.agents/codux/` is not gitignored, Codux warns — run `:CoduxWorkspaceIgnore` once per project.
+
+State lives in `stdpath("data")/codux/workspaces.json`. Non-empty project instruction files override the JSON copy.
+
+<p align="center">
+  <img src="assets/codux-workspaces.gif" alt="Codux workspaces demo" width="800">
+</p>
+
+---
 
 ## Mission Control
 
-Mission Control launches one or more Codux agent workspaces around a shared
-objective. Run `:CoduxMissionCreate`, enter the mission name, choose Codex or
-Grok, choose default, auto, or full profile, enter the objective, review the
-preview, and launch.
+**Mission Control** launches one or more Codux workspaces around a **shared objective** — multi-role agent crews with a live dashboard.
 
-Every new mission always creates a **Manager** role, plus a default worker:
+### Launch a mission
 
-- **Manager**: owns the objective and focus packet, plans work, and coordinates
-  worker roles. Selecting the **mission row** in Mission Control previews and
-  controls this Manager session (same Output panel and `<C-o>` as a role row).
-- **Agent**: creates the requested outcome accurately, keeps context focused,
-  validates cheaply, and asks only high-impact questions.
+`:CoduxMissionCreate` (or `:CoduxMissionCreateGrok` for a Grok crew): name → provider → profile → objective → preview → launch.
 
-Add more workers anytime from the mission dashboard (create role workspace).
-Custom role lists still get a Manager injected when one is missing.
+Every new mission creates:
 
-The Manager can request sibling start/prompt/create by writing JSON dispatch
-files under `.agents/codux/missions/<mission>/dispatch/pending/`. Codux
-processes pending files while Mission Control is open (dashboard monitor) or
-when you run `:CoduxMissionProcessDispatch`. Successful files move to `done/`;
-failures go to `failed/`. Supported ops: `start`, `prompt`, `start_and_prompt`,
-`create_role`, `update_focus`.
+| Role | Responsibility |
+| --- | --- |
+| **Manager** | Owns objective + focus packet; plans and coordinates workers |
+| **Agent** | Delivers the outcome accurately; keeps context tight; asks only high-impact questions |
 
-Each role gets a clean Git worktree workspace under the project-scoped
-`../codux-worktrees/<project>/<workspace>` directory, mission metadata in Codux
-workspace state, the chosen permission profile and agent provider, and an initial
-plan-mode prompt. If Codux cannot confirm plan mode for a newly created mission
-agent, it rolls back the new agent workspace.
+Add more workers anytime from the dashboard (**create role workspace**). Custom role lists still get a Manager injected if missing.
 
-Each mission also carries a short focus packet. The packet is separate from each
-role's stable workspace instruction and captures the current intent, direction,
-preferences, active scope, and next action. Mission startup and role prompts
-include the current packet so iteration stays narrow without turning the
-workspace instruction into a transcript.
+### Focus packets & Manager dispatch
 
-`:CoduxMissions`, `:CoduxMissionDashboard`, and `<leader>zM` open the mission
-dashboard. It shows mission and role rows with status, mode, profile, age, and
-target, plus a live `Output:` panel. Highlight a **mission** row to drive the
-**Manager** console; highlight a **role** row to preview that worker's session.
-When an active preview is shown, the dashboard gives more space to the output
-panel while keeping the selected row visible. The preview uses the role's Codux
-terminal controls, so output control behaves like the default `<leader>zc` Codux
-window while staying inside the dashboard layout. Profile labels include the
-provider, and switching the profile of a highlighted active role refreshes the
-output preview after the restarted session is ready.
+- Each mission carries a short **focus packet** (intent, direction, preferences, scope, next action) — separate from stable workspace instructions.
+- The Manager can request sibling start/prompt/create via JSON files under  
+  `.agents/codux/missions/<mission>/dispatch/pending/`.
+- Codux processes pending files while Mission Control is open, or via `:CoduxMissionProcessDispatch`.
+- Ops: `start`, `prompt`, `start_and_prompt`, `create_role`, `update_focus`. Success → `done/`; failure → `failed/`.
 
-Dashboard controls:
+Each role gets a clean Git worktree under `../codux-worktrees/<project>/<workspace>`, mission metadata, the chosen provider/profile, and an initial **plan-mode** prompt. If plan mode cannot be confirmed for a new mission agent, Codux **rolls back** that workspace.
 
-- Type in `Search Codux missions:` to fuzzy-filter mission, role, or workspace names.
-- `<Tab>` switches between search and the dashboard list.
-- `<CR>` focuses the highlighted mission or role from search.
-- `j`/`k` moves through selectable mission and role rows.
-- `m` opens the mission menu for mission rows or the workspace menu for role
-  rows.
-- `n` creates a mission.
-- `c` cleans empty Mission Control residue.
-- `h` runs Codux Doctor (same as `:CoduxDoctor`).
-- `<C-o>` enters output control for the highlighted active role workspace.
+### Dashboard
 
-While controlling role output, type directly into the agent session. `<C-o>`
-returns to the mission dashboard and `<C-q>` closes Mission Control. `Esc`
-continues to belong to the agent inside the output session.
+`:CoduxMissions`, `:CoduxMissionDashboard`, or `<leader>zM`.
 
-Mission menu actions include start/reopen mission, **Start Manager**, **Process
-Dispatch** (pending Manager handoff files), view/edit objective, edit focus,
-**Add Manager** (legacy missions), close mission, delete mission, and create a
-mission. Role workspace menus include start workspace, **Prompt Role**, switch
-provider/profile, rename role, edit instructions, close workspace, delete
-workspace, and create workspace. Recent dispatch results appear as a
-`dispatch | N ok | M failed` status line on the dashboard when handoffs run.
+| Control | Action |
+| --- | --- |
+| Type in search | Fuzzy-filter missions / roles / workspaces |
+| `<Tab>` | Search ↔ list |
+| `j` / `k` | Move rows |
+| `<CR>` | Focus highlighted mission or role |
+| `m` | Mission menu (mission row) or workspace menu (role row) |
+| `n` | Create mission |
+| `c` | Clean empty Mission Control residue |
+| `h` | Codux Doctor |
+| `<C-o>` | Output control for highlighted active role |
 
-Close and delete are separate operations. Closing a mission only closes role
-windows and preserves worktrees, branches, instructions, saved state, and mission
-metadata. Deleting a mission is destructive cleanup and asks for confirmation;
-it removes each role workspace, closes matching tmux windows, removes role
-worktrees and branches, deletes instruction files, and cleans empty mission
-residue.
+**Output control:** type into the agent session; `<C-o>` returns to the dashboard; `<C-q>` closes Mission Control; `Esc` stays with the agent.
 
-## Token and Status Monitoring
+Selecting the **mission row** previews/controls the **Manager**. Role rows preview that worker. Profile labels include the provider; switching an active role refreshes the output preview after restart.
 
-The `<leader>z` which-key header shows Codux status and token usage, for example:
+**Close vs delete:** Close only closes role windows and **preserves** worktrees, branches, instructions, and metadata. Delete is **destructive** (confirmation required).
+
+---
+
+## Token & Status Monitoring
+
+With which-key, the `<leader>z` header shows live Codux status and usage, for example:
 
 ```text
 codux | 5hr 3% | wk 5%
@@ -376,65 +390,105 @@ codux | quota | tpm full 53.0M | rpm full 8300
 codux | quota | tpm used 1.2k/53.0M | rpm used 5/8300
 ```
 
-Token monitoring refreshes in the background while a session is running.
-Codex uses `refresh_ms` (default 60s). Grok uses `token_monitor.grok.refresh_ms`
-(default 15s) because request rate-limit headroom can recover within seconds.
-Mission Control also refreshes usage without an active main-session terminal.
-The usage line follows the **selected mission role’s agent provider** (Codex vs
-Grok). Metrics are cached per provider so switching selection updates the label
-format immediately and each provider is throttled independently.
+| Provider | How it works | Default refresh |
+| --- | --- | --- |
+| **Codex** | Short-lived `codex app-server` reads account rate limits (`5hr` / `wk` % used) | 60s |
+| **Grok** | Cheap `max_tokens=1` probe to xAI API; **rate-limit headroom** from `x-ratelimit-*` headers (not total tokens billed) | 15s |
 
-**Codex** usage is unchanged: each check starts a short-lived `codex app-server`
-process and reads account rate limits (`timeout_ms`, default 5s), shown as
-`5hr` / `wk` percent used.
+**Grok labels:** `full <limit>` when nothing is consumed in-window; `used <n>/<limit>` for small dips; percent + remaining when used % > 0. Auth: `token_monitor.grok.api_key` → `XAI_API_KEY` / `GROK_API_KEY` → `~/.grok/auth.json`. Disable with `token_monitor.grok = false` without affecting Codex.
 
-**Grok** usage uses a cheap `max_tokens=1` probe against the xAI API and reads
-`x-ratelimit-*` headers. That is **rate-limit headroom for the current window**,
-not total tokens billed for your chat. xAI tier TPM ceilings are very large
-(often tens of millions), so light use often still reports full remaining and
-integer **0% used**. Labels therefore show `full <limit>` when nothing is
-consumed in the window, `used <n>/<limit>` for small dips that would still
-round to the same millions string, and percent + remaining only when used % is
-above zero. Auth is resolved from `token_monitor.grok.api_key`, then
-`XAI_API_KEY` / `GROK_API_KEY`, then `~/.grok/auth.json` (same OAuth key as
-`grok login`). The probe incurs a small API cost per refresh; disable with
-`token_monitor.grok = false` without affecting Codex monitoring.
+Mission Control refreshes usage without a main-session terminal; the line follows the **selected role’s provider**. Metrics are cached per provider.
 
-If usage is unavailable (CLI missing, timeout, API error, no credentials),
-Codux shows `--%` placeholders; Mission Control may append `(unavailable)`.
-Inspect `require("codux").health_info().token_usage.last_error` for the last
-failure detail. When an agent is actively working and the popup is hidden,
-Codux shows a small `agent is working...` indicator near the bottom-right of the
-editor.
+If usage is unavailable, Codux shows `--%` (Mission Control may append `(unavailable)`). Inspect:
+
+```lua
+require("codux").health_info().token_usage.last_error
+```
+
+When an agent is working and the popup is hidden, a small **`agent is working...`** indicator appears near the bottom-right of the editor.
+
+---
 
 ## Troubleshooting
 
-Use `:checkhealth codux` or `:CoduxHealth` for Neovim health checks.
+| Check | Command / action |
+| --- | --- |
+| Plugin load | `:checkhealth codux` or `:CoduxHealth` |
+| Runtime / tmux / workspaces | `:CoduxDoctor` (also `h` on dashboards) |
+| Codex CLI | `codex --version` |
+| Grok CLI | `grok version` |
+| Stale workspace state after restart | `:CoduxWorkspaceRestore` |
 
-Use `:CoduxDoctor` for Codux-specific runtime checks. Doctor reports tmux
-availability, Codex/Grok availability, workspace state readability/writability,
-project-root detection, `.agents/codux/` ignore status, loaded workspaces, and
-workspace window state.
+**Doctor reports:** tmux availability, Codex/Grok availability, workspace state readability/writability, project-root detection, `.agents/codux/` ignore status, loaded workspaces, and window state.
 
-Common checks:
+Mission dashboards and output previews reconcile **moved mission worktrees** before using saved paths.
 
-- `codex --version` confirms the Codex CLI is available.
-- `grok version` confirms the Grok CLI is available.
-- `:checkhealth codux` confirms Neovim can load the plugin.
-- `:CoduxDoctor` confirms tmux/workspace state for Codux workspaces.
-- `:CoduxWorkspaceRestore` reconciles saved workspace state with tmux after
-  restarts.
-- Mission dashboards and output previews reconcile moved mission worktrees before
-  using saved paths.
-
-## Development
-
-Run the test suite with:
+### Development
 
 ```bash
 make test
 ```
 
-The suite runs plain Lua specs, headless Neovim specs with
-`--headless -u NONE -i NONE --cmd 'set shadafile=NONE'`, LuaJIT syntax loading,
-plugin setup, and `checkhealth codux`.
+Runs plain Lua specs, headless Neovim specs (`--headless -u NONE -i NONE --cmd 'set shadafile=NONE'`), LuaJIT syntax loading, plugin setup, and `checkhealth codux`.
+
+---
+
+## FAQ
+
+**Does hiding the Codux popup kill my agent?**  
+No. `:CoduxClose` / `<C-q>` only hides the floating window. The session keeps running until `:CoduxExit`.
+
+**Is Grok a second-class citizen?**  
+No. Grok is a first-class provider: open commands, permission profiles, workspaces, Mission Control, theme preference, and token monitoring all support Grok alongside Codex.
+
+**Why do new sessions start in plan mode?**  
+Plan mode is the safer default for review-first workflows. Toggle with `:CoduxTogglePlan` / `<leader>zp` in the agent terminal, or set `default_initial_mode = "execute"` if you prefer the older startup behavior.
+
+**Why do workspaces / Mission Control require tmux?**  
+Each workspace is a dedicated tmux window with isolated Git worktree and agent session. Outside tmux, workspace creation reports `no tmux session running`. Single-session `:Codux` does **not** require tmux.
+
+**What’s the difference between close and delete for missions?**  
+**Close** shuts role windows but keeps worktrees, branches, instructions, and metadata. **Delete** is destructive cleanup (with confirmation): worktrees, branches, instruction files, and mission residue.
+
+**Full access feels scary — how do profiles work?**  
+Profiles map to CLI sandbox/approval settings (default / auto / full). Prefer default or auto for day-to-day work. Use full-access / danger commands only in trusted repos.
+
+**Why does Grok token usage often show “full” or 0%?**  
+Grok monitoring reports **current-window rate-limit headroom**, not lifetime spend. xAI TPM ceilings are large, so light use often still shows full remaining.
+
+---
+
+## Showcase / Demos
+
+<p align="center">
+  <img src="assets/codux-demo.gif" alt="codux.nvim demo" width="800">
+</p>
+
+| Demo | Asset |
+| --- | --- |
+| Single-session agent + context send | `assets/codux-demo.gif` |
+| Workspaces | `assets/codux-workspaces.gif` |
+| Codux Doctor | `assets/codux-doctor-full.png` |
+
+<!-- Add more as you capture them:
+| Mission Control dashboard | `assets/codux-mission-control.gif` |
+| Send selection workflow | `assets/codux-send-selection.gif` |
+| Provider switch (Codex ↔ Grok) | `assets/codux-providers.gif` |
+-->
+
+More walkthrough stills live under `001screenshots/` (how it works, send selection, workspaces, menus).
+
+---
+
+## License
+
+[MIT](LICENSE) © 2026 [BRONZowl](https://github.com/BRONZowl)
+
+---
+
+<p align="center">
+  <strong>Ship faster without leaving Neovim.</strong><br>
+  <a href="#installation">Install codux.nvim</a> ·
+  <a href="https://github.com/BRONZowl/codux.nvim/issues">Report an issue</a> ·
+  <a href="https://github.com/BRONZowl/codux.nvim">★ Star on GitHub</a>
+</p>

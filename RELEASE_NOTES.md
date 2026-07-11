@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-Mission Manager console and multi-role dispatch.
+## v1.0.2
+
+Mission Manager dispatch and documentation refresh.
+
+codux.nvim v1.0.2 adds a Mission Manager console with multi-role dispatch,
+hardens Grok usage labels, and rewrites the README for clearer dual-provider
+workflows.
 
 - Every new mission always creates a **Manager** role (plus default **Agent**); custom role lists still get Manager injected when missing.
 - Mission row in Mission Control previews and controls the Manager session (same Output panel and `<C-o>` as a role row).
@@ -10,6 +16,9 @@ Mission Manager console and multi-role dispatch.
 - Pending dispatch is processed while Mission Control is open and via `:CoduxMissionProcessDispatch`.
 - Mission menu: Start Manager, Process Dispatch, Add Manager (legacy). Role menu: Prompt Role (`t`).
 - Dashboard shows last dispatch status (`dispatch | N ok | M failed`).
+- Sort Manager role first in mission role lists; fix Manager role preview after compact mission selection.
+- Improve Grok token monitor sampling and rate-limit headroom labels.
+- Rewrite README with hero/badges, features-first layout, FAQ, showcase, and first-class Codex + Grok documentation.
 
 ## v1.0.1
 
