@@ -75,6 +75,12 @@ function M.new(deps)
     end,
     workspace_entries_for_project = deps.workspace_entries_for_project,
     edit_saved_workspace_instruction = deps.edit_saved_workspace_instruction,
+    start_saved_workspace = function(entry, opts)
+      if type(deps.start_saved_workspace) == "function" then
+        return deps.start_saved_workspace(entry, opts)
+      end
+      return workspace_runtime:start_saved_workspace(entry, opts)
+    end,
     delete_saved_workspace = deps.delete_saved_workspace,
     close_saved_workspace_window = function(entry)
       return codux._v5.close_saved_workspace_window(entry)

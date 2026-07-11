@@ -80,6 +80,7 @@ function M.normalize(opts)
     missions_for_project = opt_function(opts, "missions_for_project", nil),
     mission_residue_for_project = opt_function(opts, "mission_residue_for_project", nil),
     edit_saved_workspace_instruction = opt_function(opts, "edit_saved_workspace_instruction", noop),
+    start_saved_workspace = opt_function(opts, "start_saved_workspace", noop),
     delete_saved_workspace = opt_function(opts, "delete_saved_workspace", noop),
     close_saved_workspace_window = opt_function(opts, "close_saved_workspace_window", noop),
     workspace_interactive_preview = opt_function(opts, "workspace_interactive_preview", function()

@@ -73,6 +73,26 @@ end
 
 function M.run_workspace_action(controller, action, target)
   local workspace = target or controller.state.mission_dashboard_action_workspace
+  if action == "start_workspace" then
+    workspace = workspace or controller:selected_role_workspace_or_notify()
+    if not workspace then
+      return false
+    end
+    controller:close_action_palette()
+    local root = workspace.project_root or controller.state.mission_dashboard_project_root or controller.project_root()
+    local ok = controller.start_saved_workspace(workspace)
+    -- Match profile-restart: clear blocked inactive preview, refresh, then retry attach.
+    if ok and type(controller.invalidate_output_preview_for_entry) == "function" then
+      controller:invalidate_output_preview_for_entry(workspace)
+    end
+    if type(controller.refresh_loaded_dashboard) == "function" then
+      controller:refresh_loaded_dashboard(root)
+    end
+    if ok and type(controller.retry_output_preview_for_entry) == "function" then
+      controller:retry_output_preview_for_entry(workspace)
+    end
+    return ok
+  end
   if action == "rename_role" then
     workspace = workspace or controller:selected_role_workspace_or_notify()
     if not workspace then

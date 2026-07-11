@@ -495,6 +495,9 @@ workspace_manager_controller = workspace_manager_mod.new({
   open_saved_workspace = function(name, project_root)
     return M.open_saved_workspace(name, project_root)
   end,
+  start_saved_workspace = function(entry, opts)
+    return M.start_saved_workspace(entry, opts)
+  end,
   rename_saved_workspace = rename_saved_workspace,
   edit_saved_workspace_instruction = edit_saved_workspace_instruction,
   delete_saved_workspace = delete_saved_workspace,
@@ -767,6 +770,10 @@ function M.open_saved_workspace(name, project_root)
   return workspace_runtime:open_saved_workspace(name, project_root)
 end
 
+function M.start_saved_workspace(entry, opts)
+  return workspace_runtime:start_saved_workspace(entry, opts)
+end
+
 function M.select_workspace(name)
   return workspace_runtime:select_workspace(name)
 end
@@ -863,6 +870,9 @@ mission_controller = mission_setup_mod.new({
   workspace_runtime = workspace_runtime,
   workspace_entries_for_project = workspace_entries_for_project,
   edit_saved_workspace_instruction = edit_saved_workspace_instruction,
+  start_saved_workspace = function(entry, opts)
+    return M.start_saved_workspace(entry, opts)
+  end,
   delete_saved_workspace = delete_saved_workspace,
   switch_workspace_profile = function(entry, agent_provider, permission_profile, opts)
     return workspace_runtime:update_workspace_profile(entry, agent_provider, permission_profile, opts)

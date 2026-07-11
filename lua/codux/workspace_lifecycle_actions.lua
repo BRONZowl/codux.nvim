@@ -676,6 +676,48 @@ function M.open_saved_workspace(runtime, name, project_root)
   return true
 end
 
+function M.start_saved_workspace(runtime, entry, opts)
+  opts = type(opts) == "table" and opts or {}
+  entry = type(entry) == "table" and entry or {}
+  local name = entry.name or entry.safe_name
+  local root = entry.project_root or opts.project_root
+  if type(name) ~= "string" or name == "" then
+    runtime.notify("workspace not found", vim.log.levels.ERROR)
+    return false
+  end
+
+  local workspace, error_message = runtime:prepare_workspace(name, {
+    allow_existing = true,
+    initial_mode = "plan",
+    require_existing = true,
+    project_root = root,
+    agent_provider = entry.agent_provider,
+    permission_profile = entry.permission_profile,
+    restart_inactive = true,
+  })
+  if not workspace then
+    runtime.notify(error_message or "Failed to start Codux workspace", vim.log.levels.ERROR)
+    return false
+  end
+
+  workspace.initial_mode = "plan"
+  runtime:ensure_workspace_plan_mode(workspace)
+
+  if opts.focus == true then
+    if not runtime:switch_tmux_window(workspace.window_id) then
+      runtime.notify("Failed to switch to Codux workspace " .. tostring(workspace.name or name), vim.log.levels.ERROR)
+      return false
+    end
+  end
+
+  local label = entry.mission_role or workspace.name or name
+  runtime.notify("Started Codux workspace " .. tostring(label))
+  if runtime.state.workspace_manager_project_root then
+    runtime.render_workspace_manager()
+  end
+  return true
+end
+
 function M.select_workspace(runtime, name)
   return runtime:open_saved_workspace(name, runtime:project_root())
 end

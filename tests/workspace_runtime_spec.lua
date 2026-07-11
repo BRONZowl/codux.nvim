@@ -453,6 +453,59 @@ end
 
 do
   local calls = {}
+  local notifications = {}
+  local rendered = false
+  local runtime = runtime_mod.new({
+    state = {
+      workspace_manager_project_root = "/repo",
+    },
+    notify = function(message)
+      table.insert(notifications, message)
+    end,
+    render_workspace_manager = function()
+      rendered = true
+    end,
+  })
+  function runtime:prepare_workspace(name, opts)
+    table.insert(calls, { name = name, opts = opts })
+    return {
+      name = name,
+      safe_name = name,
+      project_root = opts.project_root,
+      window_id = "@9",
+      git_branch = "",
+      initial_mode = opts.initial_mode,
+    }, nil
+  end
+  function runtime:ensure_workspace_plan_mode(workspace)
+    table.insert(calls, { name = "plan", workspace = workspace.name })
+    return true
+  end
+  function runtime:switch_tmux_window()
+    table.insert(calls, { name = "focus" })
+    return true
+  end
+
+  assert_true(runtime:start_saved_workspace({
+    name = "review",
+    safe_name = "review",
+    project_root = "/repo",
+    agent_provider = "grok",
+    permission_profile = "auto",
+  }))
+  assert_equal(calls[1].name, "review")
+  assert_equal(calls[1].opts.initial_mode, "plan")
+  assert_true(calls[1].opts.restart_inactive)
+  assert_equal(calls[1].opts.agent_provider, "grok")
+  assert_equal(calls[1].opts.permission_profile, "auto")
+  assert_equal(calls[2].name, "plan")
+  assert_equal(#calls, 2, "start should not focus by default")
+  assert_true(rendered)
+  assert_contains(table.concat(notifications, "\n"), "Started Codux workspace review")
+end
+
+do
+  local calls = {}
   local runtime = runtime_mod.new({
     state = {
       workspace_manager_project_root = "/repo",

@@ -272,9 +272,9 @@ JSON copy.
 
 Use `:CoduxWorkspaces` to open the workspace dashboard. It includes fuzzy search,
 `<Tab>` search/list switching, `j`/`k` movement, `<CR>` open, `h` Doctor, and
-`m` for the selected-workspace menu. The menu supports rename, edit
-instructions, switch provider/profile, close workspace, close all workspaces,
-and delete workspace. Switching the profile of an active workspace restarts that
+`m` for the selected-workspace menu. The menu supports start workspace, rename,
+edit instructions, switch provider/profile, close workspace, close all
+workspaces, and delete workspace. Switching the profile of an active workspace restarts that
 workspace with the selected Codex or Grok command; switching an inactive
 workspace updates its saved startup provider/profile for the next launch.
 
@@ -342,9 +342,9 @@ continues to belong to the agent inside the output session.
 
 Mission menu actions include start/reopen mission, view objective, edit
 objective, edit focus, close mission, delete mission, and create a mission. Role
-workspace menus include prompt or answer when available, interrupt, switch mode,
-switch provider/profile, rename role, edit instructions, close workspace, delete
-workspace, and create workspace.
+workspace menus include start workspace, prompt or answer when available,
+interrupt, switch mode, switch provider/profile, rename role, edit instructions,
+close workspace, delete workspace, and create workspace.
 
 Close and delete are separate operations. Closing a mission only closes role
 windows and preserves worktrees, branches, instructions, saved state, and mission

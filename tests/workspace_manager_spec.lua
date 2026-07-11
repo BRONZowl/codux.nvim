@@ -402,4 +402,29 @@ do
   assert_contains(notifications[#notifications], "Grok Full")
 end
 
+do
+  local calls = {}
+  local controller = manager_mod.new({
+    state = {
+      workspace_manager_action_workspace = {
+        name = "review",
+        safe_name = "review",
+        project_root = "/repo",
+      },
+    },
+    start_saved_workspace = function(entry)
+      table.insert(calls, "start:" .. tostring(entry.name))
+      return true
+    end,
+  })
+  function controller:close_action_palette()
+    table.insert(calls, "close_palette")
+    return true
+  end
+
+  assert_true(controller:run_action("start_workspace"))
+  assert_equal(calls[1], "close_palette")
+  assert_equal(calls[2], "start:review")
+end
+
 print("workspace_manager_spec.lua: ok")

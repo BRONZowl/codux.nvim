@@ -106,6 +106,10 @@ function M.run_action(controller, action, item)
     return false
   end
 
+  if action == "start_workspace" then
+    controller:close_action_palette()
+    return controller:start_selected_workspace(item)
+  end
   if action == "rename" then
     controller:close_action_palette()
     return controller:rename_selected_workspace(item)
@@ -158,6 +162,14 @@ function M.open_selected_workspace(controller, item)
   local root = item.project_root or controller.state.workspace_manager_project_root
   controller:close()
   return controller.open_saved_workspace(item.name, root)
+end
+
+function M.start_selected_workspace(controller, item)
+  item = item or controller:selected_or_notify()
+  if not item then
+    return false
+  end
+  return controller.start_saved_workspace(item)
 end
 
 function M.rename_selected_workspace(controller, item)

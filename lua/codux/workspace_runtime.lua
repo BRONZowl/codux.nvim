@@ -944,6 +944,10 @@ function M:open_saved_workspace(name, project_root)
   return workspace_lifecycle_actions.open_saved_workspace(self, name, project_root)
 end
 
+function M:start_saved_workspace(entry, opts)
+  return workspace_lifecycle_actions.start_saved_workspace(self, entry, opts)
+end
+
 function M:select_workspace(name)
   return workspace_lifecycle_actions.select_workspace(self, name)
 end

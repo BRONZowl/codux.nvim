@@ -530,6 +530,48 @@ end
 
 do
   local calls = {}
+  local entry = {
+    name = "alpha-builder",
+    safe_name = "alpha-builder",
+    project_root = "/repo",
+  }
+  local controller = mission_control_mod.new({
+    state = {
+      mission_dashboard_action_workspace = entry,
+      mission_dashboard_project_root = "/repo",
+    },
+    start_saved_workspace = function(workspace)
+      table.insert(calls, "start:" .. tostring(workspace.name))
+      return true
+    end,
+  })
+  function controller:close_action_palette()
+    table.insert(calls, "close_palette")
+    return true
+  end
+  function controller:invalidate_output_preview_for_entry(workspace)
+    table.insert(calls, "invalidate:" .. tostring(workspace.name))
+    return true
+  end
+  function controller:refresh_loaded_dashboard(root)
+    table.insert(calls, "refresh:" .. tostring(root))
+    return true
+  end
+  function controller:retry_output_preview_for_entry(workspace)
+    table.insert(calls, "retry:" .. tostring(workspace.name))
+    return true
+  end
+
+  assert_true(controller:run_action("start_workspace", entry))
+  assert_equal(calls[1], "close_palette")
+  assert_equal(calls[2], "start:alpha-builder")
+  assert_equal(calls[3], "invalidate:alpha-builder")
+  assert_equal(calls[4], "refresh:/repo")
+  assert_equal(calls[5], "retry:alpha-builder")
+end
+
+do
+  local calls = {}
   local controller = mission_control_mod.new({})
   function controller:close_action_palette()
     table.insert(calls, "close_palette")

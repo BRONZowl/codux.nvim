@@ -73,6 +73,7 @@ function M.new(opts)
     restore_workspaces = type(opts.restore_workspaces) == "function" and opts.restore_workspaces or noop,
     prompt_merged_workspaces = type(opts.prompt_merged_workspaces) == "function" and opts.prompt_merged_workspaces or noop,
     open_saved_workspace = type(opts.open_saved_workspace) == "function" and opts.open_saved_workspace or noop,
+    start_saved_workspace = type(opts.start_saved_workspace) == "function" and opts.start_saved_workspace or noop,
     rename_saved_workspace = type(opts.rename_saved_workspace) == "function" and opts.rename_saved_workspace or noop,
     edit_saved_workspace_instruction = type(opts.edit_saved_workspace_instruction) == "function"
         and opts.edit_saved_workspace_instruction
@@ -463,6 +464,10 @@ end
 
 function M:open_selected_workspace(item)
   return manager_actions.open_selected_workspace(self, item)
+end
+
+function M:start_selected_workspace(item)
+  return manager_actions.start_selected_workspace(self, item)
 end
 
 function M:rename_selected_workspace(item)

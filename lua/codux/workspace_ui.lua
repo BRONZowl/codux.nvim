@@ -196,6 +196,7 @@ end
 
 function M.manager_action_items()
   return {
+    { key = "s", action = "start_workspace", label = "Start Workspace" },
     { key = "p", action = "switch_profile", label = "Switch Profile" },
     { key = "r", action = "rename", label = "Rename Workspace" },
     { key = "e", action = "edit_instructions", label = "Edit Instructions" },
@@ -258,6 +259,7 @@ end
 
 function M.role_workspace_action_items()
   local items = {}
+  table.insert(items, { key = "s", action = "start_workspace", label = "Start Workspace" })
   table.insert(items, { key = "p", action = "switch_profile", label = "Switch Profile" })
   table.insert(items, { key = "r", action = "rename_role", label = "Rename Role" })
   table.insert(items, { key = "e", action = "edit_instructions", label = "Edit Instructions" })
