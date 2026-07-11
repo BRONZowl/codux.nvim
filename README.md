@@ -137,7 +137,8 @@ Restart Neovim, open a project, then verify:
 **Session rules worth knowing**
 
 - If the popup is **already open**, `:Codux` / `<leader>zc` are a **no-op** until you hide it.
-- If the agent is **still running** but the popup is closed, those commands **reopen and focus** the same session (provider/profile unchanged).
+- Choosing a different default with `<leader>zP` **ends the current agent session**. The next `:Codux` / `<leader>zc` opens the chosen provider's permission-profile picker.
+- If the agent is **still running** and its provider matches the default, those commands **reopen and focus** the same session (provider/profile unchanged).
 - Mission Control and workspace **Switch Profile** menus still use a two-step provider + profile picker so roles can differ from the global default.
 - Use **full access** only in repositories you trust. `:CoduxOpenDanger` / `:CoduxOpenGrokDanger` start with no approval prompts / no sandbox.
 

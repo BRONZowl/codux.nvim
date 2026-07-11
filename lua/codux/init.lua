@@ -593,11 +593,18 @@ function M.set_default_provider(provider)
     notify("Unknown agent provider. Use codex or grok.", vim.log.levels.ERROR)
     return false
   end
+
+  local running_provider = providers.normalize_provider(state.agent_provider)
+  local switch_running_provider = state.job_id ~= nil and running_provider ~= provider
   config.default_agent_provider = provider
-  if state.job_id == nil then
-    state.agent_provider = provider
-    state.last_agent_provider = provider
+
+  if switch_running_provider then
+    terminal:exit()
   end
+
+  state.agent_provider = provider
+  state.last_agent_provider = provider
+
   local ok, err = settings.set_default_agent_provider(provider)
   if not ok then
     notify(err or "Failed to save default provider", vim.log.levels.WARN)

@@ -323,6 +323,36 @@ if type(vim.api) == "table" then
   assert_equal(codux.set_default_provider("grok"), true)
   assert_equal(codux.set_default_provider("nope"), false)
 
+  -- Selecting a different default provider stops the current agent so the next
+  -- open goes through that provider's permission-profile picker.
+  codux.setup({
+    token_monitor = false,
+    default_agent_provider = "codex",
+    providers = {
+      codex = { default_cmd = "/bin/sh" },
+      grok = { default_cmd = "/bin/sh" },
+    },
+  })
+  assert_equal(codux.open_provider("codex", "default"), true)
+  assert_equal(type(codux.health_info().terminal_job_id), "number")
+  assert_equal(codux.set_default_provider_menu({
+    menu = function(_, on_select)
+      return on_select({ agent_provider = "grok" })
+    end,
+  }), true)
+  local switched_info = codux.health_info()
+  assert_false(switched_info.terminal_running)
+  assert_nil(switched_info.terminal_job_id)
+  assert_equal(switched_info.agent_provider, "grok")
+  assert_equal(switched_info.last_agent_provider, "grok")
+
+  -- Re-selecting the provider already used by a running agent preserves it.
+  assert_equal(codux.open_provider("grok", "default"), true)
+  local grok_job_id = codux.health_info().terminal_job_id
+  assert_equal(codux.set_default_provider("grok"), true)
+  assert_equal(codux.health_info().terminal_job_id, grok_job_id)
+  codux.exit()
+
   local default_open_menus = {}
   local old_select_keyed = codux._v5.select_keyed_provider_profile_open
   codux._v5.select_keyed_provider_profile_open = function(opts)
