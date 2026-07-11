@@ -39,6 +39,7 @@ function M.close_output_preview(self)
   self.state.mission_dashboard_output_job = nil
   if self.state.mission_dashboard_output_control then
     self:relock_output_control_mouse()
+    self:relock_output_control_cursor()
   end
   if type(job_id) == "number" and job_id > 0 then
     pcall(self.jobstop, job_id)

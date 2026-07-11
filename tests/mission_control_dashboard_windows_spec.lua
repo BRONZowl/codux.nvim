@@ -324,6 +324,7 @@ end
 
 if type(vim.api) == "table" then
   local old_mouse = vim.o.mouse
+  local old_guicursor = vim.o.guicursor
   local old_open_win = vim.api.nvim_open_win
   local old_create_augroup = vim.api.nvim_create_augroup
   local old_create_autocmd = vim.api.nvim_create_autocmd
@@ -337,6 +338,7 @@ if type(vim.api) == "table" then
   local dashboard_cursor_highlight
   local highlighted_selected_row
   vim.o.mouse = "a"
+  vim.o.guicursor = "n-v-c:block"
   vim.api.nvim_open_win = function(_, enter)
     dashboard_enter = enter
     return 20
@@ -451,11 +453,15 @@ if type(vim.api) == "table" then
   assert_equal(dashboard_cursor_highlight.fg, "NONE")
   assert_equal(dashboard_cursor_highlight.bg, "NONE")
   assert_equal(dashboard_cursor_highlight.blend, 100)
+  assert_equal(controller.state.mission_dashboard_saved_guicursor, "n-v-c:block")
+  assert_equal(vim.o.guicursor, "a:CoduxDashboardCursor")
   assert_equal(#token_refreshes, 1)
   assert_true(token_refreshes[1])
   assert_true(search_opened)
   controller:close_dashboard()
   assert_equal(vim.o.mouse, "a")
+  assert_equal(vim.o.guicursor, "n-v-c:block")
+  assert_nil(controller.state.mission_dashboard_saved_guicursor)
 
   vim.api.nvim_open_win = old_open_win
   vim.api.nvim_create_augroup = old_create_augroup
@@ -463,6 +469,7 @@ if type(vim.api) == "table" then
   vim.api.nvim_set_hl = old_set_hl
   vim.schedule = old_schedule
   vim.o.mouse = old_mouse
+  vim.o.guicursor = old_guicursor
 end
 
 do
@@ -485,11 +492,33 @@ do
   vim.o.mouse = old_mouse
 end
 
+do
+  local old_guicursor = vim.o.guicursor
+  vim.o.guicursor = "n-v-c:block"
+  local controller = mission_control_mod.new({ state = {} })
+
+  assert_true(controller:lock_dashboard_cursor())
+  assert_equal(vim.o.guicursor, "a:CoduxDashboardCursor")
+  assert_equal(controller.state.mission_dashboard_saved_guicursor, "n-v-c:block")
+
+  vim.o.guicursor = "i:ver25"
+  assert_true(controller:lock_dashboard_cursor())
+  assert_equal(vim.o.guicursor, "a:CoduxDashboardCursor")
+  assert_equal(controller.state.mission_dashboard_saved_guicursor, "n-v-c:block")
+
+  assert_true(controller:restore_dashboard_cursor())
+  assert_equal(vim.o.guicursor, "n-v-c:block")
+  assert_nil(controller.state.mission_dashboard_saved_guicursor)
+  vim.o.guicursor = old_guicursor
+end
+
 if type(vim.api) == "table" then
   local old_mouse = vim.o.mouse
+  local old_guicursor = vim.o.guicursor
   local old_open_win = vim.api.nvim_open_win
   local deleted_buf
   vim.o.mouse = "a"
+  vim.o.guicursor = "n-v-c:block"
   vim.api.nvim_open_win = function()
     error("open failed")
   end
@@ -517,27 +546,41 @@ if type(vim.api) == "table" then
 
   assert_false(controller:open_dashboard("/repo"))
   assert_equal(vim.o.mouse, "a")
+  assert_equal(vim.o.guicursor, "n-v-c:block")
   assert_nil(controller.state.mission_dashboard_saved_mouse)
+  assert_nil(controller.state.mission_dashboard_saved_guicursor)
   assert_equal(deleted_buf, 33)
 
   vim.api.nvim_open_win = old_open_win
   vim.o.mouse = old_mouse
+  vim.o.guicursor = old_guicursor
 end
 
 if type(vim.api) == "table" then
   local old_mouse = vim.o.mouse
+  local old_guicursor = vim.o.guicursor
   local controller = mission_control_mod.new({ state = {} })
   vim.o.mouse = "a"
+  vim.o.guicursor = "n-v-c:block"
 
   assert_true(controller:lock_dashboard_mouse())
+  assert_true(controller:lock_dashboard_cursor())
   assert_equal(vim.o.mouse, "")
+  assert_equal(vim.o.guicursor, "a:CoduxDashboardCursor")
   assert_true(controller:enable_output_control_mouse())
+  assert_true(controller:enable_output_control_cursor())
   assert_equal(vim.o.mouse, "a")
+  assert_equal(vim.o.guicursor, "n-v-c:block")
+  assert_true(controller.state.mission_dashboard_output_control_cursor)
   assert_true(controller:close_dashboard())
   assert_equal(vim.o.mouse, "a")
+  assert_equal(vim.o.guicursor, "n-v-c:block")
   assert_nil(controller.state.mission_dashboard_saved_mouse)
+  assert_nil(controller.state.mission_dashboard_saved_guicursor)
   assert_nil(controller.state.mission_dashboard_output_control_mouse)
+  assert_nil(controller.state.mission_dashboard_output_control_cursor)
   vim.o.mouse = old_mouse
+  vim.o.guicursor = old_guicursor
 end
 
 if type(vim.api) == "table" then

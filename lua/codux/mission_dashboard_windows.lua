@@ -5,6 +5,17 @@ local M = {}
 
 local mission_control_filetypes = filetypes.mission_control
 
+local function ensure_dashboard_cursor_highlight()
+  if vim.api and type(vim.api.nvim_set_hl) == "function" then
+    pcall(vim.api.nvim_set_hl, 0, "CoduxDashboardCursor", {
+      fg = "NONE",
+      bg = "NONE",
+      blend = 100,
+      nocombine = true,
+    })
+  end
+end
+
 function M.dashboard_is_visible(controller)
   return controller.is_loaded_buf(controller.state.mission_dashboard_buf)
 end
@@ -41,6 +52,25 @@ function M.restore_dashboard_mouse(controller)
   return true
 end
 
+function M.lock_dashboard_cursor(controller)
+  if controller.state.mission_dashboard_saved_guicursor == nil then
+    controller.state.mission_dashboard_saved_guicursor = vim.o.guicursor
+  end
+  ensure_dashboard_cursor_highlight()
+  vim.o.guicursor = "a:CoduxDashboardCursor"
+  return true
+end
+
+function M.restore_dashboard_cursor(controller)
+  local saved = controller.state.mission_dashboard_saved_guicursor
+  controller.state.mission_dashboard_saved_guicursor = nil
+  controller.state.mission_dashboard_output_control_cursor = nil
+  if saved ~= nil then
+    vim.o.guicursor = saved
+  end
+  return true
+end
+
 function M.enable_output_control_mouse(controller)
   vim.o.mouse = "a"
   controller.state.mission_dashboard_output_control_mouse = true
@@ -51,6 +81,26 @@ function M.relock_output_control_mouse(controller)
   if controller.state.mission_dashboard_output_control_mouse then
     vim.o.mouse = ""
     controller.state.mission_dashboard_output_control_mouse = nil
+  end
+  return true
+end
+
+function M.enable_output_control_cursor(controller)
+  local saved = controller.state.mission_dashboard_saved_guicursor
+  if saved ~= nil then
+    vim.o.guicursor = saved
+    controller.state.mission_dashboard_output_control_cursor = true
+  end
+  return true
+end
+
+function M.relock_output_control_cursor(controller)
+  if controller.state.mission_dashboard_output_control_cursor then
+    controller.state.mission_dashboard_output_control_cursor = nil
+    if controller.state.mission_dashboard_saved_guicursor ~= nil then
+      ensure_dashboard_cursor_highlight()
+      vim.o.guicursor = "a:CoduxDashboardCursor"
+    end
   end
   return true
 end
@@ -114,6 +164,7 @@ function M.close_dashboard(controller)
   controller.state.mission_dashboard_token_usage_refreshed_at_by_provider = nil
   controller.state.mission_dashboard_token_usage_provider = nil
   controller:restore_dashboard_mouse()
+  controller:restore_dashboard_cursor()
   return true
 end
 
@@ -229,6 +280,7 @@ function M.open_dashboard(controller, root)
   end
   ui.disable_buffer_completion(bufnr, { is_loaded_buf = controller.is_loaded_buf })
   controller:lock_dashboard_mouse()
+  controller:lock_dashboard_cursor()
 
   controller.ui.set_lines(bufnr, lines, { modifiable = true })
   controller.state.mission_dashboard_buf = bufnr
@@ -251,6 +303,7 @@ function M.open_dashboard(controller, root)
   }))
   if not win_ok then
     controller:restore_dashboard_mouse()
+    controller:restore_dashboard_cursor()
     controller.ui.delete_buffer(bufnr)
     controller.state.mission_dashboard_buf = nil
     controller.state.mission_dashboard_project_root = nil
@@ -265,9 +318,7 @@ function M.open_dashboard(controller, root)
     controller.notify("Failed to open Codux missions dashboard", vim.log.levels.ERROR)
     return false
   end
-  if vim.api and type(vim.api.nvim_set_hl) == "function" then
-    pcall(vim.api.nvim_set_hl, 0, "CoduxDashboardCursor", { fg = "NONE", bg = "NONE", blend = 100 })
-  end
+  ensure_dashboard_cursor_highlight()
   controller.ui.set_window_options(win, {
     cursorline = false,
     wrap = false,

@@ -275,6 +275,7 @@ function Output:reset_output_control_state()
   self.state.mission_dashboard_output_control = false
   self.state.mission_dashboard_output_control_key = nil
   self:relock_output_control_mouse()
+  self:relock_output_control_cursor()
   self:set_output_window_focusable(false)
   return true
 end
@@ -306,6 +307,7 @@ function Output:enter_output_control()
     return false
   end
   self:enable_output_control_mouse()
+  self:enable_output_control_cursor()
   if not self:focus_output_panel() then
     self:exit_output_control()
     return false
@@ -388,6 +390,7 @@ end
 
 function Output:close_output_panel()
   self:relock_output_control_mouse()
+  self:relock_output_control_cursor()
   self:close_output_preview()
   self.ui.close_window(self.state.mission_dashboard_output_win)
   self.ui.delete_buffer(self.state.mission_dashboard_output_buf)

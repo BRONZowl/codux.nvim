@@ -521,6 +521,7 @@ if type(vim.api) == "table" then
         mission_dashboard_output_job = 55,
         mission_dashboard_output_preview = { preview_session = "codux-preview-old" },
         mission_dashboard_saved_mouse = "n",
+        mission_dashboard_saved_guicursor = "n-v-c:block",
       },
       workspace_interactive_preview = function(_, opts)
         table.insert(preview_opts, opts or {})
@@ -568,6 +569,8 @@ if type(vim.api) == "table" then
       return true
     end
 
+    local old_guicursor = vim.o.guicursor
+    vim.o.guicursor = "a:CoduxDashboardCursor"
     assert_true(controller:enter_output_control())
     assert_true(monitor_stopped)
     assert_true(controller.state.mission_dashboard_output_control)
@@ -578,6 +581,8 @@ if type(vim.api) == "table" then
     assert_equal(focused_win, 13)
     assert_equal(controller.state.mission_dashboard_output_job, 77)
     assert_equal(vim.o.mouse, "a")
+    assert_equal(vim.o.guicursor, "n-v-c:block")
+    assert_true(controller.state.mission_dashboard_output_control_cursor)
     assert_equal(highlight_refreshes, 1)
 
     assert_true(controller:exit_output_control())
@@ -586,11 +591,14 @@ if type(vim.api) == "table" then
     assert_equal(preview_opts[2].control, nil)
     assert_equal(focusable_values[2], false)
     assert_equal(vim.o.mouse, "")
+    assert_equal(vim.o.guicursor, "a:CoduxDashboardCursor")
+    assert_nil(controller.state.mission_dashboard_output_control_cursor)
     assert_true(monitor_started)
     assert_true(dashboard_focused)
     assert_equal(controller.state.mission_dashboard_output_job, 78)
     assert_equal(highlight_refreshes, 2)
     assert_contains(table.concat(ctx.rendered_lines, "\n"), "Output: Reviewer")
+    vim.o.guicursor = old_guicursor
     output_fixtures.delete_buffer(ctx.bufnr)
   end)
 end
