@@ -63,6 +63,37 @@ function Output:output_panel_lines(entry, message)
   return lines
 end
 
+--- Compact layout (mission row) must not attach an interactive preview. Attaching into a
+--- 1-line float and then expanding on the Manager role row reuses the same entry key and
+--- leaves a broken terminal paint.
+function Output:output_preview_mode_for_selection()
+  if type(self.dashboard_preview_mode) ~= "function" then
+    return "workspace"
+  end
+  local item = type(self.selected_item) == "function" and self:selected_item() or nil
+  -- No dashboard selection (e.g. direct entry from tests): always allow full preview.
+  if item == nil then
+    return "workspace"
+  end
+  local mode = self:dashboard_preview_mode(item)
+  return mode == "workspace" and "workspace" or "compact"
+end
+
+function Output:render_compact_output_status(entry)
+  self:close_output_preview()
+  self.state.mission_dashboard_output_entry = entry
+  -- Clear key/job so the next workspace selection starts a clean full-height attach.
+  self.state.mission_dashboard_output_key = nil
+  self.state.mission_dashboard_output_blocked_key = nil
+  local message = "select role row to expand preview"
+  if type(entry) ~= "table" then
+    message = nil
+  elseif entry.status == "inactive" then
+    message = "workspace is not active"
+  end
+  return self:render_output_status(entry, message)
+end
+
 function Output:selected_output_entry()
   local item = self:selected_item()
   return self:dashboard_output_entry(item)
@@ -192,6 +223,9 @@ function Output:render_output_panel(entry)
     return true
   end
   entry = type(entry) == "table" and entry or self:selected_output_entry()
+  if self:output_preview_mode_for_selection() == "compact" then
+    return self:render_compact_output_status(entry)
+  end
   local key = self:output_entry_key(entry)
   if type(entry) == "table" and entry.status == "inactive" then
     self:close_output_preview()

@@ -136,6 +136,72 @@ do
   assert_contains(table.concat(lines, "\n"), "no Manager role")
 end
 
+if type(vim.api) == "table" then
+  -- Mission compact must not attach Manager preview; Manager role row must attach cleanly.
+  local manager = {
+    safe_name = "alpha-manager",
+    mission_role = "Manager",
+    status = "idle",
+    project_root = "/wt/manager",
+    worktree_path = "/wt/manager",
+  }
+  local agent = {
+    safe_name = "alpha-agent",
+    mission_role = "Agent",
+    status = "idle",
+    project_root = "/wt/agent",
+  }
+  local preview_calls = {}
+  local bufnr = output_fixtures.output_buffer()
+  local controller, ctx = output_fixtures.controller({
+    bufnr = bufnr,
+    state = {
+      mission_dashboard_buf = 10,
+      mission_dashboard_win = 11,
+      mission_dashboard_output_buf = bufnr,
+      mission_dashboard_output_win = 13,
+      mission_dashboard_items = {
+        [2] = {
+          kind = "mission",
+          mission = { name = "Alpha", roles = { manager, agent } },
+        },
+        [4] = { kind = "role", entry = manager, mission = { roles = { manager, agent } } },
+        [5] = { kind = "role", entry = agent, mission = { roles = { manager, agent } } },
+      },
+      mission_dashboard_selectable_rows = { 2, 4, 5 },
+      mission_dashboard_selected_row = 2,
+      mission_dashboard_search_confirmed = true,
+    },
+    workspace_interactive_preview = function(entry)
+      table.insert(preview_calls, entry.safe_name)
+      return output_fixtures.preview(), nil
+    end,
+    termopen = function()
+      return 55
+    end,
+  })
+
+  assert_equal(controller:selected_output_entry().safe_name, "alpha-manager")
+  assert_equal(controller:dashboard_preview_mode(controller:selected_item()), "compact")
+  assert_true(controller:render_output_panel())
+  assert_equal(#preview_calls, 0, "mission compact must not attach interactive preview")
+  assert_nil(controller.state.mission_dashboard_output_job)
+  assert_nil(controller.state.mission_dashboard_output_key)
+  assert_contains(table.concat(ctx.rendered_lines or {}, "\n"), "Output: Manager")
+  assert_contains(table.concat(ctx.rendered_lines or {}, "\n"), "select role row to expand preview")
+
+  -- First highlight of Manager role: full attach (no residual compact job).
+  controller.state.mission_dashboard_selected_row = 4
+  assert_equal(controller:dashboard_preview_mode(controller:selected_item()), "workspace")
+  assert_true(controller:render_output_panel())
+  assert_equal(#preview_calls, 1)
+  assert_equal(preview_calls[1], "alpha-manager")
+  assert_equal(controller.state.mission_dashboard_output_job, 55)
+  assert_equal(controller.state.mission_dashboard_output_entry.safe_name, "alpha-manager")
+
+  output_fixtures.delete_buffer(bufnr)
+end
+
 do
   local bound = {}
   local closed = false
