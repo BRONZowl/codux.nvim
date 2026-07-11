@@ -113,6 +113,24 @@ do
 end
 
 do
+  local controller = which_key_mod.new({
+    get_mode = function()
+      return "execute"
+    end,
+    token_usage_label = function()
+      return "quota | tpm 53.0M/53.0M | rpm 8300/8300"
+    end,
+  })
+  local title = controller:title()
+  assert_equal(title[1][1], " codux ")
+  assert_contains(title[2][1], "tpm 53.0M/53.0M")
+  assert_equal(title[2][1]:find("quota", 1, true), nil, "quota prefix should be stripped from title")
+  local min_width = controller:chrome_min_width()
+  assert_true(min_width >= controller:title_display_width(), "min width should cover full title")
+  assert_true(min_width >= 36)
+end
+
+do
   local actions = workspace_ui.mission_action_items()
   local by_key = {}
   local labels_by_key = {}

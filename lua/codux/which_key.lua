@@ -240,11 +240,38 @@ function M:title()
   local usage = self.token_usage_label()
   local title = { { " codux ", self:mode_status_hl() } }
   if usage ~= "" then
-    local compact_usage = usage:gsub("^usage | ", "")
+    -- Drop repeated prefixes so the window title stays compact next to "codux".
+    local compact_usage = usage:gsub("^usage%s*|%s*", ""):gsub("^quota%s*|%s*", "")
     table.insert(title, { "| " .. compact_usage .. " ", "CoduxWhichKeyUsage" })
   end
 
   return title
+end
+
+--- Display width of the composed title string (for which-key min width).
+function M:title_display_width()
+  local parts = self:title()
+  local text = ""
+  for _, segment in ipairs(type(parts) == "table" and parts or {}) do
+    if type(segment) == "table" and type(segment[1]) == "string" then
+      text = text .. segment[1]
+    end
+  end
+  if vim.fn and type(vim.fn.strdisplaywidth) == "function" then
+    local ok, width = pcall(vim.fn.strdisplaywidth, text)
+    if ok and type(width) == "number" then
+      return width
+    end
+  end
+  return #text
+end
+
+--- Ensure the which-key popup is wide enough to show "codux" plus usage/quota.
+function M:chrome_min_width()
+  -- Border + small padding so the title is not clipped against the frame.
+  local min_width = self:title_display_width() + 4
+  -- Keep a usable floor for the mapping list when usage is empty.
+  return math.max(36, min_width)
 end
 
 function M:with_chrome(callback)
@@ -260,6 +287,7 @@ function M:with_chrome(callback)
     title_pos = win_config.title_pos,
     footer = win_config.footer,
     footer_pos = win_config.footer_pos,
+    width = win_config.width,
     show_keys = which_key_config.show_keys,
   }
 
@@ -272,6 +300,22 @@ function M:with_chrome(callback)
     win_config.border = "rounded"
   end
 
+  -- which-key sizes the popup from mapping columns; raise min width so the
+  -- longer Grok quota title still keeps "codux" visible.
+  local min_width = self:chrome_min_width()
+  if type(win_config.width) == "table" then
+    local width = {}
+    for key, value in pairs(win_config.width) do
+      width[key] = value
+    end
+    width.min = math.max(tonumber(width.min) or 0, min_width)
+    win_config.width = width
+  elseif type(win_config.width) == "number" then
+    win_config.width = math.max(win_config.width, min_width)
+  else
+    win_config.width = { min = min_width }
+  end
+
   local ok_callback, results = pcall(function()
     return { callback() }
   end)
@@ -281,6 +325,7 @@ function M:with_chrome(callback)
   win_config.title_pos = original.title_pos
   win_config.footer = original.footer
   win_config.footer_pos = original.footer_pos
+  win_config.width = original.width
   which_key_config.show_keys = original.show_keys
 
   if not ok_callback then
