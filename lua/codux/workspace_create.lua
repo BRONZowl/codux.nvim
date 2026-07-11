@@ -51,7 +51,11 @@ function M.new(opts)
     select_provider_profile = type(opts.select_provider_profile) == "function" and opts.select_provider_profile or nil,
     default_agent_provider = type(opts.default_agent_provider) == "function" and opts.default_agent_provider or nil,
     create_workspace = type(opts.create_workspace) == "function" and opts.create_workspace or noop,
-    namespace = opts.namespace or vim.api.nvim_create_namespace("codux.workspace_create"),
+    namespace = opts.namespace
+      or (type(vim) == "table" and type(vim.api) == "table" and type(vim.api.nvim_create_namespace) == "function" and vim.api.nvim_create_namespace(
+        "codux.workspace_create"
+      ))
+      or 0,
   }
 
   return setmetatable(controller, M)
