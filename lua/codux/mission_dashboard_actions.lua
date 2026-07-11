@@ -1,5 +1,4 @@
 local action_palette = require("codux.action_palette")
-local mission_mod = require("codux.mission")
 local workspace_actions = require("codux.mission_dashboard_workspace_actions")
 
 local M = {}
@@ -169,25 +168,13 @@ function M.run_mission_action(controller, action, target)
     controller:close_action_palette()
     return controller:edit_selected_mission_focus(mission)
   end
-  if action == "view_objective" then
-    controller:close_action_palette()
-    return controller:view_mission_objective(mission)
-  end
   if action == "start_mission" then
     controller:close_action_palette()
     return controller:start_selected_mission(mission)
   end
-  if action == "start_manager" then
-    controller:close_action_palette()
-    return M.start_selected_manager(controller, mission)
-  end
   if action == "process_dispatch" then
     controller:close_action_palette()
     return M.process_selected_mission_dispatch(controller, mission)
-  end
-  if action == "add_manager" then
-    controller:close_action_palette()
-    return M.add_manager_to_mission(controller, mission)
   end
   if action == "close_mission" then
     controller:close_action_palette()
@@ -198,35 +185,6 @@ function M.run_mission_action(controller, action, target)
     return controller:delete_selected_mission(mission)
   end
   return false
-end
-
-function M.start_selected_manager(controller, mission)
-  mission = type(mission) == "table" and mission or controller:selected_mission_or_notify()
-  if not mission then
-    return false
-  end
-  local manager = mission_mod.find_manager_role(mission)
-  if not manager then
-    controller.notify("No Manager role for this mission", vim.log.levels.WARN)
-    return false
-  end
-  local root = manager.project_root or controller.state.mission_dashboard.project_root or controller.project_root()
-  local ok = controller.start_saved_workspace(manager, { restart_inactive = true })
-  if ok and type(controller.invalidate_output_preview_for_entry) == "function" then
-    controller:invalidate_output_preview_for_entry(manager)
-  end
-  if type(controller.refresh_loaded_dashboard) == "function" then
-    controller:refresh_loaded_dashboard(root)
-  end
-  if ok and type(controller.retry_output_preview_for_entry) == "function" then
-    controller:retry_output_preview_for_entry(manager)
-  end
-  if ok then
-    controller.notify("Started Manager for " .. tostring(mission.name or mission.mission_id))
-  else
-    controller.notify("Failed to start Manager", vim.log.levels.ERROR)
-  end
-  return ok
 end
 
 function M.process_selected_mission_dispatch(controller, mission)
@@ -281,32 +239,6 @@ function M.record_dispatch_summary(controller, summary)
         and summary.missions[1].mission
       or nil,
   }
-end
-
-function M.add_manager_to_mission(controller, mission)
-  mission = type(mission) == "table" and mission or controller:selected_mission_or_notify()
-  if not mission then
-    return false
-  end
-  if mission_mod.find_manager_role(mission) then
-    controller.notify("Mission already has a Manager role")
-    return true
-  end
-  -- Reuse create-workspace-under-mission flow with Manager as the default name.
-  local context = {
-    mission_id = mission.mission_id,
-    mission_name = mission.name,
-    mission_objective = mission.objective,
-    mission_focus_packet = mission.focus_packet,
-    agent_provider = mission.agent_provider,
-    permission_profile = mission.permission_profile,
-    default_name = "Manager",
-  }
-  if type(controller.create_workspace_prompt) ~= "function" then
-    controller.notify("Create workspace is unavailable", vim.log.levels.ERROR)
-    return false
-  end
-  return controller.create_workspace_prompt(context)
 end
 
 function M.run_action(controller, action, target)

@@ -421,27 +421,4 @@ function M.resize_dashboard_stack(controller, line_count, opts)
   return ok
 end
 
-function M.objective_preview_config(_, line_count)
-  local total_width, total_height = editor_size()
-  local max_width = available_dimension(total_width, 4)
-  local max_height = available_dimension(total_height, 4)
-  local width = math.min(max_width, math.min(92, math.max(56, math.floor(total_width * 0.68))))
-  local height = math.min(max_height, math.max(8, (line_count or 1) + 2))
-
-  return {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = " Codux Mission Objective ",
-    title_pos = "center",
-    footer = " q close ",
-    footer_pos = "center",
-    width = width,
-    height = height,
-    col = centered_col(total_width, width),
-    row = centered_row(total_height, height),
-    zindex = 80,
-  }
-end
-
 return M

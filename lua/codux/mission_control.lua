@@ -320,55 +320,6 @@ function M:open_saved_focus_editor(name, root)
   })
 end
 
-function M:objective_preview_config(line_count)
-  return dashboard_layout.objective_preview_config(self, line_count)
-end
-
-function M:view_mission_objective(mission)
-  mission = type(mission) == "table" and mission or self:selected_mission()
-  if not mission then
-    self.notify("No Codux mission selected", vim.log.levels.WARN)
-    return false
-  end
-
-  local bufnr = self.ui.create_scratch_buffer({
-    bufhidden = "wipe",
-    filetype = "codux-mission-objective-preview",
-    modifiable = true,
-  })
-  if not bufnr then
-    self.notify("Failed to create Codux mission objective preview", vim.log.levels.ERROR)
-    return false
-  end
-  ui.disable_buffer_completion(bufnr, { is_loaded_buf = self.is_loaded_buf })
-
-  local lines = vim.split(tostring(mission.objective or "No objective"), "\n", { plain = true })
-  if #lines == 0 then
-    lines = { "No objective" }
-  end
-  self.ui.set_lines(bufnr, lines)
-  pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = bufnr })
-
-  local win_ok, win = pcall(vim.api.nvim_open_win, bufnr, true, self:objective_preview_config(#lines))
-  if not win_ok then
-    self.ui.delete_buffer(bufnr)
-    self.notify("Failed to open Codux mission objective preview", vim.log.levels.ERROR)
-    return false
-  end
-
-  self.ui.set_window_options(win, {
-    wrap = true,
-    linebreak = true,
-    winhighlight = "FloatBorder:WhichKey,FloatTitle:WhichKey",
-  })
-  local function close_preview()
-    self.ui.close_window(win)
-    self.ui.delete_buffer(bufnr)
-  end
-  self.bind_close_keys(bufnr, close_preview, "Close Codux Mission Objective", "n", { escape = true, q = true })
-  return true
-end
-
 function M:delete_saved_mission(name, root, opts)
   opts = type(opts) == "table" and opts or {}
   root = root or self.project_root()

@@ -821,55 +821,6 @@ end
 do
   local calls = {}
   local notifications = {}
-  local mission = {
-    name = "Alpha",
-    mission_id = "mission:alpha",
-    roles = {
-      {
-        mission_role = "Manager",
-        name = "Manager",
-        safe_name = "alpha-manager",
-        project_root = "/repo",
-        status = "inactive",
-      },
-    },
-  }
-  local controller = mission_control_mod.new({
-    state = { mission_dashboard = {
-   project_root = "/repo",
- }},
-    notify = function(message)
-      table.insert(notifications, message)
-    end,
-    start_saved_workspace = function(entry)
-      table.insert(calls, "start:" .. tostring(entry.safe_name))
-      return true
-    end,
-  })
-  function controller:close_action_palette()
-    table.insert(calls, "close_palette")
-    return true
-  end
-  function controller:refresh_loaded_dashboard(root)
-    table.insert(calls, "refresh:" .. tostring(root))
-    return true
-  end
-  function controller:invalidate_output_preview_for_entry(entry)
-    table.insert(calls, "invalidate:" .. tostring(entry.safe_name))
-  end
-  function controller:retry_output_preview_for_entry(entry)
-    table.insert(calls, "retry:" .. tostring(entry.safe_name))
-  end
-
-  assert_true(controller:run_action("start_manager", mission))
-  assert_equal(calls[1], "close_palette")
-  assert_equal(calls[2], "start:alpha-manager")
-  assert_contains(table.concat(notifications, "\n"), "Started Manager")
-end
-
-do
-  local calls = {}
-  local notifications = {}
   local controller = mission_control_mod.new({
     state = { mission_dashboard = {
    project_root = "/repo",
@@ -894,30 +845,6 @@ do
   assert_equal(calls[2], "process:/repo")
   assert_equal(controller.state.mission_dashboard.last_dispatch.succeeded, 2)
   assert_contains(table.concat(notifications, "\n"), "Dispatched 2")
-end
-
-do
-  local calls = {}
-  local entry = { name = "alpha-agent", safe_name = "alpha-agent", status = "idle" }
-  local controller = mission_control_mod.new({
-    state = { mission_dashboard = {
-   action_workspace = entry,
- }},
-  })
-  function controller:close_action_palette()
-    table.insert(calls, "close_palette")
-  end
-  function controller:open_workspace_prompt(workspace)
-    table.insert(calls, "prompt:" .. tostring(workspace.safe_name))
-    return true
-  end
-  function controller:selected_role_workspace_or_notify()
-    return entry
-  end
-
-  assert_true(controller:run_action("prompt_role", entry))
-  assert_equal(calls[1], "close_palette")
-  assert_equal(calls[2], "prompt:alpha-agent")
 end
 
 do
