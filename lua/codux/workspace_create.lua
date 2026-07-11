@@ -132,10 +132,14 @@ function M:open_create_footer(win)
 end
 
 function M:instruction_editor_config(line_count)
+  -- Match mission objective editor geometry/stacking so dashboard edit-instructions
+  -- floats are the same size and sit above Mission Control (zindex 80).
   local total_width = math.max(1, vim.o.columns)
   local total_height = math.max(1, vim.o.lines - vim.o.cmdheight)
-  local width = math.min(96, math.max(58, math.floor(total_width * 0.72)))
-  local height = math.min(math.max(11, line_count or 1), math.max(8, total_height - 4))
+  local max_width = math.max(1, total_width - 4)
+  local max_height = math.max(1, total_height - 4)
+  local width = math.min(max_width, math.min(96, math.max(58, math.floor(total_width * 0.72))))
+  local height = math.min(max_height, math.max(10, line_count or 1))
 
   return {
     relative = "editor",
@@ -149,6 +153,7 @@ function M:instruction_editor_config(line_count)
     height = height,
     col = math.max(0, math.floor((total_width - width) / 2)),
     row = math.max(0, math.floor((total_height - height) / 2)),
+    zindex = 80,
   }
 end
 

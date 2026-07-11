@@ -5,6 +5,59 @@ local assert_true = h.assert_true
 local assert_contains = h.assert_contains
 
 local workspace_create_mod = require("codux.workspace_create")
+local mission_control_mod = require("codux.mission_control")
+
+local function with_editor_size(columns, lines, callback)
+  local old_columns = vim.o.columns
+  local old_lines = vim.o.lines
+  local old_cmdheight = vim.o.cmdheight
+  vim.o.columns = columns
+  vim.o.lines = lines
+  vim.o.cmdheight = 1
+
+  local ok, err = pcall(callback)
+  vim.o.columns = old_columns
+  vim.o.lines = old_lines
+  vim.o.cmdheight = old_cmdheight
+  if not ok then
+    error(err, 0)
+  end
+end
+
+do
+  local controller = workspace_create_mod.new({})
+  local mission = mission_control_mod.new({})
+
+  with_editor_size(140, 40, function()
+    local config = controller:instruction_editor_config(1)
+    local objective = mission:objective_editor_config(1)
+    assert_equal(config.width, 96)
+    assert_equal(config.height, 10)
+    assert_equal(config.zindex, 80)
+    assert_equal(config.width, objective.width)
+    assert_equal(config.height, objective.height)
+    assert_equal(config.zindex, objective.zindex)
+    assert_equal(config.title, " Workspace Instruction ")
+  end)
+
+  with_editor_size(42, 12, function()
+    local config = controller:instruction_editor_config(20)
+    local objective = mission:objective_editor_config(20)
+    assert_true(config.width <= 38)
+    assert_true(config.height <= 7)
+    assert_equal(config.width, objective.width)
+    assert_equal(config.height, objective.height)
+    assert_equal(config.zindex, 80)
+  end)
+
+  with_editor_size(120, 40, function()
+    local config = controller:instruction_editor_config(20)
+    local objective = mission:objective_editor_config(20)
+    assert_equal(config.width, objective.width)
+    assert_equal(config.height, objective.height)
+    assert_equal(config.zindex, objective.zindex)
+  end)
+end
 
 do
   h.with_vim_api({
