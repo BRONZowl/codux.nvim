@@ -323,10 +323,6 @@ Outside tmux, creation stops with `no tmux session running`.
 
 State lives in `stdpath("data")/codux/workspaces.json`. Non-empty project instruction files override the JSON copy.
 
-<p align="center">
-  <img src="assets/codux-workspaces.gif" alt="Codux workspaces demo" width="800">
-</p>
-
 ---
 
 ## Mission Control
@@ -460,17 +456,13 @@ Grok monitoring reports **current-window rate-limit headroom**, not lifetime spe
 
 ## Showcase / Demos
 
-<p align="center">
-  <img src="assets/codux-demo.gif" alt="codux.nvim demo" width="800">
-</p>
-
 | Demo | Asset |
 | --- | --- |
-| Single-session agent + context send | `assets/codux-demo.gif` |
-| Workspaces | `assets/codux-workspaces.gif` |
 | Codux Doctor | `assets/codux-doctor-full.png` |
 
 <!-- Add more as you capture them:
+| Single-session agent + context send | `assets/codux-demo.gif` |
+| Workspaces | `assets/codux-workspaces.gif` |
 | Mission Control dashboard | `assets/codux-mission-control.gif` |
 | Send selection workflow | `assets/codux-send-selection.gif` |
 | Provider switch (Codex ↔ Grok) | `assets/codux-providers.gif` |
