@@ -407,6 +407,7 @@ Codux does **not** store provider API keys; auth stays with the Codex/Grok CLIs 
 - Workspace **launch scripts**, **settings**, **instruction files**, and **workspace state** are written with user-only permissions when the OS allows (`rw-------` / runtime dir `rwx------`).
 - Runtime sockets and launch files live under `stdpath("run")` (or another private state/cache dir), **not** shared `/tmp`.
 - **Optional:** `security.scrub_prompts = true` masks common secret patterns in prompts sent to agents (default **off**, so intentional secret-review still works).
+- **Optional:** `security.audit_scrubs = true` surfaces redaction **counters only** (text/prompt scrub counts) in `:CoduxDoctor` and `health_info().redact_audit` — never logs secret values.
 - **Residual risk:** agent terminal buffers and CLI session logs can still contain secrets you paste into prompts; Neovim `--listen` sockets are local-trust. Prefer trusted single-user machines for agent work. Codux does not control Grok/Codex CLI telemetry — set that in the CLI configs if needed.
 
 Inspect usage errors without dumping RPC bodies:

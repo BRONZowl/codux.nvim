@@ -103,6 +103,11 @@ function M.doctor_lines(deps)
     )
   end
 
+  local audit_line = redact.audit_summary_line(config)
+  if audit_line then
+    add("[ok]", audit_line)
+  end
+
   local state_file = type(deps.workspace_state_file) == "function" and deps.workspace_state_file() or nil
   if type(state_file) == "string" and state_file ~= "" then
     local state_dir = vim.fn.fnamemodify(state_file, ":h")

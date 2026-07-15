@@ -35,10 +35,12 @@ function M.defaults()
       refresh_ms = 60000,
       timeout_ms = 5000,
     },
-    -- Optional local hardening. scrub_prompts masks common secret patterns in
-    -- agent prompts (off by default so intentional secret-review still works).
+    -- Optional local hardening.
+    -- scrub_prompts: mask common secret patterns in agent prompts (default off).
+    -- audit_scrubs: expose redaction counters via doctor / health_info (counts only).
     security = {
       scrub_prompts = false,
+      audit_scrubs = false,
     },
     workspaces = {
       enabled = true,

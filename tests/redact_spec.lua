@@ -38,6 +38,30 @@ do
 end
 
 do
+  -- Multi-line prompt with env + bearer mixed into code review context.
+  local multi = table.concat({
+    "Review this .env snippet:",
+    "OPENAI_API_KEY=sk-multiline-secret-value",
+    "XAI_API_KEY: \"xai-another-secret-value\"",
+    "Authorization: Bearer multi.line-token_value",
+    "function ok() return 1 end",
+  }, "\n")
+  local redacted = redact.redact_text(multi)
+  assert_equal(redacted:find("sk-multiline-secret-value", 1, true), nil)
+  assert_equal(redacted:find("xai-another-secret-value", 1, true), nil)
+  assert_equal(redacted:find("multi.line-token_value", 1, true), nil)
+  assert_contains(redacted, "function ok() return 1 end")
+  assert_contains(redacted, "Review this .env snippet:")
+end
+
+do
+  -- Quoted env forms
+  local redacted = redact.redact_text('export GITHUB_TOKEN="ghp_quotedtokenvalue12"')
+  assert_equal(redacted:find("ghp_quotedtokenvalue12", 1, true), nil)
+  assert_contains(redacted, "GITHUB_TOKEN")
+end
+
+do
   assert_true(redact.contains_secret_value("codex --api-key sk-abc123def"))
   assert_false(redact.contains_secret_value("codex -s workspace-write -a on-request"))
 end
@@ -48,11 +72,12 @@ do
       codex = { default_cmd = "codex --api-key sk-hidden" },
       grok = { default_cmd = "grok", api_key = "drop-me" },
     },
-    security = { scrub_prompts = true },
+    security = { scrub_prompts = true, audit_scrubs = true },
   })
   assert_equal(public.providers.codex.default_cmd, "codex")
   assert_nil(public.providers.grok.api_key)
   assert_equal(public.security.scrub_prompts, true)
+  assert_equal(public.security.audit_scrubs, true)
 end
 
 do
@@ -61,6 +86,35 @@ do
   assert_true(redact.scrub_prompts_enabled({ security = { scrub_prompts = true } }))
   assert_equal(redact.maybe_scrub_prompt("sk-abc123token", {}), "sk-abc123token")
   assert_equal(redact.maybe_scrub_prompt("sk-abc123token", { security = { scrub_prompts = true } }), "[REDACTED]")
+end
+
+do
+  redact.reset_audit_stats()
+  local before = redact.audit_stats()
+  assert_equal(before.text_calls, 0)
+  assert_equal(before.text_redacted, 0)
+  assert_equal(before.prompt_calls, 0)
+  assert_equal(before.prompt_scrubbed, 0)
+
+  redact.redact_text("no secrets here")
+  redact.redact_text("Bearer super.secret-token-value")
+  -- Detection must not inflate counters.
+  redact.contains_secret_value("sk-detectonlytoken")
+
+  local mid = redact.audit_stats()
+  assert_equal(mid.text_calls, 2)
+  assert_equal(mid.text_redacted, 1)
+
+  redact.maybe_scrub_prompt("sk-promptscrubtoken", { security = { scrub_prompts = false } })
+  redact.maybe_scrub_prompt("sk-promptscrubtoken", { security = { scrub_prompts = true } })
+  local after = redact.audit_stats()
+  assert_equal(after.prompt_calls, 2)
+  assert_equal(after.prompt_scrubbed, 1)
+
+  assert_nil(redact.audit_summary_line({ security = { audit_scrubs = false } }))
+  local line = redact.audit_summary_line({ security = { audit_scrubs = true } })
+  assert_contains(line, "redact audit:")
+  assert_contains(line, "prompts 1/2 scrubbed")
 end
 
 do

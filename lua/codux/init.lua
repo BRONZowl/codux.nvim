@@ -1075,6 +1075,18 @@ function M.health_info()
       last_error = state.token_usage.last_error,
       refreshed_at = state.token_usage.refreshed_at,
     },
+    -- Counts only (no secret material). Present when security.audit_scrubs is on,
+    -- or always as a lightweight snapshot for debugging.
+    redact_audit = (function()
+      local ok, redact = pcall(require, "codux.redact")
+      if not ok or type(redact.audit_stats) ~= "function" then
+        return nil
+      end
+      if type(redact.audit_scrubs_enabled) == "function" and not redact.audit_scrubs_enabled(config) then
+        return nil
+      end
+      return redact.audit_stats()
+    end)(),
     workspace = state.workspace,
     workspace_state_file = workspace_state_file(),
     workspace_instruction_directory = app.workspace_instruction_directory(workspace_manager_project_root()),

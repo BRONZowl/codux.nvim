@@ -33,6 +33,39 @@ local SECRET_ENV_NAMES = {
 
 local MASK = "[REDACTED]"
 
+-- Session-local counters (no secret content stored).
+local stats = {
+  text_calls = 0,
+  text_redacted = 0,
+  prompt_calls = 0,
+  prompt_scrubbed = 0,
+}
+
+function M.reset_audit_stats()
+  stats = {
+    text_calls = 0,
+    text_redacted = 0,
+    prompt_calls = 0,
+    prompt_scrubbed = 0,
+  }
+end
+
+--- Snapshot of redaction activity for health/doctor (counts only).
+function M.audit_stats()
+  return {
+    text_calls = stats.text_calls,
+    text_redacted = stats.text_redacted,
+    prompt_calls = stats.prompt_calls,
+    prompt_scrubbed = stats.prompt_scrubbed,
+  }
+end
+
+function M.audit_scrubs_enabled(config)
+  config = type(config) == "table" and config or {}
+  local security = type(config.security) == "table" and config.security or {}
+  return security.audit_scrubs == true
+end
+
 function M.is_secret_key(key)
   if type(key) ~= "string" then
     return false
@@ -68,9 +101,17 @@ function M.redact_command_value(value)
 end
 
 --- Mask common secret *values* embedded in free-form text.
-function M.redact_text(value)
+--- opts.audit (default true) increments session counters when content changes.
+function M.redact_text(value, opts)
+  opts = type(opts) == "table" and opts or {}
+  local audit = opts.audit ~= false
+
   if type(value) ~= "string" or value == "" then
     return value
+  end
+
+  if audit then
+    stats.text_calls = stats.text_calls + 1
   end
 
   local text = value
@@ -91,9 +132,19 @@ function M.redact_text(value)
   text = text:gsub("(%-%-?[%w_-]*[Ss][Ee][Cc][Rr][Ee][Tt][%s=]+)(%S+)", "%1" .. MASK)
   text = text:gsub("(%-%-?[%w_-]*[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd][%s=]+)(%S+)", "%1" .. MASK)
 
-  -- ENV_NAME=value for known secret env names
+  -- ENV_NAME=value for known secret env names (quoted or bare)
   for _, name in ipairs(SECRET_ENV_NAMES) do
-    text = text:gsub("(" .. name .. "%s*[=:]%s*)(%S+)", "%1" .. MASK)
+    text = text:gsub("(" .. name .. "%s*[=:]%s*)([\"']?)([^%s\"']+)(%2)", "%1%2" .. MASK .. "%4")
+    text = text:gsub("(" .. name .. "%s*[=:]%s*)(%S+)", function(prefix, rest)
+      if rest:sub(1, #MASK) == MASK then
+        return prefix .. rest
+      end
+      return prefix .. MASK
+    end)
+  end
+
+  if audit and text ~= value then
+    stats.text_redacted = stats.text_redacted + 1
   end
 
   return text
@@ -103,7 +154,8 @@ function M.contains_secret_value(value)
   if type(value) ~= "string" or value == "" then
     return false
   end
-  return M.redact_text(value) ~= value
+  -- Detection-only: do not bump audit counters.
+  return M.redact_text(value, { audit = false }) ~= value
 end
 
 --- Deep-copy table with secret keys removed and command fields reduced to executables.
@@ -174,10 +226,30 @@ function M.maybe_scrub_prompt(prompt, config)
   if type(prompt) ~= "string" then
     return prompt
   end
+  stats.prompt_calls = stats.prompt_calls + 1
   if not M.scrub_prompts_enabled(config) then
     return prompt
   end
-  return M.redact_text(prompt)
+  local scrubbed = M.redact_text(prompt)
+  if scrubbed ~= prompt then
+    stats.prompt_scrubbed = stats.prompt_scrubbed + 1
+  end
+  return scrubbed
+end
+
+--- One-line summary for doctor (no secret material).
+function M.audit_summary_line(config)
+  if not M.audit_scrubs_enabled(config) then
+    return nil
+  end
+  local s = M.audit_stats()
+  return string.format(
+    "redact audit: text %d/%d redacted, prompts %d/%d scrubbed",
+    s.text_redacted,
+    s.text_calls,
+    s.prompt_scrubbed,
+    s.prompt_calls
+  )
 end
 
 --- Scan provider commands for secret-like substrings (doctor warnings).
