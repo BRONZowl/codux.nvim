@@ -95,6 +95,11 @@ do
   assert_equal(before.text_redacted, 0)
   assert_equal(before.prompt_calls, 0)
   assert_equal(before.prompt_scrubbed, 0)
+  assert_nil(before.text_redaction_rate)
+  assert_nil(before.prompt_scrub_rate)
+  assert_nil(before.session_started_at)
+  assert_nil(before.last_redact_at)
+  assert_nil(before.last_prompt_scrub_at)
 
   redact.redact_text("no secrets here")
   redact.redact_text("Bearer super.secret-token-value")
@@ -104,17 +109,44 @@ do
   local mid = redact.audit_stats()
   assert_equal(mid.text_calls, 2)
   assert_equal(mid.text_redacted, 1)
+  assert_equal(mid.text_redaction_rate, 50)
+  assert_true(type(mid.session_started_at) == "number")
+  assert_true(type(mid.last_redact_at) == "number")
+  assert_nil(mid.last_prompt_scrub_at)
+
+  local line_mid = redact.audit_summary_line({ security = { audit_scrubs = true } })
+  assert_contains(line_mid, "text 1/2 (50%)")
+  assert_contains(line_mid, "prompts 0/0")
 
   redact.maybe_scrub_prompt("sk-promptscrubtoken", { security = { scrub_prompts = false } })
   redact.maybe_scrub_prompt("sk-promptscrubtoken", { security = { scrub_prompts = true } })
   local after = redact.audit_stats()
   assert_equal(after.prompt_calls, 2)
   assert_equal(after.prompt_scrubbed, 1)
+  assert_equal(after.prompt_scrub_rate, 50)
+  -- Scrub path also runs redact_text (audited).
+  assert_equal(after.text_calls, 3)
+  assert_equal(after.text_redacted, 2)
+  assert_equal(after.text_redaction_rate, 66)
+  assert_true(type(after.last_prompt_scrub_at) == "number")
 
   assert_nil(redact.audit_summary_line({ security = { audit_scrubs = false } }))
   local line = redact.audit_summary_line({ security = { audit_scrubs = true } })
   assert_contains(line, "redact audit:")
-  assert_contains(line, "prompts 1/2 scrubbed")
+  assert_contains(line, "text 2/3 (66%)")
+  assert_contains(line, "prompts 1/2 (50%)")
+end
+
+do
+  -- Known ratio flooring: 1 of 3 → 33%.
+  redact.reset_audit_stats()
+  redact.redact_text("clean")
+  redact.redact_text("still clean")
+  redact.redact_text("sk-onetokenvalue")
+  local s = redact.audit_stats()
+  assert_equal(s.text_calls, 3)
+  assert_equal(s.text_redacted, 1)
+  assert_equal(s.text_redaction_rate, 33)
 end
 
 do

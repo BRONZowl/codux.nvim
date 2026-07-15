@@ -39,7 +39,30 @@ local stats = {
   text_redacted = 0,
   prompt_calls = 0,
   prompt_scrubbed = 0,
+  session_started_at = nil,
+  last_redact_at = nil,
+  last_prompt_scrub_at = nil,
 }
+
+local function now_unix()
+  return os.time()
+end
+
+local function mark_session_started()
+  if stats.session_started_at == nil then
+    stats.session_started_at = now_unix()
+  end
+end
+
+--- Integer percent rate, or nil when there are no samples.
+local function rate_percent(numerator, denominator)
+  numerator = tonumber(numerator) or 0
+  denominator = tonumber(denominator) or 0
+  if denominator <= 0 then
+    return nil
+  end
+  return math.floor((100 * numerator) / denominator)
+end
 
 function M.reset_audit_stats()
   stats = {
@@ -47,16 +70,24 @@ function M.reset_audit_stats()
     text_redacted = 0,
     prompt_calls = 0,
     prompt_scrubbed = 0,
+    session_started_at = nil,
+    last_redact_at = nil,
+    last_prompt_scrub_at = nil,
   }
 end
 
---- Snapshot of redaction activity for health/doctor (counts only).
+--- Snapshot of redaction activity for health/doctor (counts + lazy rates).
 function M.audit_stats()
   return {
     text_calls = stats.text_calls,
     text_redacted = stats.text_redacted,
+    text_redaction_rate = rate_percent(stats.text_redacted, stats.text_calls),
     prompt_calls = stats.prompt_calls,
     prompt_scrubbed = stats.prompt_scrubbed,
+    prompt_scrub_rate = rate_percent(stats.prompt_scrubbed, stats.prompt_calls),
+    session_started_at = stats.session_started_at,
+    last_redact_at = stats.last_redact_at,
+    last_prompt_scrub_at = stats.last_prompt_scrub_at,
   }
 end
 
@@ -111,6 +142,7 @@ function M.redact_text(value, opts)
   end
 
   if audit then
+    mark_session_started()
     stats.text_calls = stats.text_calls + 1
   end
 
@@ -145,6 +177,7 @@ function M.redact_text(value, opts)
 
   if audit and text ~= value then
     stats.text_redacted = stats.text_redacted + 1
+    stats.last_redact_at = now_unix()
   end
 
   return text
@@ -226,6 +259,7 @@ function M.maybe_scrub_prompt(prompt, config)
   if type(prompt) ~= "string" then
     return prompt
   end
+  mark_session_started()
   stats.prompt_calls = stats.prompt_calls + 1
   if not M.scrub_prompts_enabled(config) then
     return prompt
@@ -233,8 +267,16 @@ function M.maybe_scrub_prompt(prompt, config)
   local scrubbed = M.redact_text(prompt)
   if scrubbed ~= prompt then
     stats.prompt_scrubbed = stats.prompt_scrubbed + 1
+    stats.last_prompt_scrub_at = now_unix()
   end
   return scrubbed
+end
+
+local function format_ratio(label, redacted, calls, rate)
+  if calls == 0 then
+    return string.format("%s 0/0", label)
+  end
+  return string.format("%s %d/%d (%d%%)", label, redacted, calls, rate or 0)
 end
 
 --- One-line summary for doctor (no secret material).
@@ -243,13 +285,10 @@ function M.audit_summary_line(config)
     return nil
   end
   local s = M.audit_stats()
-  return string.format(
-    "redact audit: text %d/%d redacted, prompts %d/%d scrubbed",
-    s.text_redacted,
-    s.text_calls,
-    s.prompt_scrubbed,
-    s.prompt_calls
-  )
+  return "redact audit: "
+    .. format_ratio("text", s.text_redacted, s.text_calls, s.text_redaction_rate)
+    .. " · "
+    .. format_ratio("prompts", s.prompt_scrubbed, s.prompt_calls, s.prompt_scrub_rate)
 end
 
 --- Scan provider commands for secret-like substrings (doctor warnings).
