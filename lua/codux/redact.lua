@@ -33,16 +33,20 @@ local SECRET_ENV_NAMES = {
 
 local MASK = "[REDACTED]"
 
+local function empty_stats()
+  return {
+    text_calls = 0,
+    text_redacted = 0,
+    prompt_calls = 0,
+    prompt_scrubbed = 0,
+    session_started_at = nil,
+    last_redact_at = nil,
+    last_prompt_scrub_at = nil,
+  }
+end
+
 -- Session-local counters (no secret content stored).
-local stats = {
-  text_calls = 0,
-  text_redacted = 0,
-  prompt_calls = 0,
-  prompt_scrubbed = 0,
-  session_started_at = nil,
-  last_redact_at = nil,
-  last_prompt_scrub_at = nil,
-}
+local stats = empty_stats()
 
 local function now_unix()
   return os.time()
@@ -64,16 +68,14 @@ local function rate_percent(numerator, denominator)
   return math.floor((100 * numerator) / denominator)
 end
 
+local function security_flag(config, name)
+  config = type(config) == "table" and config or {}
+  local security = type(config.security) == "table" and config.security or {}
+  return security[name] == true
+end
+
 function M.reset_audit_stats()
-  stats = {
-    text_calls = 0,
-    text_redacted = 0,
-    prompt_calls = 0,
-    prompt_scrubbed = 0,
-    session_started_at = nil,
-    last_redact_at = nil,
-    last_prompt_scrub_at = nil,
-  }
+  stats = empty_stats()
 end
 
 --- Snapshot of redaction activity for health/doctor (counts + lazy rates).
@@ -92,9 +94,15 @@ function M.audit_stats()
 end
 
 function M.audit_scrubs_enabled(config)
-  config = type(config) == "table" and config or {}
-  local security = type(config.security) == "table" and config.security or {}
-  return security.audit_scrubs == true
+  return security_flag(config, "audit_scrubs")
+end
+
+--- Stats for health_info when audit_scrubs is enabled; otherwise nil.
+function M.audit_for_health(config)
+  if not M.audit_scrubs_enabled(config) then
+    return nil
+  end
+  return M.audit_stats()
 end
 
 function M.is_secret_key(key)
@@ -164,12 +172,11 @@ function M.redact_text(value, opts)
   text = text:gsub("(%-%-?[%w_-]*[Ss][Ee][Cc][Rr][Ee][Tt][%s=]+)(%S+)", "%1" .. MASK)
   text = text:gsub("(%-%-?[%w_-]*[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd][%s=]+)(%S+)", "%1" .. MASK)
 
-  -- ENV_NAME=value for known secret env names (quoted or bare)
+  -- ENV_NAME=value / ENV_NAME: value (optional quotes) for known secret env names.
   for _, name in ipairs(SECRET_ENV_NAMES) do
-    text = text:gsub("(" .. name .. "%s*[=:]%s*)([\"']?)([^%s\"']+)(%2)", "%1%2" .. MASK .. "%4")
-    text = text:gsub("(" .. name .. "%s*[=:]%s*)(%S+)", function(prefix, rest)
-      if rest:sub(1, #MASK) == MASK then
-        return prefix .. rest
+    text = text:gsub("(" .. name .. "%s*[=:]%s*)([\"']?)([^%s\"']+)([\"']?)", function(prefix, q1, _value, q2)
+      if q1 ~= "" and q2 == q1 then
+        return prefix .. q1 .. MASK .. q2
       end
       return prefix .. MASK
     end)
@@ -249,9 +256,7 @@ end
 
 --- Whether security.scrub_prompts is enabled on a config table.
 function M.scrub_prompts_enabled(config)
-  config = type(config) == "table" and config or {}
-  local security = type(config.security) == "table" and config.security or {}
-  return security.scrub_prompts == true
+  return security_flag(config, "scrub_prompts")
 end
 
 --- Apply optional prompt scrubbing based on config.

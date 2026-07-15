@@ -666,6 +666,35 @@ function M:write_instruction_file(root, safe_name, instruction)
   return self.store:write_instruction_file(root, safe_name, instruction)
 end
 
+--- Ensure workspace.instruction_file points at on-disk body for argv-safe refs.
+function M:ensure_instruction_file(workspace)
+  if type(workspace) ~= "table" then
+    return nil
+  end
+  local instruction = type(workspace.resolved_instruction) == "string" and workspace.resolved_instruction or ""
+  local instruction_file = type(workspace.instruction_file) == "string" and workspace.instruction_file or ""
+  if instruction == "" or instruction_file ~= "" then
+    return workspace.instruction_file
+  end
+  if type(workspace.project_root) ~= "string" or type(workspace.safe_name) ~= "string" then
+    return nil
+  end
+
+  local path = self:instruction_file_path(workspace.project_root, workspace.safe_name)
+  if type(path) == "string" and path ~= "" then
+    self:write_instruction_file(workspace.project_root, workspace.safe_name, instruction)
+    workspace.instruction_file = path
+    return path
+  end
+
+  local workspace_remote = require("codux.workspace_remote")
+  local launch = require("codux.workspace_launch")
+  path = workspace_remote.server_dir() .. "/" .. workspace.safe_name .. ".instructions.md"
+  launch.write_private_file(path, instruction)
+  workspace.instruction_file = path
+  return path
+end
+
 function M:delete_instruction_file(root, safe_name)
   return self.store:delete_instruction_file(root, safe_name)
 end

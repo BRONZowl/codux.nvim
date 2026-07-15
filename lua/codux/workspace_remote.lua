@@ -1,3 +1,4 @@
+local fs = require("codux.fs")
 local text_util = require("codux.text")
 local workspace_git = require("codux.workspace_git")
 
@@ -42,24 +43,14 @@ local function is_shared_temp_base(base)
 end
 
 local function secure_mkdir(path)
-  if type(path) ~= "string" or path == "" or type(vim.fn) ~= "table" or type(vim.fn.mkdir) ~= "function" then
+  if type(path) ~= "string" or path == "" then
     return false
   end
-  -- 0700 when supported (Neovim passes mode as the third argument).
-  local ok, result = pcall(vim.fn.mkdir, path, "p", 448)
-  if not ok or (result ~= 1 and result ~= 0 and not is_directory(path)) then
-    ok, result = pcall(vim.fn.mkdir, path, "p")
-    if not ok or (result ~= 1 and not is_directory(path)) then
-      -- Test doubles may return 1 without creating a real directory.
-      if not ok or result ~= 1 then
-        return false
-      end
-    end
+  if fs.ensure_dir(path) then
+    return true
   end
-  if type(vim.fn.setfperm) == "function" then
-    pcall(vim.fn.setfperm, path, "rwx------")
-  end
-  return is_directory(path) or result == 1
+  -- Test doubles may claim success without a real directory.
+  return is_directory(path)
 end
 
 --- Runtime directory for sockets and launch scripts.

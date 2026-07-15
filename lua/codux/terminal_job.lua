@@ -1,6 +1,7 @@
 local ui = require("codux.ui")
 local providers = require("codux.providers")
 local settings = require("codux.settings")
+local redact = require("codux.redact")
 
 local M = {}
 
@@ -279,10 +280,7 @@ end
 
 function M.send_to_agent(controller, message)
   if type(message) == "string" and message ~= "" then
-    local ok, redact = pcall(require, "codux.redact")
-    if ok and type(redact.maybe_scrub_prompt) == "function" then
-      message = redact.maybe_scrub_prompt(message, controller:config())
-    end
+    message = redact.maybe_scrub_prompt(message, controller:config())
   end
 
   local running = controller:terminal_running()

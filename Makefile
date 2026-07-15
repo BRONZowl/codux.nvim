@@ -68,6 +68,7 @@ TEST_SPECS := \
 	tests/token_monitor_spec.lua \
 	tests/health_public_config_spec.lua \
 	tests/redact_spec.lua \
+	tests/fs_spec.lua \
 	tests/mission_orchestrate_spec.lua
 
 test:

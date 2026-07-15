@@ -86,12 +86,11 @@ function M.send_startup_plan_toggle(controller)
 end
 
 function M.paste_startup_prompt(controller, initial_prompt)
+  -- Startup paste does not go through send_to_agent; scrub here when enabled.
   if type(initial_prompt) == "string" and initial_prompt ~= "" then
-    local ok, redact = pcall(require, "codux.redact")
-    if ok and type(redact.maybe_scrub_prompt) == "function" then
-      local config = type(controller.config) == "function" and controller:config() or nil
-      initial_prompt = redact.maybe_scrub_prompt(initial_prompt, config)
-    end
+    local redact = require("codux.redact")
+    local config = type(controller.config) == "function" and controller:config() or nil
+    initial_prompt = redact.maybe_scrub_prompt(initial_prompt, config)
   end
   local paste = "\27[200~" .. initial_prompt .. "\27[201~\r"
   local paste_ok = M.send_startup_input(controller, "startup prompt", paste)

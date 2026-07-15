@@ -1,3 +1,4 @@
+local fs = require("codux.fs")
 local providers = require("codux.providers")
 
 local M = {}
@@ -7,12 +8,6 @@ local function fnameescape(value)
     return vim.fn.fnameescape(value)
   end
   return tostring(value or ""):gsub("([ \\])", "\\%1")
-end
-
-local function set_private_file_mode(path)
-  if type(path) == "string" and path ~= "" and type(vim.fn.setfperm) == "function" then
-    pcall(vim.fn.setfperm, path, "rw-------")
-  end
 end
 
 function M.shell_env_assignment(name, value)
@@ -85,32 +80,7 @@ function M.encode_payload_lua(payload)
 end
 
 function M.write_private_file(path, content)
-  if type(path) ~= "string" or path == "" then
-    return false, "missing path"
-  end
-  local directory = vim.fn.fnamemodify(path, ":h")
-  if directory ~= "" then
-    local mkdir_ok, mkdir_result = pcall(vim.fn.mkdir, directory, "p", 448)
-    if not mkdir_ok or (mkdir_result ~= 1 and mkdir_result ~= 0) then
-      mkdir_ok, mkdir_result = pcall(vim.fn.mkdir, directory, "p")
-      if not mkdir_ok or (mkdir_result ~= 1 and type(vim.fn.isdirectory) == "function" and vim.fn.isdirectory(directory) ~= 1) then
-        if not mkdir_ok or mkdir_result ~= 1 then
-          return false, "Failed to create directory"
-        end
-      end
-    end
-    set_private_file_mode(directory)
-    if type(vim.fn.setfperm) == "function" then
-      pcall(vim.fn.setfperm, directory, "rwx------")
-    end
-  end
-
-  local ok, result = pcall(vim.fn.writefile, { tostring(content or "") }, path)
-  if not ok or result ~= 0 then
-    return false, "Failed to write file"
-  end
-  set_private_file_mode(path)
-  return true, nil
+  return fs.write_private(path, content)
 end
 
 --- Bootstrap script keeps identifiers only. Sensitive prompt/instruction text is

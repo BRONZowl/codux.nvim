@@ -1,3 +1,4 @@
+local fs = require("codux.fs")
 local grok_config = require("codux.grok_config")
 local json = require("codux.json")
 local providers = require("codux.providers")
@@ -64,9 +65,7 @@ function M.write(data)
     return false, "Failed to write Codux settings"
   end
 
-  if type(vim.fn.setfperm) == "function" then
-    pcall(vim.fn.setfperm, path, "rw-------")
-  end
+  fs.set_private_file(path)
   return true
 end
 
