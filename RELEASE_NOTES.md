@@ -2,8 +2,24 @@
 
 ## Unreleased
 
-- Removed Grok TPM/RPM monitoring because reading xAI rate-limit headers required recurring inference requests that consumed request and token quota.
-- Kept Codex usage monitoring after auditing its app-server protocol: it calls only `account/rateLimits/read` and does not create a model turn or consume tokens.
+## v1.0.3
+
+Local privacy hardening and usage-monitor correctness.
+
+codux.nvim v1.0.3 stops Grok usage probes that burned inference quota, keeps
+Codex rate-limit monitoring metadata-only, and hardens host-local leakage of
+prompts, instructions, and secret-like strings.
+
+- Removed Grok TPM/RPM monitoring (xAI rate-limit headers require inference requests that consume the quota being measured).
+- Confirmed Codex token monitoring only calls `account/rateLimits/read` via app-server (no model turn / token burn).
+- Redact `health_info().config` (command executables only; strip secret-like keys).
+- Paste initial prompts after TUI ready for all providers so prompts never appear on process argv.
+- File-back workspace instructions (path ref on argv) and slim launch bootstrap with private `.payload.lua` for prompts/objectives.
+- Prefer private runtime dirs (not shared `/tmp`); user-only modes on settings, state, instructions, and launch files.
+- Shared `codux.redact` for notify/doctor masking; optional `security.scrub_prompts` and `security.audit_scrubs` (rates + timestamps).
+- Doctor warns when provider `*_cmd` looks secret-bearing; sanitize token-monitor RPC error text.
+- Refactor: single scrub edge in `send_to_agent`, shared `codux.fs` private writers, `ensure_instruction_file`.
+- README privacy notes and `security` setup options; Mission Control / Manager menu cleanup; README demo GIF / showcase trim.
 
 ## v1.0.2
 
