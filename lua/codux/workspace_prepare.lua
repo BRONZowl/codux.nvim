@@ -247,12 +247,41 @@ function M.prepare(runtime, name, opts)
     workspace.nvim_server = runtime:workspace_launch_server_path(workspace.project_root, workspace.safe_name)
   end
 
+  -- Persist instruction file before launch so argv only needs a path reference.
+  local wrote_new_instruction_file = file_instruction == nil
+    and type(workspace.resolved_instruction) == "string"
+    and trim(workspace.resolved_instruction) ~= ""
+  if type(runtime.instruction_file_path) == "function" then
+    local path = runtime:instruction_file_path(workspace.project_root, workspace.safe_name)
+    if type(path) == "string" and path ~= "" then
+      workspace.instruction_file = path
+    end
+  end
+  local instruction_ok, instruction_error =
+    runtime:write_instruction_file(workspace.project_root, workspace.safe_name, workspace.resolved_instruction)
+  if not instruction_ok then
+    if creating_worktree then
+      local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
+      if cleanup_ok == false then
+        return nil, tostring(instruction_error) .. "; cleanup failed: " .. tostring(cleanup_error)
+      end
+    end
+    return nil, instruction_error
+  end
+
+  local function cleanup_new_instruction_file()
+    if wrote_new_instruction_file and type(runtime.delete_instruction_file) == "function" then
+      pcall(runtime.delete_instruction_file, runtime, workspace.project_root, workspace.safe_name)
+    end
+  end
+
   local should_create_window = not existing_window_id or restarting_inactive
   local launch_script = nil
   if should_create_window then
     local launch_error = nil
     launch_script, launch_error = runtime:write_launch_script(workspace)
     if not launch_script then
+      cleanup_new_instruction_file()
       if creating_worktree then
         local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
         if cleanup_ok == false then
@@ -270,6 +299,7 @@ function M.prepare(runtime, name, opts)
     })
   if not window_id then
     runtime:delete_launch_script(launch_script)
+    cleanup_new_instruction_file()
     local create_error = tmux_window_error(workspace.window_name, tmux_error)
     if creating_worktree then
       local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
@@ -278,25 +308,6 @@ function M.prepare(runtime, name, opts)
       end
     end
     return nil, create_error
-  end
-
-  local wrote_new_instruction_file = file_instruction == nil
-    and type(workspace.resolved_instruction) == "string"
-    and trim(workspace.resolved_instruction) ~= ""
-  local instruction_ok, instruction_error =
-    runtime:write_instruction_file(workspace.project_root, workspace.safe_name, workspace.resolved_instruction)
-  if not instruction_ok then
-    if created then
-      runtime:kill_tmux_window(window_id)
-    end
-    runtime:delete_launch_script(launch_script)
-    if creating_worktree then
-      local cleanup_ok, cleanup_error = runtime:cleanup_created_worktree(base_root, created_worktree_path, created_worktree_branch)
-      if cleanup_ok == false then
-        return nil, tostring(instruction_error) .. "; cleanup failed: " .. tostring(cleanup_error)
-      end
-    end
-    return nil, instruction_error
   end
 
   workspace.window_id = window_id

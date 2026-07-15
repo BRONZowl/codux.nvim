@@ -333,14 +333,21 @@ do
     assert_equal(#env.sent, 0)
   end)
 
-  with_terminal_start_env({}, function(controller, env)
+  -- Execute-mode prompts must be pasted (never appended to process argv).
+  with_terminal_start_env({
+    queue_defer = true,
+  }, function(controller, env)
     assert_true(controller:start_terminal(false, "hello", "codex", { name = "role" }, "auto", {
       hidden = true,
       initial_mode = "execute",
     }))
     assert_equal(controller.state.mode, "execute")
-    assert_equal(env.command_prompt, "hello")
+    assert_nil(env.command_prompt)
     assert_equal(#env.sent, 0)
+    assert_true(#env.scheduled >= 1)
+    env.scheduled[1].callback()
+    assert_equal(#env.sent, 1)
+    assert_equal(env.sent[1], "\27[200~hello\27[201~\r")
     assert_true(controller.state.agent_working)
   end)
 

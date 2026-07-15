@@ -9,6 +9,12 @@ local function fnameescape(value)
   return tostring(value or ""):gsub("([ \\])", "\\%1")
 end
 
+local function set_private_file_mode(path)
+  if type(path) == "string" and path ~= "" and type(vim.fn.setfperm) == "function" then
+    pcall(vim.fn.setfperm, path, "rw-------")
+  end
+end
+
 function M.shell_env_assignment(name, value)
   return name .. "=" .. vim.fn.shellescape(tostring(value or ""))
 end
@@ -30,6 +36,85 @@ function M.lua_string(value)
   return '"' .. escaped .. '"'
 end
 
+function M.launch_base_name(runtime, workspace)
+  workspace = type(workspace) == "table" and workspace or {}
+  local server_dir = runtime:workspace_server_dir()
+  local server = workspace.nvim_server or runtime:workspace_server_path(workspace.project_root, workspace.safe_name)
+  local name = tostring(server or workspace.safe_name or workspace.window_name or "workspace")
+  name = vim.fn.fnamemodify(name, ":t"):gsub("%.sock$", "")
+  if name == "" then
+    name = "workspace"
+  end
+  return server_dir, name
+end
+
+function M.launch_script_path(runtime, workspace)
+  local server_dir, name = M.launch_base_name(runtime, workspace)
+  return server_dir .. "/" .. name .. ".lua"
+end
+
+function M.launch_payload_path(runtime, workspace)
+  local server_dir, name = M.launch_base_name(runtime, workspace)
+  return server_dir .. "/" .. name .. ".payload.lua"
+end
+
+function M.payload_from_workspace(workspace)
+  workspace = type(workspace) == "table" and workspace or {}
+  return {
+    initial_prompt = workspace.initial_prompt or "",
+    mission_objective = workspace.mission_objective or "",
+    mission_focus_packet = workspace.mission_focus_packet or "",
+    custom_instruction = workspace.custom_instruction or "",
+    resolved_instruction = workspace.resolved_instruction or "",
+    instruction_file = workspace.instruction_file or "",
+  }
+end
+
+function M.encode_payload_lua(payload)
+  payload = type(payload) == "table" and payload or {}
+  return table.concat({
+    "return {",
+    "initial_prompt=" .. M.lua_string(payload.initial_prompt or "") .. ",",
+    "mission_objective=" .. M.lua_string(payload.mission_objective or "") .. ",",
+    "mission_focus_packet=" .. M.lua_string(payload.mission_focus_packet or "") .. ",",
+    "custom_instruction=" .. M.lua_string(payload.custom_instruction or "") .. ",",
+    "resolved_instruction=" .. M.lua_string(payload.resolved_instruction or "") .. ",",
+    "instruction_file=" .. M.lua_string(payload.instruction_file or "") .. ",",
+    "}",
+  }, "")
+end
+
+function M.write_private_file(path, content)
+  if type(path) ~= "string" or path == "" then
+    return false, "missing path"
+  end
+  local directory = vim.fn.fnamemodify(path, ":h")
+  if directory ~= "" then
+    local mkdir_ok, mkdir_result = pcall(vim.fn.mkdir, directory, "p", 448)
+    if not mkdir_ok or (mkdir_result ~= 1 and mkdir_result ~= 0) then
+      mkdir_ok, mkdir_result = pcall(vim.fn.mkdir, directory, "p")
+      if not mkdir_ok or (mkdir_result ~= 1 and type(vim.fn.isdirectory) == "function" and vim.fn.isdirectory(directory) ~= 1) then
+        if not mkdir_ok or mkdir_result ~= 1 then
+          return false, "Failed to create directory"
+        end
+      end
+    end
+    set_private_file_mode(directory)
+    if type(vim.fn.setfperm) == "function" then
+      pcall(vim.fn.setfperm, directory, "rwx------")
+    end
+  end
+
+  local ok, result = pcall(vim.fn.writefile, { tostring(content or "") }, path)
+  if not ok or result ~= 0 then
+    return false, "Failed to write file"
+  end
+  set_private_file_mode(path)
+  return true, nil
+end
+
+--- Bootstrap script keeps identifiers only. Sensitive prompt/instruction text is
+--- loaded from a sibling private payload file (deleted after one read).
 function M.bootstrap_lua(workspace)
   workspace = type(workspace) == "table" and workspace or {}
   local root = workspace.project_root or "."
@@ -49,18 +134,15 @@ function M.bootstrap_lua(workspace)
   local mission_id = workspace.mission_id or ""
   local mission_name = workspace.mission_name or ""
   local mission_role = workspace.mission_role or ""
-  local mission_objective = workspace.mission_objective or ""
-  local mission_focus_packet = workspace.mission_focus_packet or ""
   local window_name = workspace.window_name or ""
   local nvim_server = workspace.nvim_server or ""
-  local custom_instruction = workspace.custom_instruction or ""
-  local resolved_instruction = workspace.resolved_instruction or ""
-  local initial_prompt = workspace.initial_prompt or ""
   local initial_mode = workspace.initial_mode or ""
   local open_visible = workspace.open_visible == true
   local agent_session_id = workspace.agent_session_id or ""
   local agent_session_path = workspace.agent_session_path or ""
   local agent_session_captured_at = workspace.agent_session_captured_at or ""
+  local payload_path = workspace.launch_payload or ""
+  local instruction_file = workspace.instruction_file or ""
   if agent_provider ~= "grok" then
     if agent_session_id == "" then
       agent_session_id = workspace.codex_session_id or ""
@@ -73,9 +155,10 @@ function M.bootstrap_lua(workspace)
     end
   end
   local resume_agent_session = workspace.resume_agent_session == true
-  local agent_status = initial_prompt ~= "" and "working" or "idle"
-  local status = initial_prompt ~= "" and "active" or "idle"
-  local show_codux = open_visible or initial_prompt ~= ""
+  local has_prompt = type(workspace.initial_prompt) == "string" and workspace.initial_prompt ~= ""
+  local agent_status = has_prompt and "working" or "idle"
+  local status = has_prompt and "active" or "idle"
+  local show_codux = open_visible or has_prompt
 
   return table.concat({
     "local root=" .. M.lua_string(root),
@@ -83,9 +166,63 @@ function M.bootstrap_lua(workspace)
     "local target_type=" .. M.lua_string(target_type),
     "local profile=" .. M.lua_string(profile),
     "local agent_provider=" .. M.lua_string(agent_provider),
-    "local prompt=" .. M.lua_string(initial_prompt),
+    "local payload_path=" .. M.lua_string(payload_path),
+    "local instruction_file=" .. M.lua_string(instruction_file),
     "local show_codux=" .. tostring(show_codux),
-    "local workspace={name=" .. M.lua_string(name) .. ",safe_name=" .. M.lua_string(safe_name) .. ",project_root=root,target_path=target,target_type=target_type,git_branch=" .. M.lua_string(branch) .. ",workspace_kind=" .. M.lua_string(workspace_kind) .. ",git_common_dir=" .. M.lua_string(git_common_dir) .. ",worktree_path=" .. M.lua_string(worktree_path) .. ",worktree_branch=" .. M.lua_string(worktree_branch) .. ",worktree_base=" .. M.lua_string(worktree_base) .. ",worktree_base_commit=" .. M.lua_string(worktree_base_commit) .. ",mission_id=" .. M.lua_string(mission_id) .. ",mission_name=" .. M.lua_string(mission_name) .. ",mission_role=" .. M.lua_string(mission_role) .. ",mission_objective=" .. M.lua_string(mission_objective) .. ",mission_focus_packet=" .. M.lua_string(mission_focus_packet) .. ",window_name=" .. M.lua_string(window_name) .. ",nvim_server=" .. M.lua_string(nvim_server) .. ",custom_instruction=" .. M.lua_string(custom_instruction) .. ",resolved_instruction=" .. M.lua_string(resolved_instruction) .. ",initial_mode=" .. M.lua_string(initial_mode) .. ",agent_provider=agent_provider,permission_profile=profile,agent_status=" .. M.lua_string(agent_status) .. ",status=" .. M.lua_string(status) .. ",agent_session_id=" .. M.lua_string(agent_session_id) .. ",agent_session_path=" .. M.lua_string(agent_session_path) .. ",agent_session_captured_at=" .. M.lua_string(agent_session_captured_at) .. ",resume_agent_session=" .. tostring(resume_agent_session) .. ",open_visible=" .. tostring(open_visible) .. "}",
+    "local payload={}",
+    "if payload_path~='' then pcall(function() local chunk=loadfile(payload_path); if type(chunk)=='function' then payload=chunk() or {} end end) pcall(vim.fn.delete,payload_path) end",
+    "local prompt=type(payload.initial_prompt)=='string' and payload.initial_prompt or ''",
+    "if instruction_file=='' and type(payload.instruction_file)=='string' then instruction_file=payload.instruction_file end",
+    "local workspace={name="
+      .. M.lua_string(name)
+      .. ",safe_name="
+      .. M.lua_string(safe_name)
+      .. ",project_root=root,target_path=target,target_type=target_type,git_branch="
+      .. M.lua_string(branch)
+      .. ",workspace_kind="
+      .. M.lua_string(workspace_kind)
+      .. ",git_common_dir="
+      .. M.lua_string(git_common_dir)
+      .. ",worktree_path="
+      .. M.lua_string(worktree_path)
+      .. ",worktree_branch="
+      .. M.lua_string(worktree_branch)
+      .. ",worktree_base="
+      .. M.lua_string(worktree_base)
+      .. ",worktree_base_commit="
+      .. M.lua_string(worktree_base_commit)
+      .. ",mission_id="
+      .. M.lua_string(mission_id)
+      .. ",mission_name="
+      .. M.lua_string(mission_name)
+      .. ",mission_role="
+      .. M.lua_string(mission_role)
+      .. ",mission_objective=(type(payload.mission_objective)=='string' and payload.mission_objective) or ''"
+      .. ",mission_focus_packet=(type(payload.mission_focus_packet)=='string' and payload.mission_focus_packet) or ''"
+      .. ",window_name="
+      .. M.lua_string(window_name)
+      .. ",nvim_server="
+      .. M.lua_string(nvim_server)
+      .. ",custom_instruction=(type(payload.custom_instruction)=='string' and payload.custom_instruction) or ''"
+      .. ",resolved_instruction=(type(payload.resolved_instruction)=='string' and payload.resolved_instruction) or ''"
+      .. ",instruction_file=instruction_file"
+      .. ",initial_mode="
+      .. M.lua_string(initial_mode)
+      .. ",agent_provider=agent_provider,permission_profile=profile,agent_status="
+      .. M.lua_string(agent_status)
+      .. ",status="
+      .. M.lua_string(status)
+      .. ",agent_session_id="
+      .. M.lua_string(agent_session_id)
+      .. ",agent_session_path="
+      .. M.lua_string(agent_session_path)
+      .. ",agent_session_captured_at="
+      .. M.lua_string(agent_session_captured_at)
+      .. ",resume_agent_session="
+      .. tostring(resume_agent_session)
+      .. ",open_visible="
+      .. tostring(open_visible)
+      .. ",initial_prompt=prompt}",
     "vim.defer_fn(function()",
     "pcall(vim.cmd,'cd '..vim.fn.fnameescape(root))",
     "local target_win=vim.api.nvim_get_current_win()",
@@ -106,31 +243,21 @@ function M.bootstrap_lua(workspace)
   }, " ")
 end
 
-function M.launch_script_path(runtime, workspace)
-  workspace = type(workspace) == "table" and workspace or {}
-  local server_dir = runtime:workspace_server_dir()
-  local server = workspace.nvim_server or runtime:workspace_server_path(workspace.project_root, workspace.safe_name)
-  local name = tostring(server or workspace.safe_name or workspace.window_name or "workspace")
-  name = vim.fn.fnamemodify(name, ":t"):gsub("%.sock$", "")
-  if name == "" then
-    name = "workspace"
-  end
-  return server_dir .. "/" .. name .. ".lua"
-end
-
 function M.write_launch_script(runtime, workspace)
+  workspace = type(workspace) == "table" and workspace or {}
   local path = M.launch_script_path(runtime, workspace)
-  local directory = vim.fn.fnamemodify(path, ":h")
-  if directory ~= "" then
-    local mkdir_ok, mkdir_result = pcall(vim.fn.mkdir, directory, "p")
-    if not mkdir_ok or mkdir_result ~= 1 then
-      return nil, "Failed to create Codux workspace launch directory"
-    end
+  local payload_path = M.launch_payload_path(runtime, workspace)
+  workspace.launch_payload = payload_path
+
+  local payload_ok, payload_err = M.write_private_file(payload_path, M.encode_payload_lua(M.payload_from_workspace(workspace)))
+  if not payload_ok then
+    return nil, payload_err or "Failed to write Codux workspace launch payload"
   end
 
-  local ok, result = pcall(vim.fn.writefile, { M.bootstrap_lua(workspace) }, path)
-  if not ok or result ~= 0 then
-    return nil, "Failed to write Codux workspace launch script"
+  local ok, err = M.write_private_file(path, M.bootstrap_lua(workspace))
+  if not ok then
+    pcall(vim.fn.delete, payload_path)
+    return nil, err or "Failed to write Codux workspace launch script"
   end
 
   return path, nil
@@ -144,6 +271,10 @@ function M.delete_launch_script(path)
     return true
   end
 
+  local payload_path = path:gsub("%.lua$", ".payload.lua")
+  if payload_path ~= path then
+    pcall(vim.fn.delete, payload_path)
+  end
   local ok = pcall(vim.fn.delete, path)
   return ok
 end
@@ -176,9 +307,12 @@ function M.nvim_command(runtime, workspace)
     nvim_target = workspace.target_path
   end
 
-  local bootstrap_command = "lua " .. M.bootstrap_lua(workspace)
+  -- Prefer luafile so the bootstrap body is never on the process command line.
+  local bootstrap_command
   if type(workspace.launch_script) == "string" and workspace.launch_script ~= "" then
     bootstrap_command = "luafile " .. fnameescape(workspace.launch_script)
+  else
+    bootstrap_command = "lua " .. M.bootstrap_lua(workspace)
   end
 
   local parts = {

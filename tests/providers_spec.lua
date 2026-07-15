@@ -1,5 +1,7 @@
 local h = require("tests.helpers")
 local assert_equal = h.assert_equal
+local assert_true = h.assert_true
+local assert_contains = h.assert_contains
 
 local providers = require("codux.providers")
 
@@ -65,22 +67,39 @@ do
   assert_equal(grok_profiles[3].profile, "danger")
 end
 
+-- Legacy inline text still works when no instruction file is provided.
 assert_equal(
   providers.command_with_instructions("grok", "grok", "Use repo rules."),
   "grok '--rules' 'Use repo rules.'"
 )
+-- Prefer file path: full instruction body never appears on argv.
+do
+  local with_file = providers.command_with_instructions("grok", "grok", "SECRET_RULES_BODY", {
+    instruction_file = "/repo/.agents/codux/builder.md",
+  })
+  assert_contains(with_file, "/repo/.agents/codux/builder.md")
+  assert_equal(with_file:find("SECRET_RULES_BODY", 1, true), nil)
+  assert_contains(with_file, "--rules")
+end
 assert_equal(providers.command_with_prompt("grok", "grok", "hello"), "grok")
+-- Prompts are never put on argv for any provider (paste after TUI ready).
+assert_true(providers.prompt_must_be_pasted("codex"))
+assert_true(providers.prompt_must_be_pasted("grok"))
+assert_true(providers.prompt_must_be_pasted(nil))
 assert_equal(providers.command_with_resume("grok", "grok"), "grok '--resume'")
 assert_equal(providers.command_with_resume("grok", "grok", "session-1"), "grok '--resume' 'session-1'")
 
-assert_equal(
-  providers.workspace_command(config, {
+do
+  local command = providers.workspace_command(config, {
     agent_provider = "grok",
     permission_profile = "auto",
-    resolved_instruction = "Mission rules",
-  }, "start now"),
-  "grok --sandbox workspace --always-approve '--rules' 'Mission rules'"
-)
+    resolved_instruction = "Mission rules SECRET",
+    instruction_file = "/repo/.agents/codux/role.md",
+  }, "start now")
+  assert_contains(command, "grok --sandbox workspace --always-approve")
+  assert_contains(command, "/repo/.agents/codux/role.md")
+  assert_equal(command:find("Mission rules SECRET", 1, true), nil)
+end
 assert_equal(
   providers.workspace_command(config, {
     agent_provider = "grok",

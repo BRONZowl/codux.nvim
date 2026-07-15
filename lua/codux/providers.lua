@@ -239,16 +239,38 @@ function M.executable(config, provider, profile)
   return command_util.executable(M.command(config, provider, profile))
 end
 
-function M.command_with_instructions(command, provider, instructions)
-  instructions = type(instructions) == "string" and trim(instructions) or ""
-  if instructions == "" then
+--- Short argv-safe pointer to on-disk instructions (avoids putting full text on ps).
+function M.instruction_file_ref(path)
+  path = type(path) == "string" and trim(path) or ""
+  if path == "" then
+    return ""
+  end
+  return "Read the file at "
+    .. path
+    .. " completely before other work. Treat its full contents as binding developer/workspace instructions for this session."
+end
+
+--- Attach workspace instructions to a provider command.
+--- Prefer opts.instruction_file (path only on argv). Falls back to inlined text
+--- only when no file path is available (legacy / tests).
+function M.command_with_instructions(command, provider, instructions, opts)
+  opts = type(opts) == "table" and opts or {}
+  local file = type(opts.instruction_file) == "string" and trim(opts.instruction_file) or ""
+  local body = type(instructions) == "string" and trim(instructions) or ""
+  local text = ""
+  if file ~= "" then
+    text = M.instruction_file_ref(file)
+  else
+    text = body
+  end
+  if text == "" then
     return command
   end
   provider = M.normalize_provider(provider) or "codex"
   if provider == "grok" then
-    return command_util.with_args(command, { "--rules", instructions })
+    return command_util.with_args(command, { "--rules", text })
   end
-  return command_util.with_developer_instructions(command, instructions)
+  return command_util.with_developer_instructions(command, text)
 end
 
 function M.command_with_prompt(command, provider, prompt)
@@ -284,7 +306,10 @@ function M.workspace_command(config, workspace, initial_prompt, opts)
   profile = M.normalize_profile(profile) or "default"
 
   local command = M.command(config, agent_provider, profile)
-  command = M.command_with_instructions(command, agent_provider, workspace and workspace.resolved_instruction or nil)
+  local instruction_file = workspace and type(workspace.instruction_file) == "string" and trim(workspace.instruction_file) or ""
+  command = M.command_with_instructions(command, agent_provider, workspace and workspace.resolved_instruction or nil, {
+    instruction_file = instruction_file ~= "" and instruction_file or nil,
+  })
 
   local resume_session_id = workspace and (workspace.agent_session_id or workspace.codex_session_id) or nil
   local grok_session_id = workspace and type(workspace.agent_session_id) == "string" and trim(workspace.agent_session_id) or ""
@@ -298,8 +323,10 @@ function M.workspace_command(config, workspace, initial_prompt, opts)
   return command, agent_provider, profile
 end
 
-function M.prompt_must_be_pasted(provider)
-  return M.normalize_provider(provider) == "grok"
+--- Initial prompts are always pasted after the TUI is ready so they never appear
+--- on process argv (visible via ps /proc cmdline to other local users).
+function M.prompt_must_be_pasted(_provider)
+  return true
 end
 
 function M.token_usage_supported(provider)

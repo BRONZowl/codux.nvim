@@ -127,7 +127,9 @@ do
     assert_equal(workspace.agent_status, "working")
     assert_equal(harness.command_text():find("start building", 1, true), nil)
     assert_contains(harness.command_text(), "-c 'luafile /tmp/codux/mission-builder.lua'")
-    assert_contains(harness.launch_scripts["/tmp/codux/mission-builder.lua"], "start building")
+    -- Prompt lives in the private payload file, not the bootstrap script/cmdline.
+    assert_equal(harness.launch_scripts["/tmp/codux/mission-builder.lua"]:find("start building", 1, true), nil)
+    assert_contains(harness.launch_payloads["/tmp/codux/mission-builder.payload.lua"], "start building")
     local record = store.state_data().projects["/codux-worktrees/mission-builder"].workspaces["mission-builder"]
     assert_equal(record.permission_profile, "auto")
     assert_equal(record.mission_id, "mission:mission")
@@ -394,11 +396,12 @@ do
     assert_contains(harness.command_text(), "git -C /repo status --porcelain")
     assert_contains(harness.command_text(), "--listen")
     assert_equal(harness.command_text():find("Start your Mission Control role now.", 1, true), nil)
-    assert_contains(harness.launch_scripts["/tmp/codux/mission-manager.lua"], "Mission Focus Packet:")
-    assert_contains(harness.launch_scripts["/tmp/codux/mission-manager.lua"], "outline worker handoffs")
-    assert_contains(harness.launch_scripts["/tmp/codux/mission-builder.lua"], "Mission Focus Packet:")
-    assert_contains(harness.launch_scripts["/tmp/codux/mission-architect.lua"], "Start your Mission Control role now.")
-    assert_contains(harness.launch_scripts["/tmp/codux/mission-builder.lua"], "Start your Mission Control role now.")
+    assert_equal(harness.launch_scripts["/tmp/codux/mission-manager.lua"]:find("Mission Focus Packet:", 1, true), nil)
+    assert_contains(harness.launch_payloads["/tmp/codux/mission-manager.payload.lua"], "Mission Focus Packet:")
+    assert_contains(harness.launch_payloads["/tmp/codux/mission-manager.payload.lua"], "outline worker handoffs")
+    assert_contains(harness.launch_payloads["/tmp/codux/mission-builder.payload.lua"], "Mission Focus Packet:")
+    assert_contains(harness.launch_payloads["/tmp/codux/mission-architect.payload.lua"], "Start your Mission Control role now.")
+    assert_contains(harness.launch_payloads["/tmp/codux/mission-builder.payload.lua"], "Start your Mission Control role now.")
   end)
 end
 
@@ -460,8 +463,9 @@ do
     assert_contains(harness.command_text(), "-c 'luafile /tmp/codux/long-manager.lua'")
     assert_contains(harness.command_text(), "-c 'luafile /tmp/codux/long-builder.lua'")
     assert_equal(harness.command_text():find(normalized_objective, 1, true), nil)
-    assert_contains(harness.launch_scripts["/tmp/codux/long-builder.lua"], normalized_objective)
-    assert_contains(harness.launch_scripts["/tmp/codux/long-manager.lua"], normalized_objective)
+    assert_equal(harness.launch_scripts["/tmp/codux/long-builder.lua"]:find(normalized_objective, 1, true), nil)
+    assert_contains(harness.launch_payloads["/tmp/codux/long-builder.payload.lua"], normalized_objective)
+    assert_contains(harness.launch_payloads["/tmp/codux/long-manager.payload.lua"], normalized_objective)
   end)
 end
 
@@ -679,12 +683,17 @@ end
 do
   with_workspace_prepare_env(function()
     local wrote_instruction = false
+    local deleted_instruction = false
     local store = workspace_store({
       read_instruction_file = function()
         return nil
       end,
       write_instruction_file = function()
         wrote_instruction = true
+        return true, nil
+      end,
+      delete_instruction_file = function()
+        deleted_instruction = true
         return true, nil
       end,
     })
@@ -711,7 +720,9 @@ do
     assert_nil(workspace)
     assert_contains(error_message, "Failed to create tmux window")
     assert_contains(error_message, "command too long")
-    assert_false(wrote_instruction, "instruction file should not be written when tmux creation fails")
+    -- Instruction may be written before launch for path-based argv refs, then cleaned up.
+    assert_true(wrote_instruction)
+    assert_true(deleted_instruction, "new instruction file should be removed when tmux creation fails")
   end)
 end
 

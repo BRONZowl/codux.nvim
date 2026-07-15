@@ -66,11 +66,12 @@ TEST_SPECS := \
 	tests/text_spec.lua \
 	tests/ui_spec.lua \
 	tests/token_monitor_spec.lua \
+	tests/health_public_config_spec.lua \
 	tests/mission_orchestrate_spec.lua
 
 test:
 	for f in $(TEST_SPECS); do $(LUA) $$f || exit 1; done
 	for f in $(TEST_SPECS); do $(NVIM_HEADLESS) -c 'set rtp+=.' -c "lua dofile('$$f')" -c 'qa!' || exit 1; done
 	for f in lua/codux/*.lua tests/*.lua; do $(LUAJIT) -e "assert(loadfile('$$f'))" || exit 1; done
-	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua local codux = require("codux"); codux.setup({ token_monitor = false, providers = { codex = { default_cmd = "codex-test" } } }); assert(require("codux.providers").command(codux.health_info().config, "codex", "default") == "codex-test")' -c 'qa!'
+	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua local codux = require("codux"); codux.setup({ token_monitor = false, providers = { codex = { default_cmd = "codex-test --with-secret=xyz" } } }); local cfg = codux.health_info().config; assert(require("codux.providers").command(cfg, "codex", "default") == "codex-test"); assert(tostring(vim.inspect(cfg)):find("xyz", 1, true) == nil); assert(tostring(vim.inspect(cfg)):find("api_key", 1, true) == nil)' -c 'qa!'
 	$(NVIM_HEADLESS) -c 'set rtp+=.' -c 'lua require("codux").setup({ token_monitor = false })' -c 'checkhealth codux' -c 'qa!'

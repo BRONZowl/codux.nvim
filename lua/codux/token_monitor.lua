@@ -208,7 +208,8 @@ function M:process_message(job_id, message)
   end
 
   if type(message.error) == "table" then
-    self:complete_request(job_id, nil, tostring(message.error.message or "Codex token usage request failed"), true)
+    -- Do not surface raw CLI/RPC error text (may include auth details).
+    self:complete_request(job_id, nil, "Codex token usage request failed", true)
     return
   end
 

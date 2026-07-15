@@ -73,4 +73,13 @@ do
   assert_equal(err, "workspace server is unavailable")
 end
 
+-- Runtime server dir must never land under shared /tmp.
+do
+  local dir = workspace_remote.server_dir()
+  assert_true(type(dir) == "string" and dir ~= "")
+  assert_equal(dir:find("/tmp/codux", 1, true), nil)
+  assert_true(dir ~= "/tmp")
+  assert_true(dir:find("codux", 1, true) ~= nil)
+end
+
 print("workspace_remote_spec.lua: ok")

@@ -394,6 +394,24 @@ require("codux").health_info().token_usage.last_error
 
 When an agent is working and the popup is hidden, a small **`agent is working...`** indicator appears near the bottom-right of the editor.
 
+### Privacy notes (local multi-user hosts)
+
+Codux does **not** store provider API keys; auth stays with the Codex/Grok CLIs and your environment. Still:
+
+- **Initial prompts** are pasted into the agent TUI after startup so they do not appear on process `argv` (`ps` / `/proc/.../cmdline`).
+- **Workspace instructions** are written to on-disk instruction files; agent CLIs receive only a short path-based reference on argv (not the full rule body).
+- **Launch bootstrap** scripts keep identifiers only. Prompts, objectives, focus packets, and instruction bodies go in a sibling private `.payload.lua` (user-only mode, deleted after one read).
+- **`health_info().config`** is redacted: command fields are reduced to the executable name, and secret-like keys (`api_key`, tokens, passwords, …) are stripped.
+- Workspace **launch scripts**, **settings**, **instruction files**, and **workspace state** are written with user-only permissions when the OS allows (`rw-------` / runtime dir `rwx------`).
+- Runtime sockets and launch files live under `stdpath("run")` (or another private state/cache dir), **not** shared `/tmp`.
+- **Residual risk:** agent terminal buffers and CLI session logs can still contain secrets you paste into prompts; Neovim `--listen` sockets are local-trust. Prefer trusted single-user machines for agent work.
+
+Inspect usage errors without dumping RPC bodies:
+
+```lua
+require("codux").health_info().token_usage.last_error
+```
+
 ---
 
 ## Troubleshooting

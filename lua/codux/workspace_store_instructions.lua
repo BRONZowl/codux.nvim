@@ -102,6 +102,10 @@ function M.write_file(store, root, safe_name, instruction)
     return false, "Failed to write Codux workspace instruction file"
   end
 
+  if type(vim.fn.setfperm) == "function" then
+    pcall(vim.fn.setfperm, path, "rw-------")
+  end
+
   return true, nil
 end
 

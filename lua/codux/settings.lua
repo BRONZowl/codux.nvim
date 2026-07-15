@@ -63,6 +63,10 @@ function M.write(data)
   if not ok or result ~= 0 then
     return false, "Failed to write Codux settings"
   end
+
+  if type(vim.fn.setfperm) == "function" then
+    pcall(vim.fn.setfperm, path, "rw-------")
+  end
   return true
 end
 

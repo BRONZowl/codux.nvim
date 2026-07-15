@@ -355,6 +355,37 @@ do
   assert_table_equal(stopped, { 42 })
 end
 
+-- RPC error payloads must not leak into last_error (auth text, etc.).
+do
+  local state = {}
+  local monitor = token_monitor_mod.new({
+    defaults = { enabled = true, refresh_ms = 60000, timeout_ms = 5000 },
+    state = state,
+    get_config = function()
+      return { codex_cmd = "codex" }
+    end,
+    is_running = function()
+      return true
+    end,
+    get_agent_provider = function()
+      return "codex"
+    end,
+    json_encode = function()
+      return "{}"
+    end,
+    on_update = function() end,
+  })
+
+  state.job_id = 7
+  state.in_flight = true
+  monitor:process_message(7, {
+    id = 2,
+    error = { message = "invalid api_key sk-secret-should-not-leak" },
+  })
+  assert_equal(state.last_error, "Codex token usage request failed")
+  assert_equal(tostring(state.last_error):find("sk-secret", 1, true), nil)
+end
+
 do
   local refreshes = 0
   local controller = {

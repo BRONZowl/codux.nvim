@@ -721,6 +721,28 @@ compat_mod.install_prompt_open(app, {
 function M.open_workspace_session(workspace, initial_prompt, opts)
   opts = opts or {}
   workspace = type(workspace) == "table" and workspace or nil
+  if workspace then
+    local instruction = type(workspace.resolved_instruction) == "string" and workspace.resolved_instruction or ""
+    local instruction_file = type(workspace.instruction_file) == "string" and workspace.instruction_file or ""
+    if
+      instruction ~= ""
+      and (instruction_file == "")
+      and type(workspace.project_root) == "string"
+      and type(workspace.safe_name) == "string"
+    then
+      local path = workspace_runtime:instruction_file_path(workspace.project_root, workspace.safe_name)
+      if type(path) == "string" and path ~= "" then
+        workspace_runtime:write_instruction_file(workspace.project_root, workspace.safe_name, instruction)
+        workspace.instruction_file = path
+      else
+        local workspace_remote = require("codux.workspace_remote")
+        local launch = require("codux.workspace_launch")
+        path = workspace_remote.server_dir() .. "/" .. workspace.safe_name .. ".instructions.md"
+        launch.write_private_file(path, instruction)
+        workspace.instruction_file = path
+      end
+    end
+  end
   local command, agent_provider, profile = providers.workspace_command(config, workspace, initial_prompt, opts)
 
   local visible = opts.visible == true
@@ -1033,7 +1055,8 @@ end
 function M.health_info()
   local terminal_info = terminal:health_info()
   return {
-    config = config,
+    -- Redacted: full command strings and secret-like keys are stripped.
+    config = health_mod.public_config(config),
     popup_visible = terminal_info.popup_visible,
     terminal_running = terminal_info.terminal_running,
     terminal_buffer = terminal_info.terminal_buffer,

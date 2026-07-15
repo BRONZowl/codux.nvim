@@ -18,6 +18,9 @@ do
     mission_role = "Builder",
     mission_objective = "Build it",
     mission_focus_packet = "Focus packet",
+    initial_prompt = "secret-prompt-body",
+    resolved_instruction = "secret-instruction-body",
+    launch_payload = "/run/codux/mission-builder.payload.lua",
     nvim_server = "/tmp/codux/mission-builder.sock",
     initial_mode = "plan",
   })
@@ -25,10 +28,24 @@ do
   assert_contains(lua, 'mission_id="mission:mission"')
   assert_contains(lua, 'mission_name="Mission"')
   assert_contains(lua, 'mission_role="Builder"')
-  assert_contains(lua, 'mission_objective="Build it"')
-  assert_contains(lua, 'mission_focus_packet="Focus packet"')
+  assert_contains(lua, 'payload_path="/run/codux/mission-builder.payload.lua"')
   assert_contains(lua, 'nvim_server="/tmp/codux/mission-builder.sock"')
   assert_contains(lua, 'initial_mode="plan"')
+  -- Sensitive bodies stay out of the bootstrap script itself.
+  assert_equal(lua:find("Build it", 1, true), nil)
+  assert_equal(lua:find("Focus packet", 1, true), nil)
+  assert_equal(lua:find("secret-prompt-body", 1, true), nil)
+  assert_equal(lua:find("secret-instruction-body", 1, true), nil)
+
+  local payload = workspace_launch.encode_payload_lua(workspace_launch.payload_from_workspace({
+    mission_objective = "Build it",
+    mission_focus_packet = "Focus packet",
+    initial_prompt = "secret-prompt-body",
+    resolved_instruction = "secret-instruction-body",
+  }))
+  assert_contains(payload, "Build it")
+  assert_contains(payload, "Focus packet")
+  assert_contains(payload, "secret-prompt-body")
 end
 
 do

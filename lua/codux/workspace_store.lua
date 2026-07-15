@@ -111,6 +111,10 @@ function Store:write_state(state_data)
     return false, "Failed to write Codux workspace state"
   end
 
+  if type(vim.fn.setfperm) == "function" then
+    pcall(vim.fn.setfperm, path, "rw-------")
+  end
+
   return true, nil
 end
 
