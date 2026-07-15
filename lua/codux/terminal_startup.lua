@@ -86,6 +86,13 @@ function M.send_startup_plan_toggle(controller)
 end
 
 function M.paste_startup_prompt(controller, initial_prompt)
+  if type(initial_prompt) == "string" and initial_prompt ~= "" then
+    local ok, redact = pcall(require, "codux.redact")
+    if ok and type(redact.maybe_scrub_prompt) == "function" then
+      local config = type(controller.config) == "function" and controller:config() or nil
+      initial_prompt = redact.maybe_scrub_prompt(initial_prompt, config)
+    end
+  end
   local paste = "\27[200~" .. initial_prompt .. "\27[201~\r"
   local paste_ok = M.send_startup_input(controller, "startup prompt", paste)
   if paste_ok then

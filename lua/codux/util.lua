@@ -5,6 +5,12 @@ function M.noop() end
 function M.notify(message, level)
   local log_levels = type(vim) == "table" and type(vim.log) == "table" and vim.log.levels or nil
   local default_level = log_levels and log_levels.INFO or 2
+  if type(message) == "string" and message ~= "" then
+    local ok, redact = pcall(require, "codux.redact")
+    if ok and type(redact.redact_text) == "function" then
+      message = redact.redact_text(message)
+    end
+  end
   if type(vim) == "table" and type(vim.notify) == "function" then
     vim.notify(message, level or default_level, { title = "codux.nvim" })
   end

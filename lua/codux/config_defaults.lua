@@ -35,6 +35,11 @@ function M.defaults()
       refresh_ms = 60000,
       timeout_ms = 5000,
     },
+    -- Optional local hardening. scrub_prompts masks common secret patterns in
+    -- agent prompts (off by default so intentional secret-review still works).
+    security = {
+      scrub_prompts = false,
+    },
     workspaces = {
       enabled = true,
       tmux_cmd = vim.env.TMUX_CMD or "tmux",

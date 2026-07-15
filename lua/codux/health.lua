@@ -1,89 +1,11 @@
 local M = {}
-local command_util = require("codux.command")
 local providers = require("codux.providers")
-
--- Lua patterns do not support `|` alternation; check each fragment separately.
-local SECRET_KEY_PATTERNS = {
-  "api[_%-]?key",
-  "access[_%-]?token",
-  "refresh[_%-]?token",
-  "auth[_%-]?token",
-  "oauth[_%-]?token",
-  "client[_%-]?secret",
-  "private[_%-]?key",
-  "password",
-  "passwd",
-  "secret",
-  "authorization",
-  "bearer",
-}
-
-local function is_secret_key(key)
-  if type(key) ~= "string" then
-    return false
-  end
-  local normalized = key:lower():gsub("%s+", "")
-  for _, pattern in ipairs(SECRET_KEY_PATTERNS) do
-    if normalized:match(pattern) then
-      return true
-    end
-  end
-  return false
-end
-
-local function is_command_key(key)
-  if type(key) ~= "string" then
-    return false
-  end
-  return key == "codex_cmd"
-    or key == "tmux_cmd"
-    or key:match("_cmd$") ~= nil
-    or key:match("_command$") ~= nil
-end
-
-local function redact_command_value(value)
-  local executable = command_util.executable(value)
-  if type(executable) == "string" and executable ~= "" then
-    return executable
-  end
-  if value == nil then
-    return nil
-  end
-  return "[redacted]"
-end
+local redact = require("codux.redact")
 
 --- Return a copy of plugin config safe for health/debug surfaces.
 --- Strips secret-like keys and reduces command fields to executable names only.
 function M.public_config(config)
-  if type(config) ~= "table" then
-    return {}
-  end
-
-  local function walk(value, key)
-    if is_secret_key(key) then
-      return nil, true
-    end
-
-    if is_command_key(key) then
-      return redact_command_value(value), false
-    end
-
-    if type(value) ~= "table" then
-      return value, false
-    end
-
-    local out = {}
-    for child_key, child_value in pairs(value) do
-      local redacted, drop = walk(child_value, child_key)
-      if not drop then
-        out[child_key] = redacted
-      end
-    end
-    return out, false
-  end
-
-  local redacted = walk(config, nil)
-  return type(redacted) == "table" and redacted or {}
+  return redact.public_config(config)
 end
 
 local function health_start(name)
@@ -167,6 +89,18 @@ function M.doctor_lines(deps)
     else
       add("[warn]", provider .. " command not found: " .. tostring(executable_name))
     end
+  end
+
+  for _, finding in ipairs(redact.provider_commands_with_secrets(config)) do
+    add(
+      "[warn]",
+      "provider command may embed a secret ("
+        .. finding.label
+        .. " → "
+        .. tostring(finding.executable)
+        .. "); keep API keys in CLI login/env, not *_cmd. Sample: "
+        .. tostring(finding.sample)
+    )
   end
 
   local state_file = type(deps.workspace_state_file) == "function" and deps.workspace_state_file() or nil

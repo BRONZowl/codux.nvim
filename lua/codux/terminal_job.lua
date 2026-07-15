@@ -278,6 +278,13 @@ function M.exit(controller)
 end
 
 function M.send_to_agent(controller, message)
+  if type(message) == "string" and message ~= "" then
+    local ok, redact = pcall(require, "codux.redact")
+    if ok and type(redact.maybe_scrub_prompt) == "function" then
+      message = redact.maybe_scrub_prompt(message, controller:config())
+    end
+  end
+
   local running = controller:terminal_running()
   if not controller:ensure_agent(controller:config().auto_focus, running and nil or message) then
     return false

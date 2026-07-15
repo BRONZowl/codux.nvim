@@ -101,6 +101,11 @@ function M:send_prompt(prompt_key, prompt_context)
     return false
   end
 
+  local ok, redact = pcall(require, "codux.redact")
+  if ok and type(redact.maybe_scrub_prompt) == "function" then
+    prompt = redact.maybe_scrub_prompt(prompt, self:config())
+  end
+
   return self.send_to_agent(prompt)
 end
 
