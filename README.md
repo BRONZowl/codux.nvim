@@ -244,6 +244,11 @@ require("codux").setup({
     refresh_ms = 60000,
     timeout_ms = 5000,
   },
+  -- Optional hardening (defaults shown). Do not put API keys in *_cmd strings.
+  security = {
+    scrub_prompts = false, -- mask common secret patterns in agent prompts
+    audit_scrubs = false,  -- redaction counters in :CoduxDoctor / health_info().redact_audit
+  },
   workspaces = {
     enabled = true,
     tmux_cmd = "tmux",
@@ -406,15 +411,8 @@ Codux does **not** store provider API keys; auth stays with the Codex/Grok CLIs 
 - **Doctor** warns if a provider `*_cmd` looks like it embeds an API key/token (prefer CLI login / standard env vars — do not put secrets in Codux command config).
 - Workspace **launch scripts**, **settings**, **instruction files**, and **workspace state** are written with user-only permissions when the OS allows (`rw-------` / runtime dir `rwx------`).
 - Runtime sockets and launch files live under `stdpath("run")` (or another private state/cache dir), **not** shared `/tmp`.
-- **Optional:** `security.scrub_prompts = true` masks common secret patterns in prompts sent to agents (default **off**, so intentional secret-review still works).
-- **Optional:** `security.audit_scrubs = true` surfaces redaction **counters only** (text/prompt scrub counts) in `:CoduxDoctor` and `health_info().redact_audit` — never logs secret values.
+- **Optional:** `security.scrub_prompts` / `security.audit_scrubs` (see Configuration) — prompt masking and redaction counters; never log secret values.
 - **Residual risk:** agent terminal buffers and CLI session logs can still contain secrets you paste into prompts; Neovim `--listen` sockets are local-trust. Prefer trusted single-user machines for agent work. Codux does not control Grok/Codex CLI telemetry — set that in the CLI configs if needed.
-
-Inspect usage errors without dumping RPC bodies:
-
-```lua
-require("codux").health_info().token_usage.last_error
-```
 
 ---
 
